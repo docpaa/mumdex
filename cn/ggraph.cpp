@@ -769,7 +769,7 @@ int main(int argc, char* argv[]) try {
     }
     if (n_sets > 1) {
       Radio testradio{"Place this series on top", graphp, {-1, 2}};
-      graph.extra_radios.push_back(std::move(Radio{
+      graph.extra_radios.push_back(Radio{
             string("Place series") + (n_y > 1 ? " group" : "") +
                 " on top", graphp,
             {-0.7, 2 + scale *
@@ -779,7 +779,8 @@ int main(int argc, char* argv[]) try {
                 vector<unsigned int> & order{graphp->series_order};
                 vector<unsigned int>::iterator riter{
                   find(order.begin(), order.end(), r)};
-                const unsigned int rindex(riter - order.begin());
+                const unsigned int rindex{
+                  static_cast<unsigned int>(riter - order.begin())};
                 for (int y{0}; y != n_y; ++y) {
                   vector<unsigned int>::iterator togo{
                     order.begin() + (y + 1) * n_sets};
@@ -794,7 +795,7 @@ int main(int argc, char* argv[]) try {
                   [r, graphp, n_sets]() {
                     return (graphp->series_order[n_sets - 1]) !=
                         static_cast<unsigned int>(r);
-                  }}}));
+                  }}});
       graph.extra_radios.back().radius_scale = 0.5;
       graph.extra_radios.back().id = r;
       graph.radios.push_front(&graph.extra_radios.back());
