@@ -69,6 +69,7 @@ using paa::GeneXrefs;
 using paa::KnownGene;
 using paa::KnownGenes;
 using paa::Point;
+using paa::Radio;
 using paa::Reference;
 using paa::ThreadPool;
 using paa::TSV;
@@ -749,6 +750,7 @@ int main(int argc, char* argv[]) try {
   // All individuals graph
   X11Graph & graph{X11Graph::create_whole(app, data,
                                           width, height, x_off, y_off)};
+  X11Graph * graphp{&graph};
 
   // Adjust series positions, assign names, and make some series lines only
   for (int r{0}; r != n_sets; ++r) {
@@ -761,8 +763,41 @@ int main(int argc, char* argv[]) try {
           remove_including_final(names[r], '/'),
           "_results.txt"), ".varbin.data.txt") + "  " + result.name(y + 1)};
       graph.series_radios[n_sets * y + r].description =
-          string("Toggle display for ") + name;
+          string("Toggle display for ") + name
+          + " " + std::to_string(y) + " " + std::to_string(r);
       if (do_lines[y]) graph.series_only_lines[n_sets * y + r] = true;
+    }
+    if (n_sets > 1) {
+      Radio testradio{"Place this series on top", graphp, {-1, 2}};
+      graph.extra_radios.push_back(std::move(Radio{
+            string("Place series") + (n_y > 1 ? " group" : "") +
+                " on top", graphp,
+            {-0.7, 2 + scale *
+                  (1.25 * n_y * (n_sets - r - 1) + (n_y - 0.5 - 1))},
+            {[graphp, r, n_y, n_sets]() {
+                // Find location of series in ordering list
+                vector<unsigned int> & order{graphp->series_order};
+                vector<unsigned int>::iterator riter{
+                  find(order.begin(), order.end(), r)};
+                const unsigned int rindex(riter - order.begin());
+                for (int y{0}; y != n_y; ++y) {
+                  vector<unsigned int>::iterator togo{
+                    order.begin() + (y + 1) * n_sets};
+                  order.insert(togo, r + y * n_sets);
+                  vector<unsigned int>::iterator toremove{
+                    order.begin() + y * n_sets + rindex};
+                  order.erase(toremove);
+                }
+                // graphp->show_order("after");
+                graphp->draw();
+              },
+                  [r, graphp, n_sets]() {
+                    return (graphp->series_order[n_sets - 1]) !=
+                        static_cast<unsigned int>(r);
+                  }}}));
+      graph.extra_radios.back().radius_scale = 0.5;
+      graph.extra_radios.back().id = r;
+      graph.radios.push_front(&graph.extra_radios.back());
     }
   }
 

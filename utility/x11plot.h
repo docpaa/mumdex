@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <deque>
 #include <iomanip>
 #include <list>
 #include <functional>
@@ -397,6 +398,7 @@ class X11WindowT {
   Colormap colormap{};
   Pixmap pixmap{};
   std::vector<std::string> image_names{};
+  bool inside{true};
 
   GC gc{}, fill_gc{}, radio_gc{};
   uint64_t max_request{};
@@ -614,9 +616,8 @@ bool operator!=(const XPoint lhs, const XPoint & rhs) {
 using void_fun = std::function<void ()>;
 using bool_fun = std::function<bool ()>;
 
-template <class Win>
-struct ActionsT {
-  ActionsT(void_fun press_ = []() {}, bool_fun visible_ = []() { return true; },
+struct Actions {
+  Actions(void_fun press_ = []() {}, bool_fun visible_ = []() { return true; },
            void_fun release_ = []() {}) :
       press{press_}, visible{visible_}, release{release_} { }
 
@@ -642,26 +643,25 @@ class Event {
 };
 
 // Radio button widget
-template <class Win>
-struct RadioT {
-  using Actions = ActionsT<Win>;
+struct Radio {
 
   // Constructor
-  RadioT(const std::string & description_, Win * graph_,
-         const dPoint specification_, const Actions & actions_ = Actions(),
-         const bool togglable_ = false, const bool start_toggle = false,
-         const GC * gc_ = nullptr) :
-      description{description_}, graph{*graph_}, specification{specification_},
+  Radio(const std::string & description_, X11Win * win_,
+        const dPoint specification_, const Actions & actions_ = Actions(),
+        const bool togglable_ = false, const bool start_toggle = false,
+        const GC * gc_ = nullptr) :
+      description{description_}, win{win_},
+    specification{specification_},
     actions{actions_}, togglable{togglable_}, toggled{start_toggle},
-    gc{gc_ == nullptr ? graph.radio_gc : *gc_} { }
+    gc{gc_ == nullptr ? win->radio_gc : *gc_} { }
 
   // These are not strictly needed - just to avoid warning due to GC pointer
-  RadioT(const RadioT &) = default;
-  RadioT & operator=(const RadioT &) = default;
+  Radio(const Radio &) = default;
+  Radio & operator=(const Radio &) = default;
 
   // State testing and assignment
   operator bool() const { return toggled; }
-  RadioT & operator=(const bool state) {
+  Radio & operator=(const bool state) {
     toggled = state;
     draw();
     return *this;
@@ -669,14 +669,14 @@ struct RadioT {
 
   // Location of corners of graph region
   Point corner(const bool high_x, const bool high_y) const {
-    return Point{high_x ? graph.bounds[0][1] : graph.bounds[0][0],
-          high_y ? graph.bounds[1][1] : graph.bounds[1][0]};
+    return Point{high_x ? win->bounds[0][1] : win->bounds[0][0],
+          high_y ? win->bounds[1][1] : win->bounds[1][0]};
   }
 
   int min_border() const {
-    return min(graph.bounds[0][0], graph.bounds[1][0],
-               graph.width() - graph.bounds[0][1],
-               graph.height() - graph.bounds[1][1]);
+    return min(win->bounds[0][0], win->bounds[1][0],
+               win->width() - win->bounds[0][1],
+               win->height() - win->bounds[1][1]);
   }
 
   // Location in window of radio button
@@ -695,14 +695,14 @@ struct RadioT {
         // Specification of zero or around 100 is centered
         const double centered{specification[y] -
               (fabs(specification[y]) > 0 ? 100 : 0)};
-        point[y] = (graph.bounds[y][0] + graph.bounds[y][1]) / 2 +
+        point[y] = (win->bounds[y][0] + win->bounds[y][1]) / 2 +
             centered * border;
       }
     }
     return point;
   }
 
-  double radius() const { return min_border() / 3.0; }
+  double radius() const { return radius_scale * min_border() / 3.0; }
   bool contains(const Point point) const {
     return location().distance(point) < radius();
   }
@@ -713,11 +713,12 @@ struct RadioT {
   bool press(const Point point) {
     if (!actions.visible()) {
       skip_release = true;
-      return false;
+      return contains(point);
     } else if (contains(point)) {
       toggled = !toggled;
       draw();
       actions.press();
+      draw();
       return true;
     }
     return false;
@@ -726,11 +727,16 @@ struct RadioT {
   // What to do when radio is released
   template <class Point>
   bool release(const Point point) {
-    if (skip_release) return skip_release = false;
+    // if (skip_release) return skip_release = false;
+    if (skip_release) {
+      skip_release = false;
+      return contains(point);
+    }
     if (contains(point)) {
       if (!togglable) toggled = !toggled;
       draw();
       actions.release();
+      draw();
       return true;
     }
     return false;
@@ -738,7 +744,7 @@ struct RadioT {
 
   void erase() const {
     const Point point{location()};
-    fill_centered_oval(graph.display(), graph.window, graph.fill_gc,
+    fill_centered_oval(win->display(), win->window, win->fill_gc,
                        point.x, point.y, radius() + 1, radius() + 1);
   }
 
@@ -746,22 +752,22 @@ struct RadioT {
     const Point point{location()};
     static GC grey_gc{[this]() {
         XColor grey;
-        if (!XAllocNamedColor(graph.display(), graph.colormap, "rgb:dd/dd/dd",
+        if (!XAllocNamedColor(win->display(), win->colormap, "rgb:dd/dd/dd",
                               &grey, &grey)) throw Error("Could not get grey");
-        return graph.create_gc(grey.pixel, graph.app.white);
+        return win->create_gc(grey.pixel, win->app.white);
       }()};
-    if (graph.inside) {
-      fill_centered_oval(graph.display(), graph.window, graph.fill_gc,
+    if (win->inside) {
+      fill_centered_oval(win->display(), win->window, win->fill_gc,
                          point.x, point.y, radius() + 1, radius() + 1);
       // if (!actions.visible()) return;
-      draw_centered_oval(graph.display(), graph.window,
+      draw_centered_oval(win->display(), win->window,
                          actions.visible() ? gc : grey_gc,
                          point.x, point.y, radius(), radius());
       if (toggled) {
-        fill_centered_oval(graph.display(), graph.window, gc,
+        fill_centered_oval(win->display(), win->window, gc,
                            point.x, point.y, radius() / 2, radius() / 2);
       } else {
-        fill_centered_oval(graph.display(), graph.window, graph.fill_gc,
+        fill_centered_oval(win->display(), win->window, win->fill_gc,
                            point.x, point.y, radius() / 2, radius() / 2);
       }
     } else {
@@ -771,36 +777,68 @@ struct RadioT {
 
   // Data
   std::string description;  // Help text for radio
-  Win & graph;  // The graph attached to
+  X11Win * win;  // The window attached to
   dPoint specification;  // Where on page
   Actions actions;  // Actions to perform
   bool togglable;  // Can radio be toggled
   bool toggled;  // State of radio
   GC gc;  // Color for radio, line width, etc
   bool skip_release{false};
+  double radius_scale{1.0};
+  unsigned int id{0};
 };
 
-// Graph plotting window
-class X11Graph : public X11Win {
+using Range = std::vector<std::vector<double>>;
+
+class SavedConfig {
  public:
-  static constexpr int border_width{3};
   static constexpr double default_arc_radius{4};
   static constexpr double default_arc_width{2};
   static constexpr int default_line_width{4};
   static constexpr int default_line_type{LineSolid};
+
+  SavedConfig() {}
+  virtual ~SavedConfig() = default;
+  bool operator!=(const SavedConfig & rhs) const {
+    return dne(arc_radius, rhs.arc_radius) ||
+        dne(arc_width, rhs.arc_width) ||
+        line_width != rhs.line_width ||
+        line_type != rhs.line_type ||
+        series_order != rhs.series_order ||
+        range != rhs.range ||
+        max_range != rhs.max_range ||
+        zoomed != rhs.zoomed ||
+        drawn != rhs.drawn ||
+        radio_states != rhs.radio_states;
+  }
+  void restore_config(const SavedConfig & rhs) {
+    *this = rhs;
+    return;
+  }
+
   double arc_radius{default_arc_radius};
   double arc_width{default_arc_width};
   int line_width{default_line_width};
   int line_type{default_line_type};
+  std::vector<unsigned int> series_order{};
+  Range range{{unset(1.0), nunset(1.0), 0}, {unset(1.0), nunset(1.0), 0}};
+  Range max_range{range};
+  std::vector<unsigned char> zoomed{false, false};
+  mutable bool drawn{false};
+  std::vector<unsigned char> radio_states{};
+};
+
+class X11Graph : public X11Win, public SavedConfig {
+ public:
+  static constexpr int border_width{3};
 
   // Graph data typedefs
   using Values = std::vector<double>;
   using XYSeries = std::vector<const Values *>;
   using Data = std::vector<XYSeries>;
-  using Range = std::vector<std::vector<double>>;
-  using Radio = RadioT<X11Graph>;
   using CallBack = std::function<bool (X11Graph &, Event &)>;
 
+  // Graph plotting window
   // Creation factory from data in exact format needed
   static X11Graph & create_whole(X11App & app, const Data & data__,
                                  const unsigned int width_ = 1200,
@@ -866,40 +904,6 @@ class X11Graph : public X11Win {
   }
 
   void initialize();
-#if 0
-  class GraphSettings {
-   public:
-    explicit GraphSettings(const X11Graph & graph) :
-        arc_radius{graph.arc_radius},
-        arc_width{graph.arc_width},
-        line_width{graph.line_width},
-        line_type{graph.line_type} {
-      for (const Radio & radio : graph.radios) {
-        radios_toggled.push_back(radio.toggled);
-      }
-      for (const bool y : {false, true}) {
-        zoomed[y] = graph.zoomed[y];
-      }
-    }
-    double arc_radius;
-    double arc_width;
-    int line_width;
-    int line_type;
-    std::vector<unsigned char> radios_toggled{};
-    bool zoomed[2]{false, false};
-  };
-
-  class GraphView : public GraphSettings {
-   public:
-    explicit GraphView(const X11Graph & graph) :
-        GraphSettings{graph}, range{graph.range} { }
-
-    Range range;
-  };
-
-  void restore_settings(const GraphSettings & settings) {
-  }
-#endif
 
   void set_line_widths(std::vector<GC> gcs, const int width_) {
     for (unsigned int g{0}; g != data->size(); ++g)
@@ -1210,15 +1214,40 @@ class X11Graph : public X11Win {
     }
   }
 
+  void show_order(const std::string prefix) const {
+    std::cout << prefix;
+    for (const unsigned int s : series_order) {
+      std::cout << " " << s;
+    }
+    std::cout << std::endl;
+  }
+  void show_range(const std::string prefix) const {
+    std::cout << prefix << " range";
+    for (const bool y : {false, true}) {
+      for (const double val : range[y]) {
+        std::cout << " " << val;
+      }
+    }
+    if (bounds.size()) {
+      std::cout << " bounds";
+      for (const bool y : {false, true}) {
+        for (const double val : bounds[y]) {
+          std::cout << " " << val;
+        }
+      }
+    }
+    std::cout << " scale";
+    for (const double val : scale) {
+      std::cout << " " << val;
+    }
+    std::cout << std::endl;
+  }
+
+
+
   // Data is series * (x, y) -> point
   Data input_data{}, log_data{}, log_x_data{}, log_y_data{}, *data{};
   std::vector<std::unique_ptr<Values> > log_series{};
-
-  // (x, y) * (low, high, width)
-  Range bad_range{{unset(1.0), nunset(1.0), 0}, {unset(1.0), nunset(1.0), 0}};
-  Range range{bad_range};
-  Range max_range{range};
-  double scale[3];  // x, y, y / x
 
   // Drawing data for series
   std::vector<std::vector<XArc> > arcs{};
@@ -1291,11 +1320,11 @@ class X11Graph : public X11Win {
 
   // Graph state information
   std::string status{""};
-  mutable bool drawn{false};
   bool inside{false};
+  std::vector<double> scale{};  // x, y, y / x
   Point last_press{}, last_motion{};
-  bool zoomed[2]{false, false};
   bool moved{false};
+  bool small_move{false};
 
   bool_fun radio_tester(const Radio & radio, const bool state = true) {
     return [&radio, state]() { return radio.toggled == state; };
@@ -1348,20 +1377,56 @@ class X11Graph : public X11Win {
     {"Toggle range restriction on Y axis to actual data range", this, {1, -3},
       {[this]() { get_range(1); prepare_draw(); }}, true, true}};
 
+  // Saved history
+  std::deque<SavedConfig> saved_config{};
+  std::vector<Radio *> saved_radios{
+        &arcs_radio, &outlines_radio, &lines_radio};
+  SavedConfig current_config() const {
+    SavedConfig current{*this};
+    current.radio_states.clear();
+    for (Radio * radio : saved_radios) {
+      current.radio_states.push_back(*radio);
+    }
+    return current;
+  }
+
+  void restore_config(const SavedConfig & config) {
+    for (unsigned int r{0}; r != saved_radios.size(); ++r) {
+      saved_radios[r]->toggled = config.radio_states[r];
+    }
+    SavedConfig::restore_config(config);
+  }
+  void save_config(const SavedConfig & config) {
+    saved_config.push_back(std::move(config));
+  }
+
+  // Cannot go into saved config
+  Radio previous_views_radio{"Show previous view",
+        this, {-1, 1}, {[this]() { },
+          [this]() {return saved_config.size() > 1; },
+          {[this]() {
+              if (saved_config.size() > 1) {
+                saved_config.pop_back();
+                restore_config(saved_config.back());
+                prepare_draw();
+              }}}}};
+
   // All radios
-  std::vector<Radio *> radios{&help_radio, &coord_radio,
+  std::deque<Radio *> radios{&help_radio, &coord_radio,
         &arcs_radio, &outlines_radio, &lines_radio,
         &log_radios[0], &log_radios[1],
         &grid_radios[0][0], &grid_radios[0][1],
         &grid_radios[1][0], &grid_radios[1][1],
-        &movie_radios[0], &movie_radios[1]};
+        &movie_radios[0], &movie_radios[1],
+        &previous_views_radio};
   //        &restrict_range_radios[0], &restrict_range_radios[1]};
   std::vector<Radio> create_unnamed_radios();
-  std::vector<Radio> unnamed_radios{create_unnamed_radios()};
+  std::vector<Radio> extra_radios{};
 
   // Callback functions and radios for customization
   std::vector<CallBack> call_backs{};
   std::vector<Radio> call_back_radios{};
+  std::vector<Radio> unnamed_radios{};
 };
 
 // Common initialization for constructors
@@ -1369,6 +1434,8 @@ inline void X11Graph::initialize() {
   if (data->size() > color_names.size())
     throw Error(std::string("Too many series to display (max is ") +
                 std::to_string(color_names.size()) + ")");
+
+  scale.resize(3);
 
   // Events to watch out for
   XSelectInput(display(), window, StructureNotifyMask | ExposureMask |
@@ -1407,18 +1474,25 @@ inline void X11Graph::initialize() {
   }
 
   // Create series radios, and add to master radio list, adjust properties
+  series_radios.reserve(data->size());
   for (unsigned int c{0}; c != data->size(); ++c) {
     series_radios.push_back(Radio{"Toggle display of this series", this,
         {-1, data->size() + 1.0 - c},
         {[this]() { prepare_draw(); }, [this]() { return inside; }},
             true, true, &series_radio_gcs[c]});
+    saved_radios.push_back(&series_radios.back());
     series_only_arcs.emplace_back(0);
     series_only_lines.emplace_back(0);
+    series_order.push_back(c);
   }
+  series_order.reserve(series_order.size() + 1);
 
   // Add radios to master radio list
+  unnamed_radios = create_unnamed_radios();
+
   for (std::vector<Radio> * radio_vec : {&series_radios, &unnamed_radios})
     for (Radio & radio : (*radio_vec)) radios.push_back(&radio);
+  extra_radios.reserve(1000);
 }
 
 // Get range for axes a: x 0, y 1, or both 2
@@ -1426,7 +1500,7 @@ inline void X11Graph::get_range(const unsigned int a) {
   constexpr double padding{0.01};
   for (const bool y : {0, 1}) {
     if (a != 2 && a != y) continue;
-    range[y] = {unset(1.0), nunset(1.0)};
+    range[y] = {unset(1.0), nunset(1.0), 0};
     for (unsigned int s{0}; s != data->size(); ++s) {
       if (!series_radios[s]) continue;
       for (const double val : *(*data)[s][y]) {
@@ -1469,6 +1543,7 @@ inline void X11Graph::button_press(const XButtonEvent & event) {
 }
 
 inline void X11Graph::motion(const XMotionEvent & event) {
+  // std::cerr << "In motion" << std::endl;
   moved = true;
   if (XPending(display())) return;
 
@@ -1520,6 +1595,8 @@ inline void X11Graph::motion(const XMotionEvent & event) {
   }
   if (event.state == 0) return;
   for (Radio * radio : radios) if (radio->contains(last_press)) return;
+
+  if (!(event.state & (Button1Mask | Button2Mask | Button3Mask))) return;
 
   const Point point{event};
   const unsigned int quadrant{get_quadrant(last_press)};
@@ -1582,12 +1659,15 @@ inline void X11Graph::motion(const XMotionEvent & event) {
     }
   }
   last_motion = point;
-  if (range != old_range) return prepare_draw();
+  if (range != old_range) {
+    small_move = true;
+    return prepare_draw();
+  }
 }
 
 inline void X11Graph::button_release(const XButtonEvent & event) {
   for (Radio * radio : radios) { if (radio->release(last_press)) return; }
-
+  
   Event button_event{Event::X, &app.event};
   for (unsigned int c{0}; c != call_backs.size(); ++c) {
     if (call_back_radios[c]) {
@@ -1630,7 +1710,10 @@ inline void X11Graph::button_release(const XButtonEvent & event) {
       }
     }
   }
-  if (range != old_range) prepare_draw();
+  if (range != old_range || small_move) {
+    small_move = false;
+    prepare_draw();
+  }
 }
 
 inline void X11Graph::leave(const XCrossingEvent &) {
@@ -1808,7 +1891,7 @@ inline void X11Graph::draw() {
   // The graph arcs and points to connect with lines
   const uint64_t arc_block{max_request / 3};
   const uint64_t line_block{max_request / 2};
-  for (unsigned int s{0}; s != data->size(); ++s) {  // Lines
+  for (const unsigned int s : series_order) {
     if (do_arcs(s)) {
       for (unsigned int bs{0}; bs < arcs[s].size(); bs += arc_block) {
         const uint64_t n{bs + arc_block < arcs[s].size() ?
@@ -1836,9 +1919,18 @@ inline void X11Graph::draw() {
     redraw();
   }
   drawn = true;
+  if (!small_move) {
+    const SavedConfig current{current_config()};
+    if (saved_config.empty() || current != saved_config.back()) {
+      save_config(std::move(current));
+      draw_controls();
+    }
+  }
+  // std::cout << "Config stack size is " << saved_config.size() << std::endl;
+  // show_range("After draw");
 }
 
-inline std::vector<X11Graph::Radio> X11Graph::create_unnamed_radios() {
+inline std::vector<Radio> X11Graph::create_unnamed_radios() {
   return std::vector<Radio>{
     {"Save an image of graph, and add all images so far to a pdf",
           this, {1, 1}, {[this]() { save_image("cn"); }}},
@@ -1902,7 +1994,6 @@ class X11TextGrid : public X11Win {
   using X11Win::X11Win;
   using Column = std::vector<std::string>;
   using Data = std::vector<Column>;
-  using Radio = RadioT<X11TextGrid>;
   using CellStatus = std::vector<std::vector<unsigned char>>;
   using CallBack = std::function<bool (const CellStatus &)>;
 
@@ -2185,7 +2276,6 @@ class X11TextGrid : public X11Win {
   std::vector<int> max_widths, column_offsets{};
   CallBack call_back, cell_test{};
 
-  bool inside{true};
   Point last_press{}, last_motion{};
 
   Radio bigger_radio{"Bigger_text", this, {1, 98.5},

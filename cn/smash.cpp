@@ -3,6 +3,8 @@
 //
 // Process smash data
 //
+// Not for clinical use
+//
 // Copyright 2016 Peter Andrews @ CSHL
 //
 

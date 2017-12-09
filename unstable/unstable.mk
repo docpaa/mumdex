@@ -98,6 +98,7 @@ DEVELOPMENT_PROGRAMS := \
 	unequal_bridges \
 	validate_leukemia \
 	validate_mumdex \
+	wg_smash_comparison \
 	x11plot
 
 PROGRAMS += $(DEVELOPMENT_PROGRAMS)
