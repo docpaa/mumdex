@@ -644,7 +644,6 @@ class Event {
 
 // Radio button widget
 struct Radio {
-
   // Constructor
   Radio(const std::string & description_, X11Win * win_,
         const dPoint specification_, const Actions & actions_ = Actions(),
@@ -1667,7 +1666,7 @@ inline void X11Graph::motion(const XMotionEvent & event) {
 
 inline void X11Graph::button_release(const XButtonEvent & event) {
   for (Radio * radio : radios) { if (radio->release(last_press)) return; }
-  
+
   Event button_event{Event::X, &app.event};
   for (unsigned int c{0}; c != call_backs.size(); ++c) {
     if (call_back_radios[c]) {

@@ -40,7 +40,6 @@ using MUMDEX = MUMdex;
 
 class X11MUMdexViewer : public X11Win {
  public:
-  using Radio = RadioT<X11MUMdexViewer>;
   static constexpr int border_width{3};
 
   // Creation factory
