@@ -130,17 +130,18 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
   static bool missing_message_shown = false;
   if (genes.size() == 0) {
     if (!missing_message_shown) {
-      cerr << "***************************************************" << endl;
+      cerr << "******************************************************" << endl;
       cerr << "No gene information was loaded" << endl;
       cerr << "Please download the files" << endl;
       cerr << "knownGenes.txt, knownIsoforms.txt and kgXref.txt" << endl;
       cerr << "from the UCSC website, from mumdex.com or from the" << endl;
       cerr << "G-Graph paper supplementary materials" << endl;
-      cerr << "to match your reference, and place in the XXXX.bin/" << endl;
-      cerr << "directory next to your reference file" << endl;
-      cerr << "Only hg19 versions of these files were tested" << endl;
+      cerr << "to match your reference, and place in the directory" << endl;
+      cerr << ref.fasta_file() + ".bin/" << endl;
+      cerr << "Only hg19 and hg38 versions of these files were tested" << endl;
+      cerr << "Note chromosome names must match your reference" << endl;
       cerr << "G-Graph will continue to run without this gene info" << endl;
-      cerr << "***************************************************" << endl;
+      cerr << "******************************************************" << endl;
       missing_message_shown = true;
     }
     return false;
@@ -619,6 +620,10 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
       vector<CytobandInfo> result;
       const ChromosomeIndexLookup chr_lookup{ref};
       while (bands >> chr_name >> start >> stop >> name >> stain) {
+        if (chr_name.find("_") != string::npos ||
+            chr_name.find("M") != string::npos) {
+          continue;
+        }
         const unsigned int chr{chr_lookup[chr_name]};
         result.emplace_back(chr_name,
                             cn_abspos(chr, start), cn_abspos(chr, stop),
@@ -631,15 +636,17 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
   static bool shown_missing_message{false};
   if (cytobands.empty()) {
     if (!shown_missing_message) {
-      cerr << "***************************************************" << endl;
+      cerr << "******************************************************" << endl;
+      cerr << "No cytoband information was loaded" << endl;
       cerr << "Please download the file cytoBand.txt" << endl;
       cerr << "from the UCSC website, from mumdex.com or from the" << endl;
       cerr << "G-Graph paper supplementary materials" << endl;
-      cerr << "to match your reference, and place in the XXXX.bin/" << endl;
-      cerr << "directory next to your reference file" << endl;
-      cerr << "Only hg19 versions of these files were tested" << endl;
+      cerr << "to match your reference, and place in the directory" << endl;
+      cerr << ref.fasta_file() + ".bin/" << endl;
+      cerr << "Only hg19 and hg38 versions of these files were tested" << endl;
+      cerr << "Note chromosome names must match your reference" << endl;
       cerr << "G-Graph will continue to run without this info" << endl;
-      cerr << "***************************************************" << endl;
+      cerr << "******************************************************" << endl;
       shown_missing_message = true;
     }
     return false;
