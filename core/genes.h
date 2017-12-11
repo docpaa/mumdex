@@ -207,10 +207,12 @@ class JunctionCount {
 // class Reference;
 class KnownGenes {
  public:
-  explicit KnownGenes(const std::string & genes_file_name,
-                      const std::string & isoforms_file_name,
-                      const ChromosomeIndexLookup & index,
-                      const Reference & ref_arg);
+  // Empty gene information in case UCSC files are unavailable
+  explicit KnownGenes(const Reference & ref_arg) : ref{ref_arg} {}
+  KnownGenes(const std::string & genes_file_name,
+             const std::string & isoforms_file_name,
+             const ChromosomeIndexLookup & index,
+             const Reference & ref_arg);
   const KnownGene & operator[] (const unsigned int i) const {
     return genes[i];
   }

@@ -116,12 +116,35 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
   static mutex genes_mutex;
   unique_lock<mutex> lock{genes_mutex};
   static const KnownGenes genes{[&ref]() {
-      const string & reference_file{ref.fasta_file()};
-      const ChromosomeIndexLookup chr_lookup{ref};
-      const string genes_name{reference_file + ".bin/knownGene.txt"};
-      const string isoforms_name{reference_file + ".bin/knownIsoforms.txt"};
-      return KnownGenes{genes_name, isoforms_name, chr_lookup, ref};
+      try {
+        const string & reference_file{ref.fasta_file()};
+        const ChromosomeIndexLookup chr_lookup{ref};
+        const string genes_name{reference_file + ".bin/knownGene.txt"};
+        const string isoforms_name{reference_file + ".bin/knownIsoforms.txt"};
+        return KnownGenes{genes_name, isoforms_name, chr_lookup, ref};
+      } catch (Error & err) {
+        cerr << err.what() << endl;
+        return KnownGenes{ref};
+      }
     }()};
+  static bool missing_message_shown = false;
+  if (genes.size() == 0) {
+    if (!missing_message_shown) {
+      cerr << "***************************************************" << endl;
+      cerr << "No gene information was loaded" << endl;
+      cerr << "Please download the files" << endl;
+      cerr << "knownGenes.txt, knownIsoforms.txt and kgXref.txt" << endl;
+      cerr << "from the UCSC website, from mumdex.com or from the" << endl;
+      cerr << "G-Graph paper supplementary materials" << endl;
+      cerr << "to match your reference, and place in the XXXX.bin/" << endl;
+      cerr << "directory next to your reference file" << endl;
+      cerr << "Only hg19 versions of these files were tested" << endl;
+      cerr << "G-Graph will continue to run without this gene info" << endl;
+      cerr << "***************************************************" << endl;
+      missing_message_shown = true;
+    }
+    return false;
+  }
   static const string & reference_file{ref.fasta_file()};
   static const string kgXrefs_name{reference_file + ".bin/kgXref.txt"};
   static const GeneXrefs xref{kgXrefs_name};
@@ -581,10 +604,13 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
       }
 
       // Read bands file
-      const string bands_name{ref.fasta_file() + ".bin/bands.txt"};
+      const string bands_name{ref.fasta_file() + ".bin/cytoBand.txt"};
       ifstream bands{bands_name.c_str()};
-      if (!bands) throw Error("Could not load cytobands file") << bands_name;
-      bands.ignore(1000, '\n');
+      if (!bands) {
+        cerr << "Could not load cytobands file" << bands_name << endl;
+        return vector<CytobandInfo>{};
+      }
+      // bands.ignore(1000, '\n');
       string chr_name;
       unsigned int start;
       unsigned int stop;
@@ -601,6 +627,23 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
       sort(result.begin(), result.end());
       return result;
     }()};
+
+  static bool shown_missing_message{false};
+  if (cytobands.empty()) {
+    if (!shown_missing_message) {
+      cerr << "***************************************************" << endl;
+      cerr << "Please download the file cytoBand.txt" << endl;
+      cerr << "from the UCSC website, from mumdex.com or from the" << endl;
+      cerr << "G-Graph paper supplementary materials" << endl;
+      cerr << "to match your reference, and place in the XXXX.bin/" << endl;
+      cerr << "directory next to your reference file" << endl;
+      cerr << "Only hg19 versions of these files were tested" << endl;
+      cerr << "G-Graph will continue to run without this info" << endl;
+      cerr << "***************************************************" << endl;
+      shown_missing_message = true;
+    }
+    return false;
+  }
 
   static int band_low{0};
   static int band_high{0};
@@ -824,7 +867,7 @@ int main(int argc, char* argv[]) try {
 
   future<bool> gene_future;;
   if (type == "genome" || type == "cn") {
-    static const Reference ref{ref_name};
+    static const Reference ref{ref_name, true};
     static const CN_abspos cn_abspos{ref};
 
     // Add drawing callback to add chromosomes and ratio lines
