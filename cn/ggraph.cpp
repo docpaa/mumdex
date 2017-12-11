@@ -619,7 +619,11 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
       string stain;
       vector<CytobandInfo> result;
       const ChromosomeIndexLookup chr_lookup{ref};
-      while (bands >> chr_name >> start >> stop >> name >> stain) {
+      while (bands >> chr_name >> start >> stop) {
+        bands.get();
+        getline(bands, name, '\t');
+        bands >> stain;
+        if (!bands) throw Error("Problem parsing cytoband file") << bands_name;
         if (chr_name.find("_") != string::npos ||
             chr_name.find("M") != string::npos) {
           continue;
