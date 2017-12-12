@@ -96,7 +96,7 @@ endif
 
 ifeq ($(UNAME),Darwin)
 	WARN += $(COMMON_WARN) -Wno-variadic-macros -Wint-to-void-pointer-cast \
-		-Wshorten-64-to-32
+		-Wshorten-64-to-32 -Wno-unknown-pragmas
 	INCFLAGS += -I /opt/X11/include
 	LIBFLAGS += -L /opt/X11/lib
 endif
