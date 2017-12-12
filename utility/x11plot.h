@@ -717,7 +717,6 @@ struct Radio {
       toggled = !toggled;
       draw();
       actions.press();
-      draw();
       return true;
     }
     return false;
@@ -735,7 +734,6 @@ struct Radio {
       if (!togglable) toggled = !toggled;
       draw();
       actions.release();
-      draw();
       return true;
     }
     return false;
@@ -1025,8 +1023,8 @@ class X11Graph : public X11Win, public SavedConfig {
   void prepare_log();
   virtual void prepare();
   void draw_ticks() {
-    return;
     if (inside) return;
+    if (!tick_radios[0] && !tick_radios[1]) return;
     static std::vector<std::string> tick_labels;
     tick_labels.clear();
     if (0)
@@ -1043,12 +1041,14 @@ class X11Graph : public X11Win, public SavedConfig {
     }
     const int t_height{tick_font->height()};
     for (const bool y : {false, true}) {
+      if (!tick_radios[y]) continue;
       const Axis axis{range[y][0], range[y][1], 3, log_radios[y]};
       for (const std::pair<double, bool> tick : axis.ticks()) {
         if (!tick.second) continue;
         const int loc{coord(y, tick.first)};
         std::ostringstream label;
-        label << std::setprecision(6) << tick.first;
+        label << std::setprecision(6)
+              << (log_radios[y] ? pow(10, tick.first) : tick.first);
         tick_labels.push_back(label.str());
         std::string & text{tick_labels.back()};
         const int t_width{tick_font->string_width(text)};
@@ -1319,7 +1319,6 @@ class X11Graph : public X11Win, public SavedConfig {
 
   // Graph state information
   std::string status{""};
-  bool inside{false};
   std::vector<double> scale{};  // x, y, y / x
   Point last_press{}, last_motion{};
   bool moved{false};
@@ -1347,10 +1346,17 @@ class X11Graph : public X11Win, public SavedConfig {
   Radio lines_radio{"Connect graph points by lines", this, {-2, -1},
     {[this]() { return lines_radio ? prepare_draw() : draw(); },
           [this]() { return can_do_lines(); }},  true};
+  Radio tick_radios[2]{
+    {"Toggle axis labels on X axis (shown when cursor leaves window)",
+          this, {5.5, -1},
+      {[this]() { }}, true},
+    {"Toggle axis labels on Y axis (shown when cursor leaves window)",
+          this, {1, -5.5},
+      {[this]() { }}, true}};
   Radio log_radios[2]{
-    {"Toggle logarithmic scale on X axis", this, {5.5, -1},
+    {"Toggle logarithmic scale on X axis", this, {6.5, -1},
       {[this]() { prepare_log(); prepare_draw(); }}, true},
-    {"Toggle logarithmic scale on Y axis", this, {1, -5.5},
+    {"Toggle logarithmic scale on Y axis", this, {1, -6.5},
       {[this]() { prepare_log(); prepare_draw(); }}, true}};
   Radio grid_radios[2][2]{
     {{"Toggle major grid lines on X axis", this, {4.25, -1},
@@ -1390,6 +1396,13 @@ class X11Graph : public X11Win, public SavedConfig {
   }
 
   void restore_config(const SavedConfig & config) {
+    if (dne(config.line_width, line_width)) {
+      set_line_widths(series_line_gcs,
+                      (config.line_width == 1 ? 0 : config.line_width));
+    }
+    if (dne(config.arc_width, arc_width)) {
+      set_line_widths(series_arc_gcs, config.arc_width);
+    }
     for (unsigned int r{0}; r != saved_radios.size(); ++r) {
       saved_radios[r]->toggled = config.radio_states[r];
     }
@@ -1413,6 +1426,7 @@ class X11Graph : public X11Win, public SavedConfig {
   // All radios
   std::deque<Radio *> radios{&help_radio, &coord_radio,
         &arcs_radio, &outlines_radio, &lines_radio,
+        &tick_radios[0], &tick_radios[1],
         &log_radios[0], &log_radios[1],
         &grid_radios[0][0], &grid_radios[0][1],
         &grid_radios[1][0], &grid_radios[1][1],

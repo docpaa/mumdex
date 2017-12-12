@@ -154,7 +154,7 @@ spotless : clean
 CODEDIR	= $(notdir $(PWD))
 zip :  spotless
 	rm -f ~/$(CODEDIR).zip
-	(cd .. ; zip -r ~/$(CODEDIR) $(CODEDIR) > /dev/null)
+	(cd .. ; zip -r ~/$(CODEDIR) $(CODEDIR) -x\*.git\* > /dev/null)
 
 # Count code
 count : ; @ cat */*.{cpp,h} | sed 's/[ \t]+/ /g' | sort | uniq | wc -l
