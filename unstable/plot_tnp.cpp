@@ -61,19 +61,19 @@ int main(int argc, char* argv[]) try {
   data.add_data("bridge_count_co",
                 [](const unsigned int c1,
                    const unsigned int c2,
-                   const unsigned int c3) {
+                   const unsigned int c3) noexcept {
                   return c1 + c2 + c3;
                 }, "co1", "coM", "coH");
   data.add_data("bridge_count_cm",
                 [](const unsigned int c1,
                    const unsigned int c2,
-                   const unsigned int c3) {
+                   const unsigned int c3) noexcept {
                   return c1 + c2 + c3;
                 }, "cm1", "cmM", "cmH");
   data.add_data("bridge_count_p",
                 [](const unsigned int c1,
                    const unsigned int c2,
-                   const unsigned int c3) {
+                   const unsigned int c3) noexcept {
                   return c1 + c2 + c3;
                 }, "p1", "pM", "pH");
   data.add_data_sr("abspos", [&ref, &lookup](

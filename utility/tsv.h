@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <exception>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <random>

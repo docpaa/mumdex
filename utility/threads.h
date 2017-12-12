@@ -178,7 +178,7 @@ inline void test_thread_pool(
   ThreadPool::Results<unsigned int> unordered_results;
   std::cout << "testing ThreadPool using "
             << pool.n_threads() << " threads" << std::endl;
-  auto increment = [](const unsigned int j) { return j + 1; };
+  auto increment = [](const unsigned int j) noexcept { return j + 1; };
   unsigned int n_vals{100000};
   for (unsigned int i{0}; i != n_vals; ++i) {
     pool.run(unordered_results, increment, i);

@@ -29,11 +29,11 @@ include $(wildcard $(DEPDIR)/*.dep)
 # Compile command and flags
 CXX :=  g++
 STD := -std=c++11
-FAST := -Ofast -flto -m64 -march=native
+FAST := -Ofast -m64 -march=native -flto 
 DEBUG := # -g -ggdb
 LDFLAGS	:= $(FAST)
 LIBS :=
-LIBDIRS := $(addprefix -I ,$(MODULES))
+INCFLAGS := $(addprefix -I ,$(MODULES))
 
 # Excessive compiler warnings are a good thing...
 WARN := -Wpedantic -Wall -Wextra -Weffc++ -Wc++11-compat \
@@ -43,7 +43,7 @@ WARN := -Wpedantic -Wall -Wextra -Weffc++ -Wc++11-compat \
 	-Wfloat-equal -Wundef -Wshadow -Wlarger-than=10000 \
 	-Wframe-larger-than=50000 -Wcast-qual -Wcast-align -Wdate-time \
 	-Wenum-compare -Wpacked -Wredundant-decls -Winvalid-pch -Wlong-long \
-	-Wvla -Wdisabled-optimization -Wmissing-braces
+	-Wvla -Wdisabled-optimization -Wmissing-braces 
 # Unused warnings to potentially add later:
 #
 #
@@ -76,10 +76,11 @@ WARN := -Wpedantic -Wall -Wextra -Weffc++ -Wc++11-compat \
 UNAME = $(shell sh -c 'uname -s 2> /dev/null || echo NO_UNAME_FOUND')
 
 ifeq ($(UNAME),Linux)
-	WARN += -Wnoexcept -Wstrict-null-sentinel -Wdouble-promotion \
+	WARN += -Wstrict-null-sentinel -Wdouble-promotion \
 		-Wsync-nand -Wtrampolines -Wconditionally-supported \
 		-Wlogical-op -Wzero-as-null-pointer-constant \
-		-Wvector-operation-performance -Wuseless-cast
+		-Wvector-operation-performance -Wuseless-cast \
+		-Wnoexcept 
 	LDFLAGS += -pthread
 	ifdef LD_LIBRARY_PATH
 		LDFLAGS += -Xlinker -rpath=$(LD_LIBRARY_PATH)
@@ -89,18 +90,20 @@ endif
 ifeq ($(UNAME),Darwin)
 	WARN += $(COMMON_WARN) -Wno-variadic-macros -Wint-to-void-pointer-cast \
 		-Wshorten-64-to-32
-	LIBDIRS += -I /opt/X11/include
-	LDFLAGS += -L /opt/X11/lib
+	INCFLAGS += -I /opt/X11/include
+	LIBFLAGS += -L /opt/X11/lib
 endif
 
 # For gcc under cygwin
 ifeq ($(UNAME),Windows_NT)
-#	LIBDIRS += -I /usr/include/
-#	LDFLAGS += -L /usr/lib
+#	INCFLAGS += -I /usr/include/
+#	LIBFLAGS += -L /usr/lib
 endif
 
+LDFLAGS += $(LIBFLAGS) -static-libstdc++
+
 # Compile
-CXXFLAGS =  $(STD) $(FAST) $(DEBUG) $(WARN) $(LIBDIRS)
+CXXFLAGS =  $(STD) $(FAST) $(DEBUG) $(WARN) $(INCFLAGS)
 COMPILE.cpp = $(CXX) $(CXXFLAGS) -c
 
 # Normal compilation and linking pattern rules

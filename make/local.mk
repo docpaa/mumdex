@@ -5,6 +5,8 @@ SGE_ROOT ?= NOT
 ifeq ($(SGE_ROOT), /opt/sge6-2)
   # wigler cluster at CSHL special definitions
   GCC_DIR := /data/software/gcc/4.9.2/rtf
+  # GCC_DIR := /data/software/gcc/7.2.0
+  # GCC_DIR := /data/software/gcc/6.4.0
   PATH := $(GCC_DIR)/bin:/data/software/local/bin:/bin:/usr/bin
   LD_LIBRARY_PATH := $(GCC_DIR)/lib64
   tcmalloc := defined
@@ -14,7 +16,7 @@ ifeq ($(SGE_ROOT), /opt/sge6-2)
     unwindlib := $(THIRD)/libunwind/0.99-beta/lib
     tclibs := -ltcmalloc
     LD_LIBRARY_PATH := $(LD_LIBRARY_PATH):$(tclib):$(unwindlib)
-    LIBDIRS += -L$(tclib) -L$(unwindlib)
+    LIBFLAGS += -L$(tclib) -L$(unwindlib)
     LIBS += $(tclibs)
   endif
 else ifeq ($(SGE_ROOT), /opt/sge)

@@ -91,7 +91,9 @@ DocSettings doc_defaults;
 
 inline std::string date_time(std::time_t t = std::time(nullptr)) {
   char output[100];
-  if (std::strftime(output, sizeof(output), "%c", std::localtime(&t))) {
+  //  if (std::strftime(output, sizeof(output), "%c", std::localtime(&t))) {
+  if (std::strftime(output, sizeof(output), "%a %b %d %T %Y",
+                    std::localtime(&t))) {
     return std::string{output};
   } else {
     return "bad time";

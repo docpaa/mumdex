@@ -152,7 +152,7 @@ int main(int argc, char*[]) try {
   // Add a new series w, based on two existing series x and y
   tsv.add_data("w",
                [](const unsigned int c1,
-                  const double c2) {
+                  const double c2) noexcept {
                  return fabs(c1 + 10 * c2);
                },
                "x", "y");

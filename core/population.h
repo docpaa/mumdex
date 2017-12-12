@@ -51,8 +51,12 @@ class Population {
     }
 
    private:
+    // Ignore spurious warning here - not sure why triggered
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wuseless-cast"
     Member member_{Member::normal};
     Relation relation_{Relation::none};
+#pragma GCC diagnostic pop
   };
 
   class Family {

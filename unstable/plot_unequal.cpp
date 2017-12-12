@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) try {
   data.add_data("total_bridge_count",
                 [](const unsigned int c1,
                    const unsigned int c2,
-                   const unsigned int c3) {
+                   const unsigned int c3) noexcept {
                   return c1 + c2 + c3;
                 }, "MS141", "MS149", "MS267");
   data.add_data_sr("abspos", [&ref, &lookup](
