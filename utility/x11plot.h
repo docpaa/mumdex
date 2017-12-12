@@ -408,6 +408,15 @@ class X11WindowT {
   static constexpr unsigned int default_window_height{default_doc_height};
 };
 
+inline Display * open_default_display() {
+  Display * display = XOpenDisplay(nullptr);
+  if (display == nullptr) {
+    throw Error("Could not open X display - "
+                "is X windowing enabled in your terminal?");
+  }
+  return display;
+}
+
 // Application to display several windows of different types
 class X11App {
  public:
@@ -416,7 +425,7 @@ class X11App {
   using WinList = std::list<WinPtr>;
   using WinIter = WinList::iterator;
 
-  X11App() : display{XOpenDisplay(nullptr)},
+  X11App() : display{open_default_display()},
     screen{DefaultScreen(display)}, depth{DefaultDepth(display, screen)},
     fonts{display} {
     display_size[0] = DisplayWidth(display, screen);

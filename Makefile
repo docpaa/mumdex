@@ -29,11 +29,18 @@ include $(wildcard $(DEPDIR)/*.dep)
 # Compile command and flags
 CXX :=  g++
 STD := -std=c++11
-FAST := -Ofast -m64 -march=native -flto 
+FAST := -Ofast -march=native -flto 
 DEBUG := # -g -ggdb
 LDFLAGS	:= $(FAST)
 LIBS :=
 INCFLAGS := $(addprefix -I ,$(MODULES))
+
+# For precompiled binaries... need different flags etc.
+# precompiled = defined
+ifdef precompiled
+  FAST := -Ofast -flto 
+  LDFLAGS := -static-libstdc++
+endif
 
 # Excessive compiler warnings are a good thing...
 WARN := -Wpedantic -Wall -Wextra -Weffc++ -Wc++11-compat \
@@ -100,7 +107,7 @@ ifeq ($(UNAME),Windows_NT)
 #	LIBFLAGS += -L /usr/lib
 endif
 
-LDFLAGS += $(LIBFLAGS) # -static-libstdc++
+LDFLAGS += $(LIBFLAGS)
 
 # Compile
 CXXFLAGS =  $(STD) $(FAST) $(DEBUG) $(WARN) $(INCFLAGS)

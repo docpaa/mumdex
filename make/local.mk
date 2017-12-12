@@ -24,14 +24,7 @@ else ifeq ($(SGE_ROOT), /opt/sge)
 ifeq ($(USER), andrewsp-488)
   # for Peter
   GCC_DIR := /gpfs/commons/home/andrewsp-488/4.9.2
-else
-  # for Lakshmi
-  GCC_DIR := /nfs/sw/gcc/gcc-4.9.2/rtf
 endif
   PATH := $(GCC_DIR)/bin:/bin:/usr/bin
-  LD_LIBRARY_PATH := $(GCC_DIR)/lib64
-else ifeq ($(HOSTNAME), wigstore4.cshl.edu)
-  GCC_DIR := /data/software/gcc/4.9.3
-  PATH := $(GCC_DIR)/bin:/usr/local/bin:/bin:/usr/bin
   LD_LIBRARY_PATH := $(GCC_DIR)/lib64
 endif
