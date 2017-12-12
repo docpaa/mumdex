@@ -100,7 +100,7 @@ ifeq ($(UNAME),Windows_NT)
 #	LIBFLAGS += -L /usr/lib
 endif
 
-LDFLAGS += $(LIBFLAGS) -static-libstdc++
+LDFLAGS += $(LIBFLAGS) # -static-libstdc++
 
 # Compile
 CXXFLAGS =  $(STD) $(FAST) $(DEBUG) $(WARN) $(INCFLAGS)
