@@ -23,7 +23,7 @@ if platform.system() == "Darwin":
     # extra_compile_args.append('-Wno-missing-braces')
 
 from distutils.core import setup, Extension
-setup(name="mumdex", version="0.8",
+setup(name="mumdex", version="0.9",
       author="Peter Andrews @ CSHL",
       author_email="paa@drpa.us",
       url="http://mumdex.com",

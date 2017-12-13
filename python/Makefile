@@ -16,12 +16,12 @@ install_27	:
 	rm -Rf build
 python_install 	: install_26 install_27
 
-python_sdist :
+sdist :
 	rm -Rf dist
 	python setup.py sdist
 	rm MANIFEST
 
-publish	: python_sdist
+publish	: sdist
 	rsync -av dist/mumdex-*.tar.gz mumdex.com:/paa/mumdex.com/dist
 
 clean :

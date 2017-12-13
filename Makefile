@@ -29,7 +29,7 @@ include $(wildcard $(DEPDIR)/*.dep)
 # Compile command and flags
 CXX :=  g++
 STD := -std=c++11
-FAST := -Ofast -march=native -flto 
+FAST := -Ofast
 DEBUG := # -g -ggdb
 LDFLAGS	:= $(FAST)
 LIBS :=
@@ -38,7 +38,7 @@ INCFLAGS := $(addprefix -I ,$(MODULES))
 # For precompiled binaries... need different flags etc.
 # precompiled = defined
 ifdef precompiled
-  FAST := -Ofast -flto 
+  FAST := -Ofast
   LDFLAGS := -static-libstdc++
 endif
 
@@ -48,9 +48,10 @@ WARN := -Wpedantic -Wall -Wextra -Weffc++ -Wc++11-compat \
 	-Wsign-promo -Wformat=2 -Wmissing-include-dirs -Wswitch-default \
 	-Wswitch-enum -Wunused-parameter -Wuninitialized -Wunknown-pragmas \
 	-Wfloat-equal -Wundef -Wshadow -Wlarger-than=10000 \
-	-Wframe-larger-than=50000 -Wcast-qual -Wcast-align -Wdate-time \
+	-Wframe-larger-than=50000 -Wcast-qual -Wcast-align \
 	-Wenum-compare -Wpacked -Wredundant-decls -Winvalid-pch -Wlong-long \
 	-Wvla -Wdisabled-optimization -Wmissing-braces 
+#  -Wdate-time
 # Unused warnings to potentially add later:
 #
 #
@@ -84,10 +85,11 @@ UNAME = $(shell sh -c 'uname -s 2> /dev/null || echo NO_UNAME_FOUND')
 
 ifeq ($(UNAME),Linux)
 	WARN += -Wstrict-null-sentinel -Wdouble-promotion \
-		-Wsync-nand -Wtrampolines -Wconditionally-supported \
+		-Wsync-nand -Wtrampolines \
 		-Wlogical-op -Wzero-as-null-pointer-constant \
 		-Wvector-operation-performance -Wuseless-cast \
 		-Wnoexcept 
+#  -Wconditionally-supported
 	LDFLAGS += -pthread
 	ifdef LD_LIBRARY_PATH
 		LDFLAGS += -Xlinker -rpath=$(LD_LIBRARY_PATH)
@@ -116,6 +118,8 @@ COMPILE.cpp = $(CXX) $(CXXFLAGS) -c
 # Normal compilation and linking pattern rules
 %.o : %.cpp
 %.o : %.cpp $(DEPDIR)/%.dep
+	which g++
+	echo $(PATH)
 	$(COMPILE.cpp) $(DEPFLAGS) $< -o $@
 	$(POSTCOMPILE)
 % : %.o ; $(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
@@ -156,7 +160,8 @@ $(LINTDIR)/%.lint : % ; @ $(LINT) $< 2>&1 | tee >($(LINTGREP) 1>&2) > $@
 
 # Clean all compiled files
 clean :
-	rm -f *.x11o *.gslo *.o $(PROGRAMS) && rm -Rf $(DEPDIR)/ $(LINTDIR)/
+	rm -f *.x11o *.gslo *.o $(PROGRAMS)
+	rm -Rf $(DEPDIR)/ $(LINTDIR)/ python/build python/dist
 spotless : clean
 	rm -f *~ */*~
 
@@ -166,10 +171,11 @@ zip :  spotless
 	rm -f ~/$(CODEDIR).zip
 	(cd .. ; zip -r ~/$(CODEDIR) $(CODEDIR) -x\*.git\* > /dev/null)
 
+# Put online for download
+publish : zip
+	scp ~/mumdex.zip mumdex.com:/paa/mumdex.com/
+	ssh mumdex.com 'cd /paa/mumdex.com && [ -e mumdex.zip ] && rm -Rf mumdex/ && unzip mumdex.zip'
+
 # Count code
 count : ; @ cat */*.{cpp,h} | sed 's/[ \t]+/ /g' | sort | uniq | wc -l
-
-# Put online for download
-publish: zip
-	scp ~/mumdex.zip mumdex.com:/paa/mumdex.com/
 

@@ -4,6 +4,8 @@
 *.x11o
 .dep/
 .lint/
+python/dist
+python/build
 add_abspos
 analyze_transmission
 anchor_reads

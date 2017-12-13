@@ -27,7 +27,7 @@ It is recommended that you create a directory, appropriately named, for each sam
 
 2a. To align paired fastq files using a previously created index (will create the index if it does not yet exist), run:
 
-mummer [-rcref] [-verbose] /absolute/path/to/reference.fa reads1.fq reads2.fq
+mummer -fastqs [-rcref] [-verbose] /absolute/path/to/reference.fa reads1.fq reads2.fq
 
 Make sure to use the correct path and file names for your reference and input reads.
 
@@ -41,7 +41,7 @@ For both of the above steps, you may use the -l N command line arguments to run 
 
 The mummer program creates a number of MUMdex parts in a mumdex/ directory that it creates in your current working directory that need to be merged before use.  Run the merge_mumdex program to do this:
 
-merge_mumdex mumdex
+merge_mumdex mumdex max_GB [n_threads]
 
 This will delete the parts when done and leave a complete MUMdex alignment format set of files in the mumdex/ directory.
 
@@ -51,7 +51,7 @@ The bridges program extracts bridges from the mumdex alignment file. It outputs 
 
 mkdir bridges
 cd bridges
-bridges ../mumdex [N_THREADS]
+bridges ../mumdex N_THREADS
 
 You can edit near the top of the bridges.h file to set two parameters: whether to include SNP (zero invariant) bridges, and the minimum MUM (support) length for extracted bridges.
 

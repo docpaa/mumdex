@@ -5,11 +5,14 @@ SGE_ROOT ?= NOT
 ifeq ($(SGE_ROOT), /opt/sge6-2)
   # wigler cluster at CSHL special definitions
   GCC_DIR := /data/software/gcc/4.9.2/rtf
-  # GCC_DIR := /data/software/gcc/7.2.0
+  # GCC_DIR := /data/software/gcc/4.9.4
+  # GCC_DIR := /data/software/gcc/5.5.0
   # GCC_DIR := /data/software/gcc/6.4.0
+  # GCC_DIR := /data/software/gcc/7.2.0
   PATH := $(GCC_DIR)/bin:/data/software/local/bin:/bin:/usr/bin
   LD_LIBRARY_PATH := $(GCC_DIR)/lib64
   tcmalloc := defined
+  # FAST += -march=native -flto
   ifdef tcmalloc
     THIRD := /data/software
     tclib := $(THIRD)/gperf/2.1.90/lib
