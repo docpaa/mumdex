@@ -118,8 +118,6 @@ COMPILE.cpp = $(CXX) $(CXXFLAGS) -c
 # Normal compilation and linking pattern rules
 %.o : %.cpp
 %.o : %.cpp $(DEPDIR)/%.dep
-	which g++
-	echo $(PATH)
 	$(COMPILE.cpp) $(DEPFLAGS) $< -o $@
 	$(POSTCOMPILE)
 % : %.o ; $(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
