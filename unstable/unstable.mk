@@ -24,7 +24,6 @@ DEVELOPMENT_PROGRAMS := \
 	compare_segmentation \
 	compare_yoonha \
 	control_mview \
-	convert_ggp \
 	count_anchors \
 	count_genes \
 	count_pseudogenes \
@@ -73,7 +72,6 @@ DEVELOPMENT_PROGRAMS := \
 	primers \
 	print_invariants \
 	process_bisulfite_rna \
-	process_ggp \
 	random_mumdex_sequences \
 	random_position \
 	rare \

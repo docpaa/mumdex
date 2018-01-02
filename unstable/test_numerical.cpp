@@ -104,7 +104,7 @@ int main(int argc, char * argv[]) try {
   if (0) cout << argv[0] << endl;
   const GoldenMinimizer minimizer(test_fun, -1000, 1000);
   cerr << "Minimum value is at " << setprecision(20) << minimizer.min() << endl;
-  
+
   // Set up data for multidimensional minimization
   const unsigned int n_points{10000};
   const double x_min{0};
@@ -116,11 +116,12 @@ int main(int argc, char * argv[]) try {
   const vector<double> start_params{200, 23, 15, 6.3, 3.5, 2};
   // const vector<double> start_params{120, 2.5, 15.3, 3.0, 3.3, 2.05};
   // const vector<double> start_params{150, 30, 16, 5.0, 1, 1.1};
+  unsigned int seed = time(nullptr);
   for (unsigned int xi{0}; xi != n_points; ++xi) {
     const double x{x_min + xi * step};
     const double y{adapted_fun(x, test_params)};
     x_vals[xi] = x;
-    y_vals[xi] = y + 10.0 * rand() / RAND_MAX;
+    y_vals[xi] = y + 10.0 * rand_r(&seed) / RAND_MAX;
   }
 
   // Fit model to data
