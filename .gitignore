@@ -103,6 +103,7 @@ position_coverage
 primers
 print_invariants
 process_bisulfite_rna
+random_mumdex_sequences
 random_position
 randomize_order
 rare
@@ -122,6 +123,7 @@ simulate_events2
 skbr3_in_skn1
 smash
 smash_qc
+smooth_data
 snp_report
 sssa
 subsample
