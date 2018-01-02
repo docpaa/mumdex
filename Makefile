@@ -47,11 +47,11 @@ WARN := -Wpedantic -Wall -Wextra -Weffc++ -Wc++11-compat \
 	-Wctor-dtor-privacy -Wnarrowing -Wold-style-cast -Woverloaded-virtual \
 	-Wsign-promo -Wformat=2 -Wmissing-include-dirs -Wswitch-default \
 	-Wswitch-enum -Wunused-parameter -Wuninitialized -Wunknown-pragmas \
-	-Wfloat-equal -Wundef -Wshadow -Wlarger-than=10000 \
+	-Wfloat-equal -Wundef -Wshadow -Wlarger-than=10000 -Wdate-time \
 	-Wframe-larger-than=50000 -Wcast-qual -Wcast-align \
 	-Wenum-compare -Wpacked -Wredundant-decls -Winvalid-pch -Wlong-long \
 	-Wvla -Wdisabled-optimization -Wmissing-braces 
-#  -Wdate-time
+#
 # Unused warnings to potentially add later:
 #
 #
@@ -88,8 +88,8 @@ ifeq ($(UNAME),Linux)
 		-Wsync-nand -Wtrampolines \
 		-Wlogical-op -Wzero-as-null-pointer-constant \
 		-Wvector-operation-performance -Wuseless-cast \
-		-Wnoexcept 
-#  -Wconditionally-supported
+		-Wnoexcept -Wconditionally-supported
+#
 	LDFLAGS += -pthread
 	ifdef LD_LIBRARY_PATH
 		LDFLAGS += -Xlinker -rpath=$(LD_LIBRARY_PATH)

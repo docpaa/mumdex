@@ -13,6 +13,7 @@
 #include <exception>
 #include <iostream>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <map>
 #include <memory>
@@ -732,36 +733,23 @@ int main(int argc, char* argv[]) try {
     }
   }
 
-  if (argc < 5)
-    throw Error("usage: ggraph plain|genome|cn ref xn,yn1,yn2... yl1,yl2... "
-                "results_file ...");
+  if (argc < 4)
+    throw Error("usage: ggraph plain|genome|cn ref xn,yn1[:l],yn2[:l]... "
+                "data_file ...");
 
   // Process arguments
   const string type{argv[1]};
   const string ref_name{argv[2]};
   const std::string columns{argv[3]};
-  const std::string lines{argv[4]};
-  argc -= 4;
-  argv += 5;
-
-  // Display type - points or lines
-  const vector<unsigned char> do_lines{[&lines] () {
-      vector<unsigned char> result;
-      istringstream stream{lines.c_str()};
-      bool choice;
-      while (stream >> choice) {
-        result.push_back(choice);
-        stream.get();
-      }
-      return result;
-    }()};
+  argc -= 3;
+  argv += 3;
 
   // Names of input files
   const vector<string> names{[argc, argv] () {
       vector<string> result;
       result.reserve(argc);
       for (int a{0}; a != argc; ++a) {
-        result.emplace_back(argv[a]);
+        result.emplace_back(argv[a + 1]);
       }
       return result;
     }()};
@@ -785,6 +773,28 @@ int main(int argc, char* argv[]) try {
       }
       return result;
     }()};
+
+  const vector<unsigned char> do_lines{[&results] () {
+      vector<unsigned char> result;
+      // Assumes all loaded files share the same column names, as is expected
+      const Columns & cols{results[0]};
+      for (unsigned int c{1}; c != cols.n_cols(); ++c) {
+        if (cols.type(c).empty() || cols.type(c)[0] == 'p') {
+          result.push_back(0);
+        } else if (cols.type(c)[0] == 'l') {
+          result.push_back(1);
+        } else {
+          throw Error("Unknown column type") << cols.type(c);
+        }
+      }
+      // Special case for two dependent variables and no type specifications
+      // make the second dependent variable lines
+      if (cols.n_cols() == 3 && cols.type(1).empty() && cols.type(2).empty()) {
+        result[1] = 1;
+      }
+      return result;
+    }()};
+
 
   // App to display multiple windows
   X11App app;

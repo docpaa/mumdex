@@ -77,13 +77,20 @@ class Columns {
   Columns(const std::string & file_name, const uint64_t size_hint,
           const std::string & columns, const bool header) {
     // Get list of desired column names or numbers
-    column_names = [&columns]() {
-      std::istringstream input{columns.c_str()};
-      std::string column;
-      std::vector<std::string> result;
-      while (getline(input, column, ',')) result.push_back(column);
-      return result;
-    }();
+    std::istringstream column_input{columns.c_str()};
+    std::string column_spec;
+    while (getline(column_input, column_spec, ',')) {
+      // column spec is either name or name:type
+      std::istringstream spec_stream{column_spec.c_str()};
+      std::string column_name{};
+      std::string column_type{};
+      getline(spec_stream, column_name, ':');
+      if (spec_stream) {
+        spec_stream >> column_type;
+      }
+      column_names.push_back(column_name);
+      column_types.push_back(column_type);
+    }
 
     // Input file name
     std::ifstream input{file_name.c_str()};
@@ -164,6 +171,7 @@ class Columns {
   }
 
   const std::string & name(unsigned int c) const { return column_names[c]; }
+  const std::string & type(unsigned int c) const { return column_types[c]; }
   uint64_t n_rows() const { return n_cols() ? data[0].size() : 0; }
   unsigned int n_cols() const { return static_cast<unsigned int>(data.size()); }
   const std::vector<double> & operator[](const unsigned int c) const {
@@ -172,6 +180,7 @@ class Columns {
 
  private:
   std::vector<std::string> column_names{};
+  std::vector<std::string> column_types{};
   std::vector<std::vector<double>> data{};
 };
 

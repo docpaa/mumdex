@@ -24,6 +24,7 @@ DEVELOPMENT_PROGRAMS := \
 	compare_segmentation \
 	compare_yoonha \
 	control_mview \
+	convert_ggp \
 	count_anchors \
 	count_genes \
 	count_pseudogenes \
@@ -72,6 +73,8 @@ DEVELOPMENT_PROGRAMS := \
 	primers \
 	print_invariants \
 	process_bisulfite_rna \
+	process_ggp \
+	random_mumdex_sequences \
 	random_position \
 	rare \
 	repeatness \
@@ -86,6 +89,7 @@ DEVELOPMENT_PROGRAMS := \
 	simulate_events2 \
 	simulate_events \
 	skbr3_in_skn1 \
+	smooth_data \
 	snp_report \
 	sssa \
 	subsample \
