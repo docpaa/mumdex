@@ -89,7 +89,6 @@ ifeq ($(UNAME),Linux)
 		-Wlogical-op -Wzero-as-null-pointer-constant \
 		-Wvector-operation-performance -Wuseless-cast \
 		-Wnoexcept -Wconditionally-supported
-#
 	LDFLAGS += -pthread
 	ifdef LD_LIBRARY_PATH
 		LDFLAGS += -Xlinker -rpath=$(LD_LIBRARY_PATH)
@@ -176,4 +175,8 @@ publish : zip
 
 # Count code
 count : ; @ cat */*.{cpp,h} | sed 's/[ \t]+/ /g' | sort | uniq | wc -l
+
+
+
+
 

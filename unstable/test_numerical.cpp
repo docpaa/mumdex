@@ -82,7 +82,7 @@ class DataTester {
     for (unsigned int start{0} ; start < x_vals.size() ; start += block_size) {
       const unsigned int stop{
         std::min(static_cast<unsigned int>(x_vals.size()), start + block_size)};
-      futures.push_back(pool.run([this, &parameters, start, stop]() {
+      futures.push_back(pool.run([this, &parameters, start, stop]() noexcept {
             return evaluate_block(parameters, start, stop);
           }));
     }

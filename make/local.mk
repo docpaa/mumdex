@@ -3,8 +3,16 @@
 # either in your environment with export or here in a special section for you
 SGE_ROOT ?= NOT
 ifeq ($(SGE_ROOT), /opt/sge6-2)
+
+  # Test code on various compiler versions for warnings and errors
+  test_compilers :
+	@ unset GCC_DIR && ./make/test_compilers.sh
+
+  ifndef GCC_DIR
+    FAST += -march=native -flto
+  endif
   # wigler cluster at CSHL special definitions
-  GCC_DIR := /data/software/gcc/4.9.2/rtf
+  GCC_DIR ?= /data/software/gcc/4.9.2/rtf
   # GCC_DIR := /data/software/gcc/4.9.4
   # GCC_DIR := /data/software/gcc/5.5.0
   # GCC_DIR := /data/software/gcc/6.4.0
@@ -12,7 +20,6 @@ ifeq ($(SGE_ROOT), /opt/sge6-2)
   PATH := $(GCC_DIR)/bin:/data/software/local/bin:/bin:/usr/bin
   LD_LIBRARY_PATH := $(GCC_DIR)/lib64
   tcmalloc := defined
-  # FAST += -march=native -flto
   ifdef tcmalloc
     THIRD := /data/software
     tclib := $(THIRD)/gperf/2.1.90/lib

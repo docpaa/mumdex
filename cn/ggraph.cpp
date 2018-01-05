@@ -609,7 +609,7 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
       const string bands_name{ref.fasta_file() + ".bin/cytoBand.txt"};
       ifstream bands{bands_name.c_str()};
       if (!bands) {
-        cerr << "Could not load cytobands file" << bands_name << endl;
+        cerr << "Could not load cytobands file " << bands_name << endl;
         return vector<CytobandInfo>{};
       }
       // bands.ignore(1000, '\n');
@@ -709,6 +709,7 @@ int main(int argc, char* argv[]) try {
   unsigned int height{1000};
   int x_off{0};
   int y_off{0};
+  char ** initial{nullptr};
   while (argc) {
     if (argv[1][0] == '-') {
       const string option{argv[1]};
@@ -725,6 +726,10 @@ int main(int argc, char* argv[]) try {
                << " x offset " << x_off << " y offset " << y_off << endl;
         argv += 2;
         argc -= 2;
+      } else if (option == "--initial-view") {
+        initial = argv + 2;
+        argc -= 5;
+        argv += 5;
       } else {
         throw Error("Unrecognized command line option") << option;
       }
@@ -919,6 +924,14 @@ int main(int argc, char* argv[]) try {
     graph.grid_radios[0][0].toggled = false;
     graph.grid_radios[1][0].toggled = false;
     graph.log_radios[0].actions.visible = [] () { return false; };
+  }
+
+  // Process initial view command line arguments
+  if (initial) {
+    graph.get_range();
+    graph.set_range(0, atof(initial[0]), atof(initial[1]));
+    graph.set_range(1, atof(initial[2]), atof(initial[3]));
+    graph.prepare();
   }
 
   // Run the app
