@@ -23,7 +23,7 @@ if [ -e mumdex/ggraph ] ; then
 else
     url=http://mumdex.com/mumdex.zip
     echo Downloading $url
-    lwp-request -f $url > mumdex.zip
+    lwp-request -m GET $url > mumdex.zip
     echo Unzipping mumdex.zip
     unzip mumdex.zip > /dev/null
     rm mumdex.zip
@@ -46,7 +46,7 @@ else
     for file in $(eval echo $data) ; do
         url=http://mumdex.com/ggraph/data/$file
         echo Downloading $url
-        lwp-request -f $url > $file
+        lwp-request -m GET $url > $file
     done
 fi
 
@@ -62,7 +62,10 @@ for genome in $genomes ; do
         for file in $(eval echo $config $gzip) ; do
             url=http://mumdex.com/ggraph/config/$genome/$file
             echo Downloading $url
-            lwp-request -f $url > $file
+            if [ $file = $gzip ] ; then
+                echo Please be patient for this one
+            fi
+            lwp-request -m GET $url > $file
         done
         echo Unzipping $gzip
         gunzip $gzip
@@ -77,7 +80,7 @@ for genome in $genomes ; do
     echo
     echo You can now run G-Graph with $genome using the following command:
     echo
-    echo ./mumdex/ggraph cn $genome.fa abspos,ratio,seg 0,1 "$data"
+    echo ./mumdex/ggraph cn $genome.fa abspos,ratio,seg "$data"
     if [ ! -e $genome.fa.bin/ref.seq.bin ] ; then
         echo
         echo Note the first time the command runs it will take a short time \
