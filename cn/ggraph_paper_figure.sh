@@ -13,17 +13,30 @@
 # http://mumdex.com/ggraph/
 #
 
+n_threads=2
+uname=$(uname)
+if [ $uname = "Linux" ] ; then
+    n_threads=$(grep processor /proc/cpuinfo)
+fi
+if [ $uname = "Darwin" ] ; then
+    n_threads=$(sysctl -n hw.logicalcpu)
+fi
+
 abspos_left=2983775000
-(cd ~/mumdex ; make -j > /dev/null) &&
+geometry=2000x1120+0+0
+
+(cd ~/mumdex ; make -j $n_threads ggraph > /dev/null) &&
 (
 echo 'Note: to exactly reproduce the figure from the paper:'
-echo 'you need to run on a mac, to get the exact fonts used in the paper'
+echo 'you need to run on a mac, to get the exact fonts and gui used in the paper'
+echo "you need a big enough screen to contain the image (${geometry%%+*} pixels min usable)"
 echo 'you need to manually turn on cytoband display (near top left)'
-echo 'you need to increase point display size by two levels (near bottom right)'
+echo 'you need to manually increase point display size by two levels (near bottom right)'
 echo 'have the mouse focus remain in the window, in the central graphing region'
 echo 'take a window-screenshot: command-shift-4 space, then click on window'
 ) &&
-~/mumdex/ggraph --geometry 1800x800+0+0 --initial-view $abspos_left $((abspos_left+1000000)) 0 2.5 cn ~/analysis/mums/hg19/chrAll.fa abspos,ratio,seg {m,f,d,s}.txt
+~/mumdex/ggraph --n-threads $n_threads --geometry $geometry --initial-view $abspos_left $((abspos_left+1000000)) 0 2.5 \
+    cn ~/hg19/chrAll.fa abspos,ratio,seg {m,f,d,s}.txt
 
 
 

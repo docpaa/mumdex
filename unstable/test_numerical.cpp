@@ -116,7 +116,7 @@ int main(int argc, char * argv[]) try {
   const vector<double> start_params{200, 23, 15, 6.3, 3.5, 2};
   // const vector<double> start_params{120, 2.5, 15.3, 3.0, 3.3, 2.05};
   // const vector<double> start_params{150, 30, 16, 5.0, 1, 1.1};
-  unsigned int seed = time(nullptr);
+  unsigned int seed = static_cast<unsigned int>(time(nullptr));
   for (unsigned int xi{0}; xi != n_points; ++xi) {
     const double x{x_min + xi * step};
     const double y{adapted_fun(x, test_params)};

@@ -1449,6 +1449,13 @@ class X11Graph : public X11Win, public SavedConfig {
   std::vector<CallBack> call_backs{};
   std::vector<Radio> call_back_radios{};
   std::vector<Radio> unnamed_radios{};
+
+  // Number of threads to use
+  unsigned int n_threads_{std::thread::hardware_concurrency()};
+  unsigned int n_threads(const unsigned int n_threads__ = 0) {
+    if (n_threads__ != 0) n_threads_ = n_threads__;
+    return n_threads_;
+  }
 };
 
 // Common initialization for constructors
@@ -1876,7 +1883,7 @@ inline void X11Graph::prepare() {
     }
   };
 
-  ThreadPool pool(static_cast<unsigned int>(data->size()));
+  ThreadPool pool{n_threads()};
   std::vector<std::future<void>> futures;
   for (unsigned int s{0}; s != data->size(); ++s)
     futures.emplace_back(pool.run(series_fun, s));
@@ -1989,10 +1996,10 @@ inline std::vector<Radio> X11Graph::create_unnamed_radios() {
     {"Make marker outlines thinner", this, {-1, -6.75}, {[this]() {
           set_line_widths(series_arc_gcs, arc_width -= 1); draw(); }, [this]() {
           return do_arcs() && outlines_radio && arc_width > 0; }}},
-    {"Make lines connecting points thicker", this, {-3.25, -1}, {[this]() {
+    {"Make series lines thicker", this, {-3.25, -1}, {[this]() {
           set_line_widths(series_line_gcs, line_width += 1); draw(); },
             [this]() { return do_lines(); }}},
-    {"Make lines connecting points thinner", this, {-4.25, -1}, {[this]() {
+    {"Make series lines thinner", this, {-4.25, -1}, {[this]() {
           line_width -= 1;
           set_line_widths(series_line_gcs, (line_width == 1 ? 0 : line_width));
           draw(); }, [this]() {return do_lines() && line_width >= 2; }}},

@@ -79,6 +79,8 @@ using paa::X11Font;
 using paa::X11Graph;
 using paa::X11Win;
 
+unsigned int n_threads{std::thread::hardware_concurrency()};
+
 const unsigned int max_gene_mb{100};
 const unsigned int max_name_mb{5};
 
@@ -705,6 +707,7 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
 int main(int argc, char* argv[]) try {
   // Process optional command line arguments
   --argc;
+
   unsigned int width{1200};
   unsigned int height{1000};
   int x_off{0};
@@ -730,6 +733,10 @@ int main(int argc, char* argv[]) try {
         initial = argv + 2;
         argc -= 5;
         argv += 5;
+      } else if (option == "--n-threads") {
+        n_threads = atoi(argv[2]);
+        argc -= 2;
+        argv += 2;
       } else {
         throw Error("Unrecognized command line option") << option;
       }
@@ -761,7 +768,7 @@ int main(int argc, char* argv[]) try {
 
   // Read in columns from data file
   const vector<Columns> results{[&names, &columns] () {
-      ThreadPool pool(12);
+      ThreadPool pool(n_threads);
       vector<future<Columns>> futures;
       for (const string & name : names) {
         futures.push_back(
@@ -925,6 +932,8 @@ int main(int argc, char* argv[]) try {
     graph.grid_radios[1][0].toggled = false;
     graph.log_radios[0].actions.visible = [] () { return false; };
   }
+
+  graph.n_threads(n_threads);
 
   // Process initial view command line arguments
   if (initial) {
