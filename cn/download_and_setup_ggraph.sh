@@ -21,11 +21,15 @@ echo
 if [ -e mumdex/ggraph ] ; then
     echo mumdex directory and ggraph program already exists - skipping 1>&2
 else
-    wget http://mumdex.com/mumdex.zip
-    unzip mumdex.zip
+    url=http://mumdex.com/mumdex.zip
+    echo Downloading $url
+    lwp-request -f $url > mumdex.zip
+    echo Unzipping mumdex.zip
+    unzip mumdex.zip > /dev/null
     rm mumdex.zip
     cd mumdex
-    make -j 4 ggraph
+    echo Compiling mumdex/ggraph
+    make -j 4 ggraph > /dev/null
     if [ $? != 0 ] ; then
         echo Problem compiling ggraph - \
             please try to copile manually before continuing - quitting 1>&2
@@ -39,7 +43,11 @@ data="{m,f,d,s}.txt"
 if [ -e s.txt ] ; then
     echo sample data already exists - skipping 1>&2
 else
-    eval wget http://mumdex.com/ggraph/data/$data
+    for file in $(eval echo $data) ; do
+        url=http://mumdex.com/ggraph/data/$file
+        echo Downloading $url
+        lwp-request -f $url > $file
+    done
 fi
 
 # Get genomes
@@ -51,8 +59,12 @@ for genome in $genomes ; do
         echo Genome files for $genome already exist - skipping 1>&2
     else
         config="{knownGene,knownIsoforms,kgXref,cytoBand}.txt"
-        eval wget http://mumdex.com/ggraph/config/$genome/{$config,$gzip}
-        echo unzipping $gzip
+        for file in $(eval echo $config $gzip) ; do
+            url=http://mumdex.com/ggraph/config/$genome/$file
+            echo Downloading $url
+            lwp-request -f $url > $file
+        done
+        echo Unzipping $gzip
         gunzip $gzip
         mkdir $bin
         eval mv $config $bin
@@ -65,10 +77,15 @@ for genome in $genomes ; do
     echo
     echo You can now run G-Graph with $genome using the following command:
     echo
-    echo ./mumdex/ggraph cn $genome.fa abspos,ratio,seg "$data"
+    echo ./mumdex/ggraph cn $genome.fa abspos,ratio,seg 0,1 "$data"
     if [ ! -e $genome.fa.bin/ref.seq.bin ] ; then
         echo
         echo Note the first time the command runs it will take a short time \
             to create a binary reference cache file
+    fi
+    if [ $genome = hg38 ] ; then
+        echo 
+        echo Note the sample data is processed for hg19 \
+            but it will still display "(slightly incorrectly)" for hg38
     fi
 done
