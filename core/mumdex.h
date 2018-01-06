@@ -396,7 +396,7 @@ class ChromosomeIndexLookup {
       throw;
     }
   }
-  // quiet lookup (still trhows)
+  // quiet lookup (still throws)
   unsigned int operator()(const std::string & name) const {
     return lookup_table.at(name);
   }
