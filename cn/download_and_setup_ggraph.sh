@@ -34,7 +34,7 @@ else
         (
             echo Problem compiling ggraph and x11plot
             echo Please try to copile manually before continuing
-            echo You probably need a more recent compiler (gcc 4.9 or later)
+            echo You probably need a more recent compiler "(gcc 4.9 or later)"
             echo Quitting
         ) 1>&2
         exit 1

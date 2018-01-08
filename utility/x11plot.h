@@ -32,6 +32,7 @@
 #include "error.h"
 #include "files.h"
 #include "plot.h"
+#include "strings.h"
 #include "threads.h"
 #include "utility.h"
 
@@ -320,24 +321,17 @@ class X11WindowT {
 
   virtual void save_image(const std::string & base_name,
                           std::function<void()> call_back = [] () {}) {
-    static const std::string pdf_name{get_next_file(base_name, "pdf")};
     const std::string image_name{get_next_file(base_name, "xpm")};
-    // Not sure why I need to subtract 1 from width and height on Mac OS
-    save_image(image_name, window, 0, 0, width() - 1, height() - 1, call_back);
+    const std::string png_name{replace_substring(image_name, "xpm", "png")};
+    save_image(image_name, window, 0, 0, width(), height(), call_back);
     image_names.push_back(image_name);
-    std::ostringstream pdf_command;
-    pdf_command << "convert -quality 100 -density "
-                << app.pixels_per_inch(0) << "x" << app.pixels_per_inch(1);
-    for (const std::string & name : image_names) {
-      pdf_command << " " << name;
-    }
-    pdf_command << " " << pdf_name;
-    // std::cerr << pdf_command.str() << std::endl;
-    std::cerr << "Saved " << image_names.size() << " image"
-              << (image_names.size() == 1 ? "" : "s so far") << " in pdf file "
-              << pdf_name << std::endl;
-    if (system(pdf_command.str().c_str()) == -1) {
-      std::cerr << "Problem creating pdf file" << std::endl;
+    std::ostringstream png_command;
+    png_command << "convert " << image_names.back() << " "
+                << png_name;
+    if (system(png_command.str().c_str()) == -1) {
+      std::cerr << "Problem creating png image" << std::endl;
+    } else {
+      std::cerr << "Converted image to " << png_name << std::endl;
     }
   }
   void save_image(const std::string & file_name, Drawable d,
@@ -346,7 +340,7 @@ class X11WindowT {
                   std::function<void()> call_back = [] () {}) {
     if (0) std::cerr << xp << " " << yp << " "
                      << w << " " << h << " " << std::endl;
-    XImage * image{XGetImage(display(), d, xp, yp, w, h, -1UL, XYPixmap)};
+    XImage * image{XGetImage(display(), d, xp, yp, w, h, AllPlanes, XYPixmap)};
     if (!image) throw Error("Could not get image");
     call_back();
     std::map<uint64_t, char> colors;
@@ -1192,6 +1186,26 @@ class X11Graph : public X11Win, public SavedConfig {
   }
 
   virtual ~X11Graph() {
+    // Save accumulated images as pdf
+    if (image_names.size()) {
+      const std::string pdf_name{get_next_file("cn", "pdf")};
+      std::ostringstream pdf_command;
+      pdf_command << "convert -quality 100 -density "
+                  << app.pixels_per_inch(0) << "x" << app.pixels_per_inch(1);
+      for (const std::string & name : image_names) {
+        pdf_command << " " << name;
+      }
+      pdf_command << " " << pdf_name;
+
+      if (system(pdf_command.str().c_str()) == -1) {
+        std::cerr << "Problem creating pdf file" << std::endl;
+      } else {
+        std::cerr << "Saved " << image_names.size() << " image"
+                  << (image_names.size() == 1 ? "" : "s")
+                  << " in pdf file " << pdf_name << std::endl;
+      }
+    }
+
     for (GC gc_ : {border_gc, minor_gc, major_gc}) XFreeGC(display(), gc_);
     // FIX Should also free all other GCs...
   }
