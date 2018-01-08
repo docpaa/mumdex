@@ -2,11 +2,17 @@
 # If a special compiler is needed, set PATH and LD_LIBRARY_PATH appropriately
 # either in your environment with export or here in a special section for you
 SGE_ROOT ?= NOT
-ifeq ($(SGE_ROOT), /opt/sge6-2)
+SGE_CLUSTER_NAME ?= NOT
+ifeq ($(SGE_CLUSTER_NAME), wigclust)
 
   # Test code on various compiler versions for warnings and errors
   test_compilers :
 	@ unset GCC_DIR && ./make/test_compilers.sh
+
+  # Put online for download
+  publish : zip
+	scp ~/mumdex.zip mumdex.com:/paa/mumdex.com/
+	ssh mumdex.com 'cd /paa/mumdex.com && [ -e mumdex.zip ] && rm -Rf mumdex/ && unzip mumdex.zip'
 
   ifndef GCC_DIR
     FAST += -march=native -flto
@@ -35,6 +41,6 @@ ifeq ($(USER), andrewsp-488)
   # for Peter
   GCC_DIR := /gpfs/commons/home/andrewsp-488/4.9.2
 endif
-  PATH := $(GCC_DIR)/bin:/bin:/usr/bin
-  LD_LIBRARY_PATH := $(GCC_DIR)/lib64
+  PATH := $(GCC_DIR)/bin:$(PATH)
+  LD_LIBRARY_PATH := $(GCC_DIR)/lib64:$(LD_LIBRARY_PATH)
 endif

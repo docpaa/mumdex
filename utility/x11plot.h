@@ -836,6 +836,7 @@ class SavedConfig {
 
 class X11Graph : public X11Win, public SavedConfig {
  public:
+  const unsigned int max_series{512};
   static constexpr int border_width{3};
 
   // Graph data typedefs
@@ -879,6 +880,11 @@ class X11Graph : public X11Win, public SavedConfig {
   X11Graph(X11App & app__, Input && ... input) : X11Win{app__} {
     add_input(std::forward<Input>(input)...);
     data = &input_data;
+    color_names = make_colors();
+    series_colors.resize(color_names.size());
+    series_arc_gcs.resize(color_names.size());
+    series_line_gcs.resize(color_names.size());
+    series_radio_gcs.resize(color_names.size());
     initialize();
   }
 
@@ -1206,6 +1212,7 @@ class X11Graph : public X11Win, public SavedConfig {
       last_time = time;
       const double movement{rate * seconds * range[0][2]};
       range_jump(0, (right ? 1 : -1) * movement);
+      small_move = true;
       prepare_draw();
       XFlush(display());
       if (!(range[0][0] > max_range[0][0] && range[0][1] < max_range[0][1])) {
@@ -1254,7 +1261,8 @@ class X11Graph : public X11Win, public SavedConfig {
 
 
   // Data is series * (x, y) -> point
-  Data input_data{}, log_data{}, log_x_data{}, log_y_data{}, *data{};
+  Data input_data{}, log_data{}, log_x_data{}, log_y_data{};
+  Data * data{&input_data};
   std::vector<std::unique_ptr<Values> > log_series{};
 
   // Drawing data for series
@@ -1265,60 +1273,8 @@ class X11Graph : public X11Win, public SavedConfig {
   GC border_gc{}, border_fill_gc{}, minor_gc{}, major_gc{};
 
   // Colors for series
-  std::vector<std::string> color_names{
-    "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray",
-        "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray",
-        "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray",
-        "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray",
-    "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray",
-        "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray",
-        "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray",
-        "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray",
-    "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray",
-        "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray",
-        "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray",
-        "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray"};
-#if 0
-  color_names.reserve(color_names.size() * 4);
-  color_names.insert(color_names.end(), color_names.begin(), color_names.end());
-  color_names.insert(color_names.end(), color_names.begin(), color_names.end());
-#endif
+  std::vector<std::string> make_colors() const;
+  std::vector<std::string> color_names{make_colors()};
   std::vector<XColor> series_colors{color_names.size()};
   std::vector<GC> series_arc_gcs{color_names.size()};
   std::vector<GC> series_line_gcs{color_names.size()};
@@ -1458,12 +1414,28 @@ class X11Graph : public X11Win, public SavedConfig {
   }
 };
 
+inline std::vector<std::string> X11Graph::make_colors() const {
+  std::vector<std::string> names{
+    "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
+        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
+        "red", "blue", "orange", "green",
+        "brown", "purple", "cyan", "yellow", "black", "gray"};
+  if (data->size() > max_series)
+    throw Error(std::string("Too many series to display (max is ") +
+                std::to_string(max_series) + ")");
+
+  const unsigned int doublings{5};
+  names.reserve(names.size() * pow(2, doublings));
+  for (unsigned int n{0}; n != doublings; ++n) {
+    if (names.size() > data->size()) break;
+    names.insert(names.end(), names.begin(), names.end());
+  }
+  names.resize(data->size());
+  return names;
+}
+
 // Common initialization for constructors
 inline void X11Graph::initialize() {
-  if (data->size() > color_names.size())
-    throw Error(std::string("Too many series to display (max is ") +
-                std::to_string(color_names.size()) + ")");
-
   scale.resize(3);
 
   // Events to watch out for
@@ -1485,6 +1457,7 @@ inline void X11Graph::initialize() {
   for (unsigned int c{0}; c != color_names.size(); ++c) {
     std::string & color_name{color_names[c]};
     XColor & color{series_colors[c]};
+    // std::cerr << c << " " << color_name << std::endl;
     if (!XAllocNamedColor(display(), colormap, color_name.c_str(),
                           &color, &color))
       throw Error("Could not get color") << color_name;
@@ -1559,6 +1532,7 @@ inline unsigned int X11Graph::get_quadrant(const Point point) const {
 inline void X11Graph::button_press(const XButtonEvent & event) {
   last_motion = last_press = event;
   moved = false;
+  small_move = false;
   for (Radio * radio : radios) { if (radio->press(event)) return; }
 
   // Button actions - no work done here other than record last press

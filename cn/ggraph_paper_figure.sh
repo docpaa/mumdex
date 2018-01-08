@@ -16,7 +16,7 @@
 n_threads=2
 uname=$(uname)
 if [ $uname = "Linux" ] ; then
-    n_threads=$(grep processor /proc/cpuinfo)
+    n_threads=$(grep processor /proc/cpuinfo | wc -l)
 fi
 if [ $uname = "Darwin" ] ; then
     n_threads=$(sysctl -n hw.logicalcpu)
@@ -35,7 +35,7 @@ echo 'you need to manually increase point display size by two levels (near botto
 echo 'have the mouse focus remain in the window, in the central graphing region'
 echo 'take a window-screenshot: command-shift-4 space, then click on window'
 ) &&
-~/mumdex/ggraph --n-threads $n_threads --geometry $geometry --initial-view $abspos_left $((abspos_left+1000000)) 0 2.5 \
+echo ~/mumdex/ggraph --n-threads $n_threads --geometry $geometry --initial-view $abspos_left $((abspos_left+1000000)) 0 2.5 \
     cn ~/hg19/chrAll.fa abspos,ratio,seg {m,f,d,s}.txt
 
 

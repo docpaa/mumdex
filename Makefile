@@ -168,11 +168,6 @@ zip :  spotless
 	rm -f ~/$(CODEDIR).zip
 	(cd .. ; zip -r ~/$(CODEDIR) $(CODEDIR) -x\*.git\* > /dev/null)
 
-# Put online for download
-publish : zip
-	scp ~/mumdex.zip mumdex.com:/paa/mumdex.com/
-	ssh mumdex.com 'cd /paa/mumdex.com && [ -e mumdex.zip ] && rm -Rf mumdex/ && unzip mumdex.zip'
-
 # Count code
 count : ; @ cat */*.{cpp,h} | sed 's/[ \t]+/ /g' | sort | uniq | wc -l
 
