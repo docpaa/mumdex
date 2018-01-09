@@ -203,7 +203,7 @@ class X11WindowT {
   X11WindowT(X11App & app_,
              const unsigned int width__ = default_window_width * window_scale,
              const unsigned int height__ = default_window_height * window_scale,
-             const int x__ = 100, const int y__ = 100, const bool map_ = true) :
+             const int x__ = 0, const int y__ = 0, const bool map_ = true) :
       app{app_}, size_{width__, height__},
     window{XCreateSimpleWindow(display(), DefaultRootWindow(display()),
                                x__, y__, width(), height(),
@@ -282,6 +282,7 @@ class X11WindowT {
       just_configured = true;
       size_[0] = event.width;
       size_[1] = event.height;
+      }
       prepare_draw();
     }
   }
