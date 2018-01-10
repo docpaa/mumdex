@@ -598,7 +598,7 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
         if (inserted.second) {
           GC & gc{inserted.first->second};
           XColor color;
-          if (!XAllocNamedColor(graph.display(), graph.colormap,
+          if (!XAllocNamedColor(graph.display(), graph.app.colormap,
                                 stain_colors.at(stain_name).c_str(),
                                 &color, &color))
             throw Error("Could not get color") << color_name;
@@ -708,11 +708,13 @@ int main(int argc, char* argv[]) try {
   // Process optional command line arguments
   --argc;
 
+  bool set_geometry{false};
   unsigned int width{1200};
   unsigned int height{1000};
   int x_off{0};
   int y_off{0};
   char ** initial{nullptr};
+  bool fullscreen{false};
   while (argc) {
     if (argv[1][0] == '-') {
       const string option{argv[1]};
@@ -724,6 +726,7 @@ int main(int argc, char* argv[]) try {
         if (!geometry_stream) {
           throw Error("Problem parsing geometry") << geometry;
         }
+        set_geometry = true;
         if (false)
           cerr << "Geometry set to width " << width << " height " << height
                << " x offset " << x_off << " y offset " << y_off << endl;
@@ -737,6 +740,10 @@ int main(int argc, char* argv[]) try {
         n_threads = atoi(argv[2]);
         argc -= 2;
         argv += 2;
+      } else if (option == "--fullscreen") {
+        fullscreen = true;
+        argc -= 1;
+        argv += 1;
       } else {
         throw Error("Unrecognized command line option") << option;
       }
@@ -748,6 +755,11 @@ int main(int argc, char* argv[]) try {
   if (argc < 4)
     throw Error("usage: ggraph plain|genome|cn ref xn,yn1[:l],yn2[:l]... "
                 "data_file ...");
+
+  if (fullscreen && set_geometry) {
+    cerr << "Note that --fullscreen option overrides --geometry" << endl;
+    sleep(1);
+  }
 
   // Process arguments
   const string type{argv[1]};
@@ -811,6 +823,13 @@ int main(int argc, char* argv[]) try {
   // App to display multiple windows
   X11App app;
 
+  if (fullscreen) {
+    width = app.display_size[0];
+    height = app.display_size[1];
+    x_off = 0;
+    y_off = 0;
+  }
+
   // Rearrange data in specific X11Graph format for all individuals
   const int n_sets(static_cast<unsigned int>(results.size()));
   const int n_y(results.front().n_cols() - 1);
@@ -825,7 +844,8 @@ int main(int argc, char* argv[]) try {
 
   // All individuals graph
   X11Graph & graph{X11Graph::create_whole(app, data,
-                                          width, height, x_off, y_off)};
+                                          width, height, x_off, y_off,
+                                          "G-Graph")};
   X11Graph * graphp{&graph};
 
   // Adjust series positions, assign names, and make some series lines only
@@ -839,8 +859,8 @@ int main(int argc, char* argv[]) try {
           remove_including_final(names[r], '/'),
           "_results.txt"), ".varbin.data.txt") + "  " + result.name(y + 1)};
       graph.series_radios[n_sets * y + r].description =
-          string("Toggle display for ") + name
-          + " " + std::to_string(y) + " " + std::to_string(r);
+          string("Toggle display for ") + name;
+      // + " " + std::to_string(y) + " " + std::to_string(r);
       if (do_lines[y]) graph.series_only_lines[n_sets * y + r] = true;
     }
     if (n_sets > 1) {

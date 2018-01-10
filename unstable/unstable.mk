@@ -32,6 +32,7 @@ DEVELOPMENT_PROGRAMS := \
 	denovo_pseudogenes \
 	determine_cn_sex \
 	determine_sex \
+	distinct_colors \
 	dsDNAvt \
 	encode \
 	event_histogram \
@@ -128,6 +129,7 @@ count_pseudogenes : files.o genes.o utility.o
 debruijn : files.o genes.o utility.o
 denovo_cn : denovo_cn.gslo
 denovo_pseudogenes : files.o genes.o utility.o
+distinct_colors : distinct_colors.x11o
 encode : files.o
 event_histogram : genes.o utility.o
 family_count : utility.o
