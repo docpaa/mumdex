@@ -395,7 +395,7 @@ class X11WindowT {
   bool in_bounds(const int x, const int y) const {
     return x > bounds[0][0] && x < bounds[0][1] &&
         y > bounds[1][0] && y < bounds[1][1];
-}
+  }
 
   virtual void save_image(const std::string & base_name,
                           void_fun call_back = [] () {}) {
@@ -412,71 +412,71 @@ class X11WindowT {
       std::cerr << "Converted image to " << png_name << std::endl;
     }
   }
-void save_image(const std::string & file_name, Drawable d,
-                const int xp, const int yp,
-                const unsigned int w, const unsigned int h,
-                void_fun call_back = [] () {}) {
-  if (0) std::cerr << xp << " " << yp << " "
-                   << w << " " << h << " " << std::endl;
-  XImage * image{XGetImage(display(), d, xp, yp, w, h, AllPlanes, XYPixmap)};
-  if (!image) throw Error("Could not get image");
-  call_back();
-  std::map<uint64_t, char> colors;
-  XColor color;
-  std::ostringstream color_string;
-  std::ostringstream image_string;
-  for (unsigned int y{0}; y != h; ++y) {
-    image_string << '"';
-    for (unsigned int x{0}; x != w; ++x) {
-      color.pixel = XGetPixel(image, x, y);
-      auto inserted = colors.emplace(color.pixel, 'a' + colors.size());
-      if (inserted.second == true) {
-        XQueryColor(display(), app.colormap, &color);
-        color_string << '"' << inserted.first->second << " "
-                     << "c #" << hex(color) << '"' << ",\n";
+  void save_image(const std::string & file_name, Drawable d,
+                  const int xp, const int yp,
+                  const unsigned int w, const unsigned int h,
+                  void_fun call_back = [] () {}) {
+    if (0) std::cerr << xp << " " << yp << " "
+                     << w << " " << h << " " << std::endl;
+    XImage * image{XGetImage(display(), d, xp, yp, w, h, AllPlanes, XYPixmap)};
+    if (!image) throw Error("Could not get image");
+    call_back();
+    std::map<uint64_t, char> colors;
+    XColor color;
+    std::ostringstream color_string;
+    std::ostringstream image_string;
+    for (unsigned int y{0}; y != h; ++y) {
+      image_string << '"';
+      for (unsigned int x{0}; x != w; ++x) {
+        color.pixel = XGetPixel(image, x, y);
+        auto inserted = colors.emplace(color.pixel, 'a' + colors.size());
+        if (inserted.second == true) {
+          XQueryColor(display(), app.colormap, &color);
+          color_string << '"' << inserted.first->second << " "
+                       << "c #" << hex(color) << '"' << ",\n";
+        }
+        image_string << inserted.first->second;
       }
-      image_string << inserted.first->second;
+      image_string << '"' << (y + 1 == h ? "" : ",") << "\n";
     }
-    image_string << '"' << (y + 1 == h ? "" : ",") << "\n";
+    std::ofstream file{file_name.c_str()};
+    if (!file) throw Error("Problem opening file") << file_name;
+    file << "/* XPM */\n"
+         << "static char * XFACE[] = {\n"
+         << "/* <Values> */\n"
+         << "/* <width/cols> <height/rows> <colors> <char on pixel>*/\n"
+         << '"' << w << " " << h << " " << colors.size()
+         << " 1" << '"' << ",\n"
+         << "/* <Colors> */\n"
+         << color_string.str()
+         << "/* <Pixels> */\n"
+         << image_string.str()
+         << "};\n";
+    std::cerr << "Saved image to " << file_name << std::endl;
+    XDestroyImage(image);
   }
-  std::ofstream file{file_name.c_str()};
-  if (!file) throw Error("Problem opening file") << file_name;
-  file << "/* XPM */\n"
-       << "static char * XFACE[] = {\n"
-       << "/* <Values> */\n"
-       << "/* <width/cols> <height/rows> <colors> <char on pixel>*/\n"
-       << '"' << w << " " << h << " " << colors.size()
-       << " 1" << '"' << ",\n"
-       << "/* <Colors> */\n"
-       << color_string.str()
-       << "/* <Pixels> */\n"
-       << image_string.str()
-       << "};\n";
-  std::cerr << "Saved image to " << file_name << std::endl;
-  XDestroyImage(image);
-}
 
-// Data preparation and drawing functions (just an empty window here)
-virtual void prepare() { }
-virtual void draw() {
-  XFillRectangle(display(), window, fill_gc, 0, 0, width(), height());
-}
-void prepare_draw() { prepare(); draw(); }
+  // Data preparation and drawing functions (just an empty window here)
+  virtual void prepare() { }
+  virtual void draw() {
+    XFillRectangle(display(), window, fill_gc, 0, 0, width(), height());
+  }
+  void prepare_draw() { prepare(); draw(); }
 
-X11App & app;
-unsigned int size_[2]{0, 0};
-Point window_offset{};
-iBounds bounds{};
-Window window{};
-Pixmap pixmap{};
-bool pixmap_used{false};
-std::vector<std::string> image_names{};
-bool inside{true};
+  X11App & app;
+  unsigned int size_[2]{0, 0};
+  Point window_offset{};
+  iBounds bounds{};
+  Window window{};
+  Pixmap pixmap{};
+  bool pixmap_used{false};
+  std::vector<std::string> image_names{};
+  bool inside{true};
 
-GC gc{}, fill_gc{}, radio_gc{};
-uint64_t max_request{};
-bool destroyed{false};
-mutable bool just_configured{true};
+  GC gc{}, fill_gc{}, radio_gc{};
+  uint64_t max_request{};
+  bool destroyed{false};
+  mutable bool just_configured{true};
 };
 
 inline Display * open_default_display() {
@@ -1104,7 +1104,7 @@ class X11Colors : public X11Win {
                               LineSolid, CapButt, JoinMiter);
     }
 
-  inline void button_press(const XButtonEvent & event) {
+  virtual void button_press(const XButtonEvent & event) {
     const Click click{event};
     if (click == 0) return;
     if (click > 1) close_on_click = true;
@@ -1116,7 +1116,7 @@ class X11Colors : public X11Win {
     call_back(i);
   }
 
-  inline void button_release(const XButtonEvent & event) {
+  virtual void button_release(const XButtonEvent & event) {
     const Click click{event};
     if (click == 0) return;
     if (close_on_click) app.close_window(window);
@@ -2630,8 +2630,6 @@ void X11Graph::save_image(const std::string & base_name,
   draw_status(true);
 }
 
-
-
 //
 // Radio functions
 //
@@ -2734,6 +2732,9 @@ inline void X11Graph::save_config(const SavedConfig & config) {
   saved_config.push_back(std::move(config));
 }
 
+//
+// Text grid selector
+//
 class X11TextGrid : public X11Win {
  public:
   using X11Win::X11Win;
