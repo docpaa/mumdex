@@ -6,6 +6,11 @@
 // Copyright 2016 Peter Andrews @ CSHL
 //
 
+// To Do:
+//
+// Final row/col of color chooser can be too large
+//
+
 #ifndef PAA_X11PLOT_H
 #define PAA_X11PLOT_H
 
@@ -1098,9 +1103,9 @@ class X11Colors : public X11Win {
       }
 
       // Cell borders
-      border_x_gc = create_gc(app.black, app.white, x_border_width(),
+      border_x_gc = create_gc(app.white, app.black, x_border_width(),
                               LineSolid, CapButt, JoinMiter);
-      border_y_gc = create_gc(app.white, app.black, y_border_width(),
+      border_y_gc = create_gc(app.white, app.black, y_border_height(),
                               LineSolid, CapButt, JoinMiter);
     }
 
@@ -1139,7 +1144,7 @@ class X11Colors : public X11Win {
   }
 
   unsigned int x_border_width() const { return 1 + width() / n_x / 10; }
-  unsigned int y_border_width() const { return 1 + width() / n_y / 10; }
+  unsigned int y_border_height() const { return 1 + height() / n_y / 10; }
 
   virtual void draw() {
     XFillRectangle(display(), window, fill_gc, 0, 0, width(), height());
@@ -1162,16 +1167,14 @@ class X11Colors : public X11Win {
     // Draw borders between cells
     XSetLineAttributes(display(), border_x_gc, x_border_width(),
                        LineSolid, CapButt, JoinMiter);
-    XSetLineAttributes(display(), border_y_gc, y_border_width(),
+    XSetLineAttributes(display(), border_y_gc, y_border_height(),
                        LineSolid, CapButt, JoinMiter);
-    for (unsigned int x{1}; x != n_x; ++x) {
-      const unsigned int low_x{
-        static_cast<unsigned int>(box_width * x - x_border_width() / 2)};
-      XDrawLine(display(), window, border_y_gc, low_x, 0, low_x, height());
+    for (unsigned int x{0}; x <= n_x; ++x) {
+      const unsigned int low_x{static_cast<unsigned int>(box_width * x)};
+      XDrawLine(display(), window, border_x_gc, low_x, 0, low_x, height());
     }
-    for (unsigned int y{1}; y != n_y; ++y) {
-      const unsigned int low_y{
-        static_cast<unsigned int>(box_height * y) - y_border_width() / 2};
+    for (unsigned int y{0}; y <= n_y; ++y) {
+      const unsigned int low_y{static_cast<unsigned int>(box_height * y)};
       XDrawLine(display(), window, border_y_gc, 0, low_y, width(), low_y);
     }
 
