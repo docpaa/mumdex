@@ -3,12 +3,7 @@
 //
 // Plot on X11
 //
-// Copyright 2016 Peter Andrews @ CSHL
-//
-
-// To Do:
-//
-// Final row/col of color chooser can be too large
+// Copyright 2016 - 2018 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_X11PLOT_H
