@@ -30,7 +30,6 @@
 #include "genes.h"
 #include "mumdex.h"
 #include "strings.h"
-#include "tsv.h"
 #include "threads.h"
 #include "x11plot.h"
 
@@ -73,7 +72,6 @@ using paa::Point;
 using paa::Radio;
 using paa::Reference;
 using paa::ThreadPool;
-using paa::TSV;
 using paa::X11App;
 using paa::X11Font;
 using paa::X11Graph;
@@ -497,15 +495,15 @@ bool add_chromosomes(const Reference & ref, const CN_abspos & cn_abspos,
   }
 
   // Chromosome name
-  const double avail_height{(graph.bounds[1][0] - graph.border_width) * 0.6};
-  const std::string longest{"22"};
+  const double avail_height{0.8 * (graph.bounds[1][0] - graph.border_width)};
+  const std::string longest{"22"};  // In practice, does "22" fit into chr 21?
   static X11Font * last_font{nullptr};
   static GC gc{[&graph]() {
       GC gc_{XCreateGC(graph.display(), graph.window, 0, nullptr)};
       XSetForeground(graph.display(), gc_, graph.app.black);
       return gc_;
     }()};
-  const X11Font * fits{graph.app.fonts.fits(longest, 1000, avail_height)};
+  const X11Font * fits{graph.app.fonts.fits(longest, min_w, avail_height)};
   if (fits != last_font) XSetFont(graph.display(), gc, fits->id());
 
   static iBounds last_bounds;
@@ -709,8 +707,8 @@ int main(int argc, char* argv[]) try {
   --argc;
 
   bool set_geometry{false};
-  unsigned int width{1200};
-  unsigned int height{1000};
+  unsigned int width{X11Graph::default_width};
+  unsigned int height{X11Graph::default_height};
   int x_off{0};
   int y_off{0};
   char ** initial{nullptr};
@@ -767,6 +765,10 @@ int main(int argc, char* argv[]) try {
   const std::string columns{argv[3]};
   argc -= 3;
   argv += 3;
+
+  // Open reference, if needed
+  unique_ptr<const Reference> ref_ptr{(type == "genome" || type == "cn") ?
+        make_unique<const Reference>(ref_name, true) : nullptr};
 
   // Names of input files
   const vector<string> names{[argc, argv] () {
@@ -920,7 +922,7 @@ int main(int argc, char* argv[]) try {
 
   future<bool> gene_future;;
   if (type == "genome" || type == "cn") {
-    static const Reference ref{ref_name, true};
+    const Reference & ref{*ref_ptr};
     static const CN_abspos cn_abspos{ref};
 
     // Add drawing callback to add chromosomes and ratio lines

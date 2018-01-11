@@ -40,8 +40,10 @@
 
 namespace paa {
 
+// Callback function defs
 using void_fun = std::function<void ()>;
 using bool_fun = std::function<bool ()>;
+using void_uint_fun = std::function<void (const unsigned int)>;
 
 // Point class
 template <class Type>
@@ -75,22 +77,39 @@ struct PointT {
   Type y{0};
 };
 using Point = PointT<int>;  // Integer point
+using uPoint = PointT<unsigned int>;  // Unsigned integer point
+using bPoint = PointT<bool>;  // Boolean point
 using dPoint = PointT<double>;  // Double point
 
 class X11Font {
  public:
   X11Font(Display * display_, const unsigned int point_size,
           const std::string font_name = "helvetica",
+          const std::string font_weight = "medium",
+          const unsigned int x_ppi = 100,
+          const unsigned int y_ppi = 100,
           const bool fallback = false) : display{display_} {
-    const std::string font_spec{std::string("-*-") + font_name + "-*-r-*-*-" +
-          std::to_string(point_size) + "-*-*-*-*-*-*-*"};
-    font = XLoadQueryFont(display, font_spec.c_str());
-    if (fallback && !font) XLoadQueryFont(display, "fixed");
+    if (0) std::cerr << font_name << std::endl;
+    const std::vector<std::string> font_name_trials{"*sans*", "utopia", "*"};
+    for (const std::string & trial_name : font_name_trials) {
+      const std::string font_spec{std::string("-*-") + trial_name +
+            "-" + font_weight + "-r-normal-*-*-" +
+            std::to_string(point_size) + "-" +
+            std::to_string(x_ppi) + "-" + std::to_string(y_ppi) +
+            "-p-0-iso8859-1"};
+      font = XLoadQueryFont(display, font_spec.c_str());
+      if (font) break;
+    }
+    if (fallback && !font) font = XLoadQueryFont(display, "fixed");
   }
+
   X11Font(X11Font &) = delete;
   X11Font & operator=(const X11Font &) = delete;
   X11Font & operator=(X11Font &&) = delete;
-  X11Font(X11Font && other) : font{other.font} { other.font = nullptr; }
+  X11Font(X11Font && other) : display{other.display}, font{other.font} {
+    other.display = nullptr;
+    other.font = nullptr;
+  }
 
   operator bool() const { return font != nullptr; }
   Font id() const { return font->fid; }
@@ -117,7 +136,11 @@ class X11Font {
         font->per_char[static_cast<int>(text[0])].lbearing + 1;
   }
 
-  ~X11Font() { }  // segfault on if (font) XUnloadFont(display, id()); }
+  ~X11Font() {
+    if (true && font) {
+      XFreeFont(display, font);
+    }
+  }
 
   Display * display{nullptr};
   XFontStruct * font{nullptr};
@@ -125,17 +148,40 @@ class X11Font {
 
 class X11Fonts {
  public:
-  explicit X11Fonts(Display * display, const std::string & name = "helvetica") {
-    for (unsigned int s{3}; s <= max_font_size; ++s) {
-      X11Font font{display, s, name, s == max_font_size};
+  static constexpr unsigned int max_font_size{500};
+
+  template <class App>
+  explicit X11Fonts(const App & app, const std::string & name = "helvetica") {
+    Display * display{app.display};
+    fonts.reserve(max_font_size);
+    std::vector<unsigned int> indexes;
+    std::vector<unsigned int> widths;
+    std::vector<X11Font> temp_fonts;
+    std::vector<unsigned int> temp_sizes;
+    for (unsigned int tenth_points{40}; tenth_points <= max_font_size;
+         tenth_points += 10) {
+      X11Font font{display, tenth_points, name, "bold",
+            app.pixels_per_inch(0), app.pixels_per_inch(1),
+            tenth_points == max_font_size && fonts.empty()};
       if (font) {
-        sizes.push_back(s);
-        lookup[s] = static_cast<unsigned int>(fonts.size());
-        fonts.push_back(std::move(font));
+        indexes.push_back(temp_fonts.size());
+        widths.push_back(font.string_width("A test string to measure width"));
+        temp_fonts.push_back(std::move(font));
+        temp_sizes.push_back(tenth_points);
       }
+    }
+    sort(indexes.begin(), indexes.end(),
+         [&widths](const unsigned int lhs, const unsigned int rhs) {
+           return widths[lhs] < widths[rhs];
+         });
+    for (const unsigned int fi : indexes) {
+      fonts.push_back(std::move(temp_fonts[fi]));
+      lookup[temp_sizes[fi]] = static_cast<unsigned int>(sizes.size());
+      sizes.push_back(temp_sizes[fi]);
     }
     if (fonts.empty()) throw Error("No fonts loaded");
   }
+
   X11Font * size(const unsigned int points) const {
     return &fonts[lookup.at(points)];  // can throw exception
   }
@@ -160,7 +206,6 @@ class X11Fonts {
   }
   void clear() { fonts.clear(); }
 
-  static constexpr unsigned int max_font_size{60};
   std::map<unsigned int, unsigned int> lookup{};
   std::vector<unsigned int> sizes{};
   mutable std::vector<X11Font> fonts{};
@@ -280,7 +325,7 @@ class X11WindowT {
       XSetNormalHints(display(), window, &hints);
     }
 
-    const Font font{app.fonts.at_most(30)->id()};
+    const Font font{app.fonts.at_most(300)->id()};
 
     // Colors
     XSync(display(), False);
@@ -464,7 +509,8 @@ class X11WindowT {
   void prepare_draw() { prepare(); draw(); }
 
   X11App & app;
-  unsigned int size_[2]{0, 0};
+  // unsigned int size_[2]{0, 0};
+  uPoint size_{};
   Point window_offset{};
   iBounds bounds{};
   Window window{};
@@ -498,14 +544,14 @@ class X11App {
 
   X11App() : display{open_default_display()},
     screen{DefaultScreen(display)}, depth{DefaultDepth(display, screen)},
-    fonts{display} {
-      display_size[0] = DisplayWidth(display, screen);
-      display_size[1] = DisplayHeight(display, screen);
-      display_mm[0] = DisplayWidthMM(display, screen);
-      display_mm[1] = DisplayHeightMM(display, screen);
-      colormap = DefaultColormap(display, screen);
-      black = BlackPixel(display, screen);
-      white = WhitePixel(display, screen);
+    colormap{DefaultColormap(display, screen)},
+    display_size{static_cast<unsigned int>(DisplayWidth(display, screen)),
+          static_cast<unsigned int>(DisplayHeight(display, screen))},
+    display_mm{static_cast<unsigned int>(DisplayWidthMM(display, screen)),
+          static_cast<unsigned int>(DisplayHeightMM(display, screen))},
+    fonts{*this},
+    black{BlackPixel(display, screen)},
+    white{WhitePixel(display, screen)} {
       if (!display) throw Error("Problem opening X11 display");
       wmDeleteMessage_ = {XInternAtom(display, "WM_DELETE_WINDOW", False)};
     }
@@ -641,9 +687,11 @@ class X11App {
   int screen{};
   int depth{};
   Colormap colormap{};
+  // unsigned int display_size[2]{0, 0};
+  // unsigned int display_mm[2]{0, 0};
+  uPoint display_size{};
+  uPoint display_mm{};
   X11Fonts fonts;
-  unsigned int display_size[2]{0, 0};
-  unsigned int display_mm[2]{0, 0};
   uint64_t black{}, white{};
   XEvent event{};
 
@@ -720,7 +768,7 @@ struct Radio {
 
   // Location in window of radio button
   Point location() const {
-    const bool high[2]{specification.x < 0, specification.y < 0};
+    const bPoint high{specification.x < 0, specification.y < 0};
     const Point anchor{corner(high[0], high[1])};
     Point point;
     // const int border{min_border()};
@@ -966,7 +1014,7 @@ class Color {
 
 class X11Colors : public X11Win {
  public:
-  using CallBack = std::function<void (const unsigned int)>;
+  using CallBack = void_uint_fun;
 
   X11Colors(const X11Colors &) = delete;
   X11Colors & operator=(const X11Colors &) = delete;
@@ -1244,6 +1292,8 @@ class X11Graph : public X11Win, public SavedConfig {
   // Graph constants
   static constexpr unsigned int max_series{512};
   static constexpr int border_width{3};
+  static constexpr unsigned int default_width{1280};
+  static constexpr unsigned int default_height{720};
 
   // Graph data typedefs
   using Values = std::vector<double>;
@@ -1254,7 +1304,8 @@ class X11Graph : public X11Win, public SavedConfig {
   // Graph factories
   static X11Graph & create_whole(
       X11App & app, const Data & data__,
-      const unsigned int width_ = 1200, const unsigned int height_ = 1000,
+      const unsigned int width_ = default_width,
+      const unsigned int height_ = default_height,
       const int x_off_ = 0, const int y_off_ = 0,
       const std::string title = "");
   template <class ... Input>
@@ -1262,8 +1313,8 @@ class X11Graph : public X11Win, public SavedConfig {
 
   // Graph constructors and destructors and copying
   X11Graph(X11App & app__, const Data & data__,
-           const unsigned int width_ = 1200,
-           const unsigned int height_ = 1000,
+           const unsigned int width_ = default_width,
+           const unsigned int height_ = default_height,
            const int x_off_ = 0, const int y_off_ = 0,
            const std::string title = "");
   template <class ... Input>
@@ -1499,7 +1550,8 @@ X11Graph::X11Graph(X11App & app__, const Data & data__,
 
 // Construct from a bunch of vectors x1, y1, x2, y2, ...
 template <class ... Input>
-X11Graph::X11Graph(X11App & app__, Input && ... input) : X11Win{app__} {
+X11Graph::X11Graph(X11App & app__, Input && ... input) :
+    X11Win{app__, default_width, default_height, 0, 0, true} {
   add_input(std::forward<Input>(input)...);
   data = &input_data;
   initialize();
@@ -1628,6 +1680,9 @@ void X11Graph::initialize() {
   for (std::vector<Radio> * radio_vec : {&series_radios, &unnamed_radios})
     for (Radio & radio : (*radio_vec)) radios.push_back(&radio);
   extra_radios.reserve(1000);
+
+  // Map the window
+  // XMapWindow(display(), window);
 }
 
 // Colors
@@ -2551,9 +2606,9 @@ XPoint X11Graph::line_bounds_intersection(
   // but intersecting the range.  also need to reduce unnecessary
   // computation here and need to place points outside of range...
 
-  const bool out_high[2]{out[0] > range[0][1], out[1] > range[1][1]};
-  const bool out_low[2]{out[0] < range[0][0], out[1] < range[1][0]};
-  const bool is_out[2]{out_high[0] || out_low[0], out_high[1] || out_low[1]};
+  const bPoint out_high{out[0] > range[0][1], out[1] > range[1][1]};
+  const bPoint out_low{out[0] < range[0][0], out[1] < range[1][0]};
+  const bPoint is_out{out_high[0] || out_low[0], out_high[1] || out_low[1]};
   const dPoint limit{range[0][out_high[0]], range[1][out_high[1]]};
   if (!dne(in.x, out.x)) return xcoord(dPoint{in.x, limit.y});
   if (!dne(in.y, out.y)) return xcoord(dPoint{limit.x, in.y});
@@ -2783,7 +2838,9 @@ class X11TextGrid : public X11Win {
 
       // Fonts of various size
       fonts.reserve(max_font_size);
-      for (unsigned int s{3}; s <= max_font_size; ++s) {
+      for (const unsigned int s : {60, 70, 80, 90, 100, 120, 130, 140,
+              150, 160, 170, 180, 190, 200, 230, 240, 250, 300, 400,
+              500, 600, 700, 1000}) {
         fonts.emplace_back(display(), s);
         if (fonts.back()) {
           font_sizes.push_back(s);
@@ -3081,7 +3138,7 @@ class X11Plotter {
         status[1].begin(), status[1].end(), 1) - status[1].begin() - 1]};
     for (unsigned int n{0}; n != names.size(); ++n)
       if (status[2][n + 1]) gd.emplace_back(X11Graph::XYSeries{xs, &data[n]});
-    X11Graph & graph{X11Graph::create_whole(app, gd, 1300, 850)};
+    X11Graph & graph{X11Graph::create_whole(app, gd)};
     graph.arc_radius = 1;
     return true;
   }
