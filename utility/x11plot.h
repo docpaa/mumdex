@@ -85,7 +85,7 @@ class X11Font {
  public:
   X11Font(Display * display_, const unsigned int point_size,
           const std::string font_name = "helvetica",
-          const std::string font_weight = "medium",
+          const std::string font_weight = "bold",
           const unsigned int x_ppi = 100,
           const unsigned int y_ppi = 100,
           const bool fallback = false) : display{display_} {
@@ -154,7 +154,7 @@ class X11Fonts {
   explicit X11Fonts(const App & app, const std::string & name = "helvetica") {
     Display * display{app.display};
     fonts.reserve(max_font_size);
-    std::vector<unsigned int> indexes;
+    std::vector<uint64_t> indexes;
     std::vector<unsigned int> widths;
     std::vector<X11Font> temp_fonts;
     std::vector<unsigned int> temp_sizes;
@@ -174,7 +174,7 @@ class X11Fonts {
          [&widths](const unsigned int lhs, const unsigned int rhs) {
            return widths[lhs] < widths[rhs];
          });
-    for (const unsigned int fi : indexes) {
+    for (const uint64_t fi : indexes) {
       fonts.push_back(std::move(temp_fonts[fi]));
       lookup[temp_sizes[fi]] = static_cast<unsigned int>(sizes.size());
       sizes.push_back(temp_sizes[fi]);
@@ -1403,12 +1403,13 @@ class X11Graph : public X11Win, public SavedConfig {
   mutable X11Font * tick_font{nullptr};
   mutable X11Font * status_font{nullptr};
 
-  // Colors and GCs and shapes for series
+  // Colors and GCs and shapes and names for series
   std::vector<std::string> make_colors() const;
   void set_color(const unsigned int series, const unsigned int color);
   void reset_colors();
   bool colors_changed{false};
   std::vector<std::string> color_names{};
+  std::vector<std::string> series_names{};
   std::vector<XColor> series_colors{};
   std::vector<GC> series_arc_gcs{};
   std::vector<GC> series_line_gcs{};
@@ -1633,13 +1634,15 @@ void X11Graph::initialize() {
                        CapButt, JoinMiter);
   tick_label_gc = create_gc(app.black, app.white);
 
-  // Series colors
+  // Series colors and names
   color_names = make_colors();
+  series_names.resize(color_names.size());
   series_colors.resize(color_names.size());
   series_arc_gcs.resize(color_names.size());
   series_line_gcs.resize(color_names.size());
   series_radio_gcs.resize(color_names.size());
   for (unsigned int c{0}; c != color_names.size(); ++c) {
+    series_names[c] = std::to_string(c + 1);
     std::string & color_name{color_names[c]};
     XColor & color{series_colors[c]};
     // std::cerr << c << " " << color_name << std::endl;
@@ -1663,8 +1666,9 @@ void X11Graph::initialize() {
   // Create series radios, and add to master radio list, adjust properties
   series_radios.reserve(data->size());
   for (unsigned int c{0}; c != data->size(); ++c) {
-    series_radios.push_back(Radio{"Toggle display of this series", this,
-        {-1, data->size() + 1.0 - c},
+    series_radios.push_back(Radio{"Pointer clicks toggle display "
+            "or change colors (buttons 2,3) for series " + series_names[c],
+            this, {-1, data->size() + 1.0 - c},
         {[this]() { prepare_draw(); }, [this]() { return inside; }},
             true, true, &series_radio_gcs[c]});
     saved_radios.push_back(&series_radios.back());
@@ -2183,9 +2187,7 @@ inline void X11Graph::button_release(const XButtonEvent & event) {
                 &color_change_callback, std::placeholders::_1, r,
                 std::ref(*this), std::cref(app), window)),
             click == 2,
-            std::string("Color chooser for ") +
-            replace_substring(static_cast<const std::string &>(
-                radio.description), "Toggle display for ", ""));
+            std::string("Color chooser for series ") + series_names[r]);
         return;
       }
     }

@@ -860,8 +860,9 @@ int main(int argc, char* argv[]) try {
       const string name{remove_substring(remove_substring(
           remove_including_final(names[r], '/'),
           "_results.txt"), ".varbin.data.txt") + "  " + result.name(y + 1)};
-      graph.series_radios[n_sets * y + r].description =
-          string("Toggle display for ") + name;
+      graph.series_names[n_sets * y + r] += ", " + name;
+      graph.series_radios[n_sets * y + r].description +=
+          ", " + name;
       // + " " + std::to_string(y) + " " + std::to_string(r);
       if (do_lines[y]) graph.series_only_lines[n_sets * y + r] = true;
     }
