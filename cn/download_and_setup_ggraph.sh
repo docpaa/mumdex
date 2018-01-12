@@ -34,7 +34,7 @@ if [ "$OSTYPE" = cygwin ] ; then
         mv apt-cyg /usr/local/bin
     fi
 
-    apt-cyg install git perl-libwww-perl unzip make gcc-g++ libX11-devel xinit ImageMagick xorg-x11-fonts-Type1
+    apt-cyg install git perl-libwww-perl unzip make gcc-g++ libX11-devel xinit ImageMagick xorg-x11-fonts-Type1 libgsl-devel python
 
 fi
 
