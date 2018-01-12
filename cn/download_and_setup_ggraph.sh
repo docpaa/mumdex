@@ -42,12 +42,16 @@ fi
 if [ -e mumdex/ggraph ] ; then
     echo mumdex directory and ggraph program already exists - skipping 1>&2
 else
-    url=http://mumdex.com/mumdex.zip
-    echo Downloading $url
-    lwp-request -m GET $url > mumdex.zip
-    echo Unzipping mumdex.zip
-    unzip mumdex.zip > /dev/null
-    rm mumdex.zip
+    if [ -e mumdex/ ] ; then
+        echo mumdex directory already exists - skipping 1>&2
+    else
+        url=http://mumdex.com/mumdex.zip
+        echo Downloading $url
+        lwp-request -m GET $url > mumdex.zip
+        echo Unzipping mumdex.zip
+        unzip mumdex.zip > /dev/null
+        rm mumdex.zip
+    fi
     cd mumdex
     echo Compiling mumdex/ggraph and mumdex/x11plot
     make -j 4 ggraph x11plot > /dev/null

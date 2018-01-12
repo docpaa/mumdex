@@ -3,7 +3,7 @@
 //
 // Plot on X11
 //
-// Copyright 2016 Peter Andrews @ CSHL
+// Copyright 2016 - 2018 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_X11PLOT_H
@@ -11,12 +11,14 @@
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/keysym.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <deque>
 #include <iomanip>
+#include <limits>
 #include <list>
 #include <functional>
 #include <fstream>
@@ -37,6 +39,11 @@
 #include "utility.h"
 
 namespace paa {
+
+// Callback function defs
+using void_fun = std::function<void ()>;
+using bool_fun = std::function<bool ()>;
+using void_uint_fun = std::function<void (const unsigned int)>;
 
 // Point class
 template <class Type>
@@ -70,22 +77,39 @@ struct PointT {
   Type y{0};
 };
 using Point = PointT<int>;  // Integer point
+using uPoint = PointT<unsigned int>;  // Unsigned integer point
+using bPoint = PointT<bool>;  // Boolean point
 using dPoint = PointT<double>;  // Double point
 
 class X11Font {
  public:
   X11Font(Display * display_, const unsigned int point_size,
           const std::string font_name = "helvetica",
+          const std::string font_weight = "bold",
+          const unsigned int x_ppi = 100,
+          const unsigned int y_ppi = 100,
           const bool fallback = false) : display{display_} {
-    const std::string font_spec{std::string("-*-") + font_name + "-*-r-*-*-" +
-          std::to_string(point_size) + "-*-*-*-*-*-*-*"};
-    font = XLoadQueryFont(display, font_spec.c_str());
-    if (fallback && !font) XLoadQueryFont(display, "fixed");
+    if (0) std::cerr << font_name << std::endl;
+    const std::vector<std::string> font_name_trials{"*sans*", "utopia", "*"};
+    for (const std::string & trial_name : font_name_trials) {
+      const std::string font_spec{std::string("-*-") + trial_name +
+            "-" + font_weight + "-r-normal-*-*-" +
+            std::to_string(point_size) + "-" +
+            std::to_string(x_ppi) + "-" + std::to_string(y_ppi) +
+            "-p-0-iso8859-1"};
+      font = XLoadQueryFont(display, font_spec.c_str());
+      if (font) break;
+    }
+    if (fallback && !font) font = XLoadQueryFont(display, "fixed");
   }
+
   X11Font(X11Font &) = delete;
   X11Font & operator=(const X11Font &) = delete;
   X11Font & operator=(X11Font &&) = delete;
-  X11Font(X11Font && other) : font{other.font} { other.font = nullptr; }
+  X11Font(X11Font && other) : display{other.display}, font{other.font} {
+    other.display = nullptr;
+    other.font = nullptr;
+  }
 
   operator bool() const { return font != nullptr; }
   Font id() const { return font->fid; }
@@ -112,7 +136,11 @@ class X11Font {
         font->per_char[static_cast<int>(text[0])].lbearing + 1;
   }
 
-  ~X11Font() { }  // segfault on if (font) XUnloadFont(display, id()); }
+  ~X11Font() {
+    if (true && font) {
+      XFreeFont(display, font);
+    }
+  }
 
   Display * display{nullptr};
   XFontStruct * font{nullptr};
@@ -120,17 +148,40 @@ class X11Font {
 
 class X11Fonts {
  public:
-  explicit X11Fonts(Display * display, const std::string & name = "helvetica") {
-    for (unsigned int s{3}; s <= max_font_size; ++s) {
-      X11Font font{display, s, name, s == max_font_size};
+  static constexpr unsigned int max_font_size{500};
+
+  template <class App>
+  explicit X11Fonts(const App & app, const std::string & name = "helvetica") {
+    Display * display{app.display};
+    fonts.reserve(max_font_size);
+    std::vector<uint64_t> indexes;
+    std::vector<unsigned int> widths;
+    std::vector<X11Font> temp_fonts;
+    std::vector<unsigned int> temp_sizes;
+    for (unsigned int tenth_points{40}; tenth_points <= max_font_size;
+         tenth_points += 10) {
+      X11Font font{display, tenth_points, name, "bold",
+            app.pixels_per_inch(0), app.pixels_per_inch(1),
+            tenth_points == max_font_size && fonts.empty()};
       if (font) {
-        sizes.push_back(s);
-        lookup[s] = static_cast<unsigned int>(fonts.size());
-        fonts.push_back(std::move(font));
+        indexes.push_back(temp_fonts.size());
+        widths.push_back(font.string_width("A test string to measure width"));
+        temp_fonts.push_back(std::move(font));
+        temp_sizes.push_back(tenth_points);
       }
+    }
+    sort(indexes.begin(), indexes.end(),
+         [&widths](const unsigned int lhs, const unsigned int rhs) {
+           return widths[lhs] < widths[rhs];
+         });
+    for (const uint64_t fi : indexes) {
+      fonts.push_back(std::move(temp_fonts[fi]));
+      lookup[temp_sizes[fi]] = static_cast<unsigned int>(sizes.size());
+      sizes.push_back(temp_sizes[fi]);
     }
     if (fonts.empty()) throw Error("No fonts loaded");
   }
+
   X11Font * size(const unsigned int points) const {
     return &fonts[lookup.at(points)];  // can throw exception
   }
@@ -155,7 +206,6 @@ class X11Fonts {
   }
   void clear() { fonts.clear(); }
 
-  static constexpr unsigned int max_font_size{60};
   std::map<unsigned int, unsigned int> lookup{};
   std::vector<unsigned int> sizes{};
   mutable std::vector<X11Font> fonts{};
@@ -187,11 +237,58 @@ std::string hex(const XColor & color) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wold-style-cast"
 
+// X11 convenience functions
+void draw_centered_oval(Display * display, Window window, GC gc_,
+                        const int x, const int y,
+                        const int x_rad, const int y_rad) {
+  XDrawArc(display, window, gc_, x - x_rad, y - y_rad,
+           2 * x_rad + 1, 2 * y_rad + 1, 0, 64 * 360);
+}
+void fill_centered_oval(Display * display, Window window, GC gc_,
+                        const int x, const int y,
+                        const int x_rad, const int y_rad) {
+  XFillArc(display, window, gc_, x - x_rad, y - y_rad,
+           2 * x_rad + 1, 2 * y_rad + 1, 0, 64 * 360);
+}
+void draw_centered_rectangle(Display * display, Window window, GC gc_,
+                             const int x, const int y,
+                             const int x_rad, const int y_rad) {
+  XDrawRectangle(display, window, gc_, x - x_rad, y - y_rad,
+                 2 * x_rad + 1, 2 * y_rad + 1);
+}
+void fill_centered_rectangle(Display * display, Window window, GC gc_,
+                             const int x, const int y,
+                             const int x_rad, const int y_rad) {
+  XFillRectangle(display, window, gc_, x - x_rad, y - y_rad,
+                 2 * x_rad + 2, 2 * y_rad + 2);
+}
+XRectangle rect(const unsigned int x, const unsigned int y,
+                const unsigned int width_, const unsigned int height_) {
+  XRectangle rect_;
+  rect_.x = x;
+  rect_.y = y;
+  rect_.width = width_;
+  rect_.height = height_;
+  return rect_;
+}
+XRectangle rect(const iBounds & bounds) {
+  return rect(bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
+}
+bool operator!=(const XRectangle lhs, const XRectangle & rhs) {
+  return lhs.x != rhs.x || lhs.y != rhs.y ||
+      lhs.width != rhs.width || lhs.height != rhs.height;
+}
+bool operator!=(const XPoint lhs, const XPoint & rhs) {
+  return lhs.x != rhs.x || lhs.y != rhs.y;
+}
+
 // Window class in an app
 template <class X11App>
 class X11WindowT {
  public:
   using X11Win = X11WindowT<X11App>;
+  static constexpr unsigned int default_window_width{default_doc_width};
+  static constexpr unsigned int default_window_height{default_doc_height};
   static constexpr double window_scale{1.65};
   static constexpr int radio_width{1};
 
@@ -203,13 +300,15 @@ class X11WindowT {
   X11WindowT(X11App & app_,
              const unsigned int width__ = default_window_width * window_scale,
              const unsigned int height__ = default_window_height * window_scale,
-             const int x__ = 0, const int y__ = 0, const bool map_ = true) :
+             const int x__ = 0, const int y__ = 0, const bool map_ = true,
+             const std::string title = "") :
       app{app_}, size_{width__, height__},
     window{XCreateSimpleWindow(display(), DefaultRootWindow(display()),
                                x__, y__, width(), height(),
                                0, app.white, app.white)}
   {
     // Window properties
+    XStoreName(display(), window, title.c_str());
     XSelectInput(display(), window, StructureNotifyMask | ExposureMask);
     XSetWMProtocols(display(), window, app.wmDeleteMessage(), 1);
     XSetWindowBackgroundPixmap(display(), window, None);
@@ -226,11 +325,10 @@ class X11WindowT {
       XSetNormalHints(display(), window, &hints);
     }
 
-    const Font font{app.fonts.at_most(30)->id()};
+    const Font font{app.fonts.at_most(300)->id()};
 
     // Colors
     XSync(display(), False);
-    colormap = DefaultColormap(display(), app.screen);
 
     // Graphics contexts
     gc = create_gc(app.black, app.white);
@@ -243,15 +341,17 @@ class X11WindowT {
     // Maximum request size for draw events (for points; divide for arcs, etc)
     max_request = XMaxRequestSize(display()) - 3;
 
-    if (map_) XMapWindow(display(), window);
+    if (map_) {
+      XMapWindow(display(), window);
+    }
   }
 
   X11WindowT(const X11WindowT &) = delete;
   X11WindowT & operator=(const X11WindowT &) = delete;
 
- public:
   virtual ~X11WindowT() {
-    for (GC g : {gc, fill_gc}) XFreeGC(display(), g);
+    for (GC g : {gc, fill_gc, radio_gc}) XFreeGC(display(), g);
+    if (pixmap_used) XFreePixmap(display(), pixmap);
     XDestroyWindow(display(), window);
   }
 
@@ -261,6 +361,20 @@ class X11WindowT {
   int height() const { return size_[1]; }
   int extent(const bool y) { return size_[y]; }
   virtual bool slow() const { return false; }
+
+  void set_window_offset() {
+    int xo{0};
+    int yo{0};
+    XWindowAttributes xwa;
+    XGetWindowAttributes(display(), window, &xwa);
+    // std::cerr << "xwa " << xwa.x << " " << xwa.y << std::endl;
+    Window child;
+    XTranslateCoordinates(display(), window, DefaultRootWindow(display()),
+                          0, 0, &xo, &yo, &child);
+    // std::cerr << "trans " << xo << " " << yo << std::endl;
+    window_offset[0] = xo - xwa.x;
+    window_offset[1] = yo - xwa.y;
+  }
 
   GC create_gc(const uint64_t foreground, const uint64_t background,
                const unsigned int line_width = 1,
@@ -276,18 +390,25 @@ class X11WindowT {
   }
 
   // Event actions
+  virtual void mapped(const XMapEvent &) {
+    // std::cerr << "mapped" << std::endl;
+    set_window_offset();
+  }
   virtual void configure(const XConfigureEvent & event) {
     if (size_[0] != static_cast<unsigned int>(event.width) ||
         size_[1] != static_cast<unsigned int>(event.height)) {
       just_configured = true;
       size_[0] = event.width;
       size_[1] = event.height;
-      }
+      set_window_offset();
       prepare_draw();
     }
   }
   virtual void expose(const XExposeEvent & event) {
-    if (event.count == 0) return prepare_draw();
+    if (event.count == 0) {
+      set_window_offset();
+      return prepare_draw();
+    }
   }
   virtual void enter(const XCrossingEvent &) { }
   virtual void key(const XKeyEvent &) { }
@@ -309,6 +430,7 @@ class X11WindowT {
     if (bounds != last_bounds) {
       if (valid_initial_bounds) XFreePixmap(display(), pixmap);
       pixmap = XCreatePixmap(display(), window, width(), height(), app.depth);
+      pixmap_used = true;
     }
   }
   template <class POINT>
@@ -321,7 +443,7 @@ class X11WindowT {
   }
 
   virtual void save_image(const std::string & base_name,
-                          std::function<void()> call_back = [] () {}) {
+                          void_fun call_back = [] () {}) {
     const std::string image_name{get_next_file(base_name, "xpm")};
     const std::string png_name{replace_substring(image_name, "xpm", "png")};
     save_image(image_name, window, 0, 0, width(), height(), call_back);
@@ -338,7 +460,7 @@ class X11WindowT {
   void save_image(const std::string & file_name, Drawable d,
                   const int xp, const int yp,
                   const unsigned int w, const unsigned int h,
-                  std::function<void()> call_back = [] () {}) {
+                  void_fun call_back = [] () {}) {
     if (0) std::cerr << xp << " " << yp << " "
                      << w << " " << h << " " << std::endl;
     XImage * image{XGetImage(display(), d, xp, yp, w, h, AllPlanes, XYPixmap)};
@@ -354,7 +476,7 @@ class X11WindowT {
         color.pixel = XGetPixel(image, x, y);
         auto inserted = colors.emplace(color.pixel, 'a' + colors.size());
         if (inserted.second == true) {
-          XQueryColor(display(), colormap, &color);
+          XQueryColor(display(), app.colormap, &color);
           color_string << '"' << inserted.first->second << " "
                        << "c #" << hex(color) << '"' << ",\n";
         }
@@ -387,11 +509,13 @@ class X11WindowT {
   void prepare_draw() { prepare(); draw(); }
 
   X11App & app;
-  unsigned int size_[2]{0, 0};
+  // unsigned int size_[2]{0, 0};
+  uPoint size_{};
+  Point window_offset{};
   iBounds bounds{};
   Window window{};
-  Colormap colormap{};
   Pixmap pixmap{};
+  bool pixmap_used{false};
   std::vector<std::string> image_names{};
   bool inside{true};
 
@@ -399,8 +523,6 @@ class X11WindowT {
   uint64_t max_request{};
   bool destroyed{false};
   mutable bool just_configured{true};
-  static constexpr unsigned int default_window_width{default_doc_width};
-  static constexpr unsigned int default_window_height{default_doc_height};
 };
 
 inline Display * open_default_display() {
@@ -422,16 +544,17 @@ class X11App {
 
   X11App() : display{open_default_display()},
     screen{DefaultScreen(display)}, depth{DefaultDepth(display, screen)},
-    fonts{display} {
-    display_size[0] = DisplayWidth(display, screen);
-    display_size[1] = DisplayHeight(display, screen);
-    display_mm[0] = DisplayWidthMM(display, screen);
-    display_mm[1] = DisplayHeightMM(display, screen);
-    black = BlackPixel(display, screen);
-    white = WhitePixel(display, screen);
-    if (!display) throw Error("Problem opening X11 display");
-    wmDeleteMessage_ = {XInternAtom(display, "WM_DELETE_WINDOW", False)};
-  }
+    colormap{DefaultColormap(display, screen)},
+    display_size{static_cast<unsigned int>(DisplayWidth(display, screen)),
+          static_cast<unsigned int>(DisplayHeight(display, screen))},
+    display_mm{static_cast<unsigned int>(DisplayWidthMM(display, screen)),
+          static_cast<unsigned int>(DisplayHeightMM(display, screen))},
+    fonts{*this},
+    black{BlackPixel(display, screen)},
+    white{WhitePixel(display, screen)} {
+      if (!display) throw Error("Problem opening X11 display");
+      wmDeleteMessage_ = {XInternAtom(display, "WM_DELETE_WINDOW", False)};
+    }
 
   X11App(const X11App &) = delete;
   X11App & operator=(const X11App &) = delete;
@@ -439,6 +562,7 @@ class X11App {
   ~X11App() {
     fonts.clear();
     windows.clear();
+    XFreeColormap(display, colormap);
     XCloseDisplay(display);
   }
 
@@ -489,6 +613,7 @@ class X11App {
           break;
 
         case MapNotify:
+          (*window_lookups[event.xmap.window])->mapped(event.xmap);
           break;
 
         case VisibilityNotify:
@@ -554,12 +679,19 @@ class X11App {
     return const_cast<Atom *>(&wmDeleteMessage_);
   }
 
+  bool exists(const Window & win) const {
+    return window_lookups.count(win);
+  }
+
   Display * display{};
   int screen{};
   int depth{};
+  Colormap colormap{};
+  // unsigned int display_size[2]{0, 0};
+  // unsigned int display_mm[2]{0, 0};
+  uPoint display_size{};
+  uPoint display_mm{};
   X11Fonts fonts;
-  unsigned int display_size[2]{0, 0};
-  unsigned int display_mm[2]{0, 0};
   uint64_t black{}, white{};
   XEvent event{};
 
@@ -572,57 +704,9 @@ class X11App {
 };
 using X11Win = X11App::X11Win;
 
-// X11 convenience functions
-void draw_centered_oval(Display * display, Window window, GC gc_,
-                        const int x, const int y,
-                        const int x_rad, const int y_rad) {
-  XDrawArc(display, window, gc_, x - x_rad, y - y_rad,
-           2 * x_rad + 1, 2 * y_rad + 1, 0, 64 * 360);
-}
-void fill_centered_oval(Display * display, Window window, GC gc_,
-                        const int x, const int y,
-                        const int x_rad, const int y_rad) {
-  XFillArc(display, window, gc_, x - x_rad, y - y_rad,
-           2 * x_rad + 1, 2 * y_rad + 1, 0, 64 * 360);
-}
-void draw_centered_rectangle(Display * display, Window window, GC gc_,
-                             const int x, const int y,
-                             const int x_rad, const int y_rad) {
-  XDrawRectangle(display, window, gc_, x - x_rad, y - y_rad,
-                 2 * x_rad + 1, 2 * y_rad + 1);
-}
-void fill_centered_rectangle(Display * display, Window window, GC gc_,
-                             const int x, const int y,
-                             const int x_rad, const int y_rad) {
-  XFillRectangle(display, window, gc_, x - x_rad, y - y_rad,
-                 2 * x_rad + 2, 2 * y_rad + 2);
-}
-XRectangle rect(const unsigned int x, const unsigned int y,
-                const unsigned int width_, const unsigned int height_) {
-  XRectangle rect_;
-  rect_.x = x;
-  rect_.y = y;
-  rect_.width = width_;
-  rect_.height = height_;
-  return rect_;
-}
-XRectangle rect(const iBounds & bounds) {
-  return rect(bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
-}
-bool operator!=(const XRectangle lhs, const XRectangle & rhs) {
-  return lhs.x != rhs.x || lhs.y != rhs.y ||
-      lhs.width != rhs.width || lhs.height != rhs.height;
-}
-bool operator!=(const XPoint lhs, const XPoint & rhs) {
-  return lhs.x != rhs.x || lhs.y != rhs.y;
-}
-
-using void_fun = std::function<void ()>;
-using bool_fun = std::function<bool ()>;
-
 struct Actions {
   Actions(void_fun press_ = []() {}, bool_fun visible_ = []() { return true; },
-           void_fun release_ = []() {}) :
+          void_fun release_ = []() {}) :
       press{press_}, visible{visible_}, release{release_} { }
 
   void_fun press;  // Function to take action on press
@@ -684,7 +768,7 @@ struct Radio {
 
   // Location in window of radio button
   Point location() const {
-    const bool high[2]{specification.x < 0, specification.y < 0};
+    const bPoint high{specification.x < 0, specification.y < 0};
     const Point anchor{corner(high[0], high[1])};
     Point point;
     // const int border{min_border()};
@@ -753,7 +837,7 @@ struct Radio {
     const Point point{location()};
     static GC grey_gc{[this]() {
         XColor grey;
-        if (!XAllocNamedColor(win->display(), win->colormap, "rgb:dd/dd/dd",
+        if (!XAllocNamedColor(win->display(), win->app.colormap, "rgb:dd/dd/dd",
                               &grey, &grey)) throw Error("Could not get grey");
         return win->create_gc(grey.pixel, win->app.white);
       }()};
@@ -787,6 +871,380 @@ struct Radio {
   bool skip_release{false};
   double radius_scale{1.0};
   unsigned int id{0};
+};
+
+class Click : public Point {
+ public:
+  class Resetter {
+   public:
+    explicit Resetter(Click & click_) : click{click_} { }
+    ~Resetter() { click.reset(); }
+
+   private:
+    Click & click;
+  };
+
+  Click() : Point{} {}
+
+  explicit Click(const XButtonEvent & event) {
+    *this = event;
+  }
+
+  Click & operator=(const XButtonEvent & event) {
+    this->Point::operator=(event);
+    if (event.button == Button2 || event.state & ShiftMask) {
+      value = 2;
+    } else if (event.button == Button3 || event.state & ControlMask) {
+      value = 3;
+    } else if (event.button == Button1) {
+      value = 1;
+    } else {
+      // Buttons 4, 5 act like no button was pressed
+      value = 0;
+    }
+    return *this;
+  }
+
+  bool operator==(const unsigned int mouse_button) const {
+    return value == mouse_button;
+  }
+  bool operator!=(const unsigned int mouse_button) const {
+    return value != mouse_button;
+  }
+  bool operator<(const unsigned int mouse_button) const {
+    return value < mouse_button;
+  }
+  bool operator<=(const unsigned int mouse_button) const {
+    return value <= mouse_button;
+  }
+  bool operator>(const unsigned int mouse_button) const {
+    return value > mouse_button;
+  }
+  bool operator>=(const unsigned int mouse_button) const {
+    return value > mouse_button;
+  }
+
+  // operator unsigned int() const { return value; }
+  void reset() { value = 0; }
+
+ private:
+  unsigned int value{0};
+};
+
+class Color {
+ public:
+  explicit Color(std::string color_name) {
+    replace_substring(color_name, "rgb:", "");
+    std::istringstream name{color_name.c_str()};
+    std::string hex;
+    getline(name, hex, '/');
+    r = strtol(hex.c_str(), nullptr, 16);
+    getline(name, hex, '/');
+    g = strtol(hex.c_str(), nullptr, 16);
+    getline(name, hex, '/');
+    b = strtol(hex.c_str(), nullptr, 16);
+    if (0) std::cerr << "Converted " << color_name << " to "
+                     << r << " " << g << " " << b << " "
+                     << to_string() << std::endl;
+  }
+
+  Color(const unsigned int r_, const unsigned int g_, const unsigned int b_) :
+      r{r_}, g{g_}, b{b_} { }
+
+  // Find color of maximum distance to others
+  explicit Color(const std::vector<Color> & colors,
+                 const unsigned int step = 8,
+                 const unsigned int min_white_distance2 = 2048,
+                 const unsigned int min_black_distance2 = 1024) {
+    if (colors.empty()) throw Error("Empty color list");
+    const Color white{255, 255, 255};
+    const Color black{0, 0, 0};
+    Color best{colors.front()};
+    int64_t best_distance2{0};
+    for (r = 0; r < 256; r += step) {
+      for (g = 0; g < 256; g += step) {
+        for (b = 0; b < 256; b += step) {
+          if (distance2(white) < min_white_distance2) continue;
+          if (distance2(black) < min_black_distance2) continue;
+          int64_t min_distance2{std::numeric_limits<int64_t>::max()};
+          for (const Color & existing : colors) {
+            const int64_t trial_distance2{distance2(existing)};
+            if (min_distance2 > trial_distance2) {
+              min_distance2 = trial_distance2;
+            }
+          }
+          if (best_distance2 < min_distance2) {
+            best_distance2 = min_distance2;
+            best = *this;
+          }
+        }
+      }
+    }
+    *this = best;
+  }
+
+  int64_t distance2(const Color & other) {
+    // www.compuphase.com/cmetric.htm
+    const int64_t ar{(r + other.r) / 2};
+    const int64_t rd{r - other.r};
+    const int64_t gd{g - other.g};
+    const int64_t bd{b - other.b};
+    return (((512 + ar) * rd * rd) >> 8) + 4 * gd * gd +
+        (((767 - ar) * bd * bd) >> 8);
+  }
+
+  std::string to_string() const {
+    std::ostringstream result{};
+    result << "rgb:";
+    for (unsigned int c{0}; c != 3; ++c) {
+      if (c) result << "/";
+      result.width(2);
+      result.fill('0');
+      result << std::hex << std::internal;
+      result << (&r)[c];
+    }
+    return result.str();
+  }
+
+ private:
+  int64_t r{0};
+  int64_t g{0};
+  int64_t b{0};
+};
+
+class X11Colors : public X11Win {
+ public:
+  using CallBack = void_uint_fun;
+
+  X11Colors(const X11Colors &) = delete;
+  X11Colors & operator=(const X11Colors &) = delete;
+
+  static const int side{600};
+  static X11Colors & create(X11App & app,
+                            const std::vector<std::string> & starting_colors,
+                            const size_t n_colors_ = 0,
+                            const bool order = false,
+                            const unsigned int width_ = side,
+                            const unsigned int height_ = side,
+                            const int x_off_ = 0,
+                            const int y_off_ = 0,
+                            const CallBack call_back_ =
+                            [] (const unsigned int) { },
+                            const bool close_on_click_ = false,
+                            const std::string title = "") {
+    return reinterpret_cast<X11Colors &>(
+        app.add(std::make_unique<X11Colors>(
+            app, starting_colors,
+            n_colors_ ? n_colors_ : starting_colors.size(), order,
+            width_, height_, x_off_, y_off_,
+            call_back_, close_on_click_, title)));
+  }
+
+  explicit X11Colors(X11App & app__,
+                     const std::vector<std::string> & starting_colors,
+                     const size_t n_colors_ = 0,
+                     const bool order = false,
+                     const unsigned int width_ = side,
+                     const unsigned int height_ = side,
+                     const int x_off_ = 0,
+                     const int y_off_ = 0,
+                     const CallBack call_back_ = [] (const unsigned int) { },
+                     const bool close_on_click_ = false,
+                     const std::string title = "") :
+      X11Win{app__, width_, height_,
+        static_cast<int>(x_off_ + (order ? width_ + width_ / 20: 0)), y_off_,
+        true, title},
+    color_names{starting_colors},
+    n_colors{n_colors_ ? n_colors_ : starting_colors.size()},
+    n_x{static_cast<unsigned int>(ceil(sqrt(n_colors)))},
+    n_y{static_cast<unsigned int>(ceil(1.0 * n_colors / n_x))},
+    call_back{call_back_},
+    close_on_click{close_on_click_} {
+      if (false) std::cerr << n_colors << " " << n_x * n_y << " "
+                           << n_x << " " << n_y << std::endl;
+      XSelectInput(display(), window,
+                   StructureNotifyMask | ExposureMask |
+                   ButtonPressMask | ButtonReleaseMask);
+
+      // Shrink initial color name list if too long
+      if (color_names.size() > n_colors) {
+        color_names.resize(n_colors);
+      }
+
+      // Make initial colors
+      for (const std::string & color_name : color_names) {
+        colors.emplace_back(color_name);
+      }
+
+      // Expand initial color list if necessary
+      const bool progress{false};
+      const size_t initial_size{color_names.size()};
+      if (color_names.size() != n_colors) {
+        if (progress) std::cerr << "Size";
+        while (color_names.size() != n_colors) {
+          const unsigned int step{static_cast<unsigned int>(
+              256 / pow(colors.size(), 1.0 / 3) / 2 + 1)};
+          if (progress)
+            std::cerr << " " << color_names.size() << " " << step << std::flush;
+          colors.emplace_back(colors);
+          color_names.push_back(colors.back().to_string());
+        }
+        if (progress) std::cerr << std::endl;
+        // Move first made color to end
+        if (color_names.size() != initial_size) {
+          colors.push_back(colors[initial_size]);
+          color_names.push_back(color_names[initial_size]);
+          colors.erase(colors.begin() + initial_size);
+          color_names.erase(color_names.begin() + initial_size);
+        }
+      }
+
+      // Order colors, closest next to each other as a test
+      if (order) {
+        for (std::vector<Color>::iterator first{colors.begin()};
+             first + 1 != colors.end(); ++first) {
+          std::vector<Color>::iterator best = first;
+          int64_t min_distance2{std::numeric_limits<int64_t>::max()};
+          for (std::vector<Color>::iterator second{next(first)};
+               second != colors.end(); ++second) {
+            const int64_t dist2{first->distance2(*second)};
+            if (dist2 < min_distance2) {
+              min_distance2 = dist2;
+              best = second;
+            }
+          }
+          std::swap(*next(first), *best);
+        }
+
+        // Impose snake pattern on grid
+        unsigned int n{0};
+        for (std::vector<Color>::iterator first{colors.begin()};
+             first < colors.end(); first += n_x) {
+          if ((n++ % 2) == 0) continue;
+          reverse(first, std::min(first + n_x, colors.end()));
+        }
+
+        color_names.clear();
+        for (const Color & color : colors) {
+          color_names.push_back(color.to_string());
+        }
+      }
+
+      // X Colors and GCs
+      Xcolors.resize(color_names.size());
+      gcs.resize(color_names.size());
+      for (unsigned int c{0}; c != color_names.size(); ++c) {
+        std::string & color_name{color_names[c]};
+        XColor & color{Xcolors[c]};
+        if (!XAllocNamedColor(display(), app.colormap, color_name.c_str(),
+                              &color, &color))
+          throw Error("Could not get color") << color_name;
+
+        // For colored arcs for points
+        gcs[c] = create_gc(color.pixel, app.white, 2,
+                           LineSolid, CapButt, JoinMiter);
+      }
+
+      // Cell borders
+      border_x_gc = create_gc(app.white, app.black, x_border_width(),
+                              LineSolid, CapButt, JoinMiter);
+      border_y_gc = create_gc(app.white, app.black, y_border_height(),
+                              LineSolid, CapButt, JoinMiter);
+    }
+
+  virtual void button_press(const XButtonEvent & event) {
+    const Click click{event};
+    if (click == 0) return;
+    if (click > 1) close_on_click = true;
+
+    // Determine which color was pressed
+    const unsigned int x{n_x * event.x / width()};
+    const unsigned int y{n_y * event.y / height()};
+    const unsigned int i{x + n_x * y};
+    call_back(i);
+  }
+
+  virtual void button_release(const XButtonEvent & event) {
+    const Click click{event};
+    if (click == 0) return;
+    if (close_on_click) app.close_window(window);
+  }
+
+  void print_names() const {
+    // Output color names
+    for (unsigned int c{0}; c != color_names.size(); ++c) {
+      if (c) {
+        std::cout << ",";
+        if ((c % 4) == 0) {
+          std::cout << std::endl;
+        } else {
+          std::cout << " ";
+        }
+      }
+      std::cout << '"' << color_names[c] << '"';
+    }
+    std::cout << std::endl;                          \
+  }
+
+  unsigned int x_border_width() const { return 1 + width() / n_x / 10; }
+  unsigned int y_border_height() const { return 1 + height() / n_y / 10; }
+
+  virtual void draw() {
+    XFillRectangle(display(), window, fill_gc, 0, 0, width(), height());
+
+    unsigned int c{0};
+    const double box_width{1.0 * width() / n_x};
+    const double box_height{1.0 * height() / n_y};
+    for (unsigned int y{0}; y != n_y; ++y) {
+      const unsigned int low_y{static_cast<unsigned int>(box_height * y)};
+      for (unsigned int x{0}; x != n_x; ++x) {
+        const unsigned int low_x{static_cast<unsigned int>(box_width * x)};
+        if (c < color_names.size()) {
+          XFillRectangle(display(), window, gcs[c],
+                         low_x, low_y, box_width + 1, box_height + 1);
+        }
+        ++c;
+      }
+    }
+
+    // Draw borders between cells
+    XSetLineAttributes(display(), border_x_gc, x_border_width(),
+                       LineSolid, CapButt, JoinMiter);
+    XSetLineAttributes(display(), border_y_gc, y_border_height(),
+                       LineSolid, CapButt, JoinMiter);
+    for (unsigned int x{0}; x <= n_x; ++x) {
+      const unsigned int low_x{static_cast<unsigned int>(box_width * x)};
+      XDrawLine(display(), window, border_x_gc, low_x, 0, low_x, height());
+    }
+    for (unsigned int y{0}; y <= n_y; ++y) {
+      const unsigned int low_y{static_cast<unsigned int>(box_height * y)};
+      XDrawLine(display(), window, border_y_gc, 0, low_y, width(), low_y);
+    }
+
+    XFlush(display());
+  }
+
+  virtual ~X11Colors() {
+    XFreeGC(display(), border_x_gc);
+    XFreeGC(display(), border_y_gc);
+    for (GC & gc_ : gcs) {
+      XFreeGC(display(), gc_);
+    }
+  }
+
+  std::vector<std::string> color_names{};
+
+ private:
+  std::vector<Color> colors{};
+  std::vector<XColor> Xcolors{};
+  std::vector<GC> gcs{};
+  GC border_x_gc{};
+  GC border_y_gc{};
+  size_t n_colors;
+  unsigned int n_x;
+  unsigned int n_y;
+  CallBack call_back;
+  bool close_on_click;
 };
 
 using Range = std::vector<std::vector<double>>;
@@ -831,8 +1289,11 @@ class SavedConfig {
 
 class X11Graph : public X11Win, public SavedConfig {
  public:
-  const unsigned int max_series{512};
+  // Graph constants
+  static constexpr unsigned int max_series{512};
   static constexpr int border_width{3};
+  static constexpr unsigned int default_width{1280};
+  static constexpr unsigned int default_height{720};
 
   // Graph data typedefs
   using Values = std::vector<double>;
@@ -840,476 +1301,131 @@ class X11Graph : public X11Win, public SavedConfig {
   using Data = std::vector<XYSeries>;
   using CallBack = std::function<bool (X11Graph &, Event &)>;
 
-  // Graph plotting window
-  // Creation factory from data in exact format needed
-  static X11Graph & create_whole(X11App & app, const Data & data__,
-                                 const unsigned int width_ = 1200,
-                                 const unsigned int height_ = 1000,
-                                 const int x_off_ = 0,
-                                 const int y_off_ = 0) {
-    return reinterpret_cast<X11Graph &>(app.add(
-        std::make_unique<X11Graph>(app, data__,
-                                   width_, height_, x_off_, y_off_)));
-  }
-
-  // Creation factory from a bunch of vectors x1, y1, x2, y2, ...
+  // Graph factories
+  static X11Graph & create_whole(
+      X11App & app, const Data & data__,
+      const unsigned int width_ = default_width,
+      const unsigned int height_ = default_height,
+      const int x_off_ = 0, const int y_off_ = 0,
+      const std::string title = "");
   template <class ... Input>
-  static X11Graph & create(X11App & app, Input && ... input) {
-    return reinterpret_cast<X11Graph &>(app.add(
-        std::make_unique<X11Graph>(app, std::forward<Input>(input)...)));
-  }
+  static X11Graph & create(X11App & app, Input && ... input);
 
-  // Construct from data in exact format needed
+  // Graph constructors and destructors and copying
   X11Graph(X11App & app__, const Data & data__,
-           const unsigned int width_ = 1200,
-           const unsigned int height_ = 1000,
-           const int x_off_ = 0,
-           const int y_off_ = 0) :
-      X11Win{app__, width_, height_, x_off_, y_off_}, input_data{data__},
-    data{&input_data} {
-        initialize();
-      }
-
-  // Construct from a bunch of vectors x1, y1, x2, y2, ...
+           const unsigned int width_ = default_width,
+           const unsigned int height_ = default_height,
+           const int x_off_ = 0, const int y_off_ = 0,
+           const std::string title = "");
   template <class ... Input>
-  X11Graph(X11App & app__, Input && ... input) : X11Win{app__} {
-    add_input(std::forward<Input>(input)...);
-    data = &input_data;
-    color_names = make_colors();
-    series_colors.resize(color_names.size());
-    series_arc_gcs.resize(color_names.size());
-    series_line_gcs.resize(color_names.size());
-    series_radio_gcs.resize(color_names.size());
-    initialize();
-  }
-
+  X11Graph(X11App & app__, Input && ... input);
+  virtual ~X11Graph();
   X11Graph(const X11Graph &) = delete;
   X11Graph & operator=(const X11Graph &) = delete;
 
-  // Add a bunch of series (only during construction right now)
+  // Graph initialization functions
   template <class ... Input>
-  void add_input(Values & x__, Values & y__, Input && ... input) {
-    input_data.emplace_back(0);
-    input_data.back().push_back(&x__);
-    input_data.back().push_back(&y__);
-    add_input(std::forward<Input>(input)...);
-  }
+  void add_input(Values & x__, Values & y__, Input && ... input);
   void add_input() { }
-
   void add_call_back(const std::string & help_text,
                      const CallBack & call_back,
                      const bool full_draw = false,
-                     const bool initially_on = true) {
-    call_back_radios.reserve(100);
-    call_backs.reserve(100);
-    call_backs.push_back(call_back);
-    call_back_radios.push_back(Radio{help_text, this,
-        {1, call_backs.size() + 3.0}, {[this, full_draw]() {
-            return full_draw ? draw() : redraw(); }}, true, initially_on});
-    radios.push_back(&call_back_radios.back());
-    // call_back_radios.back().draw();
-  }
-
+                     const bool initially_on = true);
   void initialize();
 
-  void set_line_widths(std::vector<GC> gcs, const int width_) {
-    for (unsigned int g{0}; g != data->size(); ++g)
-      XSetLineAttributes(display(), gcs[g], width_, LineSolid,
-                         CapButt, JoinRound);
-  }
-
-  virtual bool slow() const { return true; }
-
-  // Get range for axes x 0, y 1, or both 2
-  void set_range(const bool y, const double low, const double high) {
-    // range[y][0] = restrict_range_radios[y] ? max(low, max_range[y][0]) : low;
-    // range[y][1] =
-    // restrict_range_radios[y] ? min(high, max_range[y][1]) : high;
-    range[y][0] = low;
-    range[y][1] = high;
-    range[y][2] = range[y][1] - range[y][0];
-    zoomed[y] = (dne(range[y][0], max_range[y][0]) ||
-                 dne(range[y][1], max_range[y][1]));
-  }
+  // Range functions
   void get_range(const unsigned int a = 2);
-  void range_jump(const bool y, const double dist) {
-    set_range(y, range[y][0] + dist, range[y][1] + dist);
-  }
-  bool in_range(const double x, const double y) const {
-    return x >= range[0][0] && x <= range[0][1] &&
-        y >= range[1][0] && y <= range[1][1];
-  }
-  bool in_range(const dPoint pos) const { return in_range(pos.x, pos.y); }
+  void set_range(const bool y, const double low, const double high);
+  void range_jump(const bool y, const double dist);
+  bool in_range(const double x, const double y) const;
+  bool in_range(const dPoint pos) const;
+  void show_range(const std::string prefix) const;
 
-  // Data to window coordinate transformation
-  int coord(const bool y, const double val) const {
-    if (y) return bounds[1][1] - (val - range[1][0]) * scale[1];
-    return bounds[0][0] + (val - range[0][0]) * scale[0];
-  }
-  Point coord(const dPoint point) const {
-    return Point{coord(0, point.x), coord(1, point.y)};
-  }
-  XPoint xcoord(const dPoint point) const {
-    XPoint result;
-    result.x = coord(0, point.x);
-    result.y = coord(1, point.y);
-    return result;
-  }
-  XPoint xcoord(const Point point) const {
-    XPoint result;
-    result.x = point.x;
-    result.y = point.y;
-    return result;
-  }
-
-  // Window to data coordinate transformation
-  double icoord(const bool y, const int val) const {
-    if (y) return (bounds[1][1] - val) / scale[1] + range[1][0];
-    return (val - bounds[0][0]) / scale[0] + range[0][0];
-  }
-  dPoint icoord(const Point point) const {
-    return dPoint{icoord(0, point.x), icoord(1, point.y)};
-  }
-
-  int min_border() const { return 0.05 * std::min(width(), height()); }
+  // Coordinates and transformations
+  int coord(const bool y, const double val) const;
+  Point coord(const dPoint point) const;
+  XPoint xcoord(const dPoint point) const;
+  XPoint xcoord(const Point point) const;
+  double icoord(const bool y, const int val) const;
+  dPoint icoord(const Point point) const;
   unsigned int get_quadrant(const Point point) const;
+  int min_border() const;
 
-  //
-  // Event loop callbacks
-  //
-  virtual void expose(const XExposeEvent & event) {
-    if (bounds.size() == 0) {
-      get_range();
-      prepare();
-    }
-    if (drawn) {
-      XCopyArea(display(), pixmap, window, gc, event.x, event.y,
-                event.width, event.height, event.x, event.y);
-      draw_controls();
-    } else {
-      draw();
-    }
-  }
-  virtual void enter(const XCrossingEvent &) {
-    inside = true;
-    erase_border();
-    draw_controls();
-  }
-  virtual void key(const XKeyEvent & evnt) { last_motion = last_press = evnt; }
+  // Event loop callbacks and related functions
+  virtual void expose(const XExposeEvent & event);
+  virtual void enter(const XCrossingEvent &);
+  virtual void key(const XKeyEvent &);
   virtual void button_press(const XButtonEvent & event);
   virtual void motion(const XMotionEvent & event);
   virtual void button_release(const XButtonEvent & event);
   virtual void leave(const XCrossingEvent &);
-
-  bool do_arcs(const unsigned int s) const {
-    if (!series_radios[s]) return false;
-    return (arcs_radio && !series_only_lines[s]) || series_only_arcs[s];
-  }
-  bool do_arcs() const {
-    for (unsigned int s{0}; s != series_only_arcs.size(); ++s)
-      if (do_arcs(s)) return true;
-    return false;
-  }
-  bool can_do_arcs() const {
-    for (unsigned int s{0}; s != series_only_arcs.size(); ++s)
-      if (series_radios[s] && !series_only_lines[s]) return true;
-    return false;
-  }
-  bool do_lines(const unsigned int s) const {
-    if (!series_radios[s]) return false;
-    return (lines_radio && !series_only_arcs[s]) || series_only_lines[s];
-  }
-  bool do_lines() const {
-    for (unsigned int s{0}; s != series_only_lines.size(); ++s)
-      if (do_lines(s)) return true;
-    return false;
-  }
-  bool can_do_lines() const {
-    for (unsigned int s{0}; s != series_only_lines.size(); ++s)
-      if (series_radios[s] && !series_only_arcs[s]) return true;
-    return false;
-  }
-
-  void prepare_log();
   virtual void prepare();
-  void draw_ticks() {
-    if (inside) return;
-    if (!tick_radios[0] && !tick_radios[1]) return;
-    static std::vector<std::string> tick_labels;
-    tick_labels.clear();
-    if (0)
-      std::cerr << "Bounds "
-                << bounds[0][0] << " " << bounds[0][1] << " "
-                << bounds[1][0] << " " << bounds[1][1] << std::endl;
-    static GC tick_gc{create_gc(app.black, app.white)};
-    static X11Font * tick_font{nullptr};
-    const double avail_height{bounds[1][0] * 0.6};
-    X11Font * fits{app.fonts.fits("moo", bounds[0][2], avail_height)};
-    if (fits != tick_font) {
-      tick_font = fits;
-      XSetFont(display(), tick_gc, fits->id());
-    }
-    const int t_height{tick_font->height()};
-    for (const bool y : {false, true}) {
-      if (!tick_radios[y]) continue;
-      const Axis axis{range[y][0], range[y][1], 3, log_radios[y]};
-      for (const std::pair<double, bool> tick : axis.ticks()) {
-        if (!tick.second) continue;
-        const int loc{coord(y, tick.first)};
-        std::ostringstream label;
-        label << std::setprecision(6)
-              << (log_radios[y] ? pow(10, tick.first) : tick.first);
-        tick_labels.push_back(label.str());
-        std::string & text{tick_labels.back()};
-        const int t_width{tick_font->string_width(text)};
-        XDrawString(display(), window, tick_gc,
-                    y ? std::max(0, bounds[0][0] - t_width - 3) :
-                    loc - t_width / 2,
-                    y ? tick_font->centered_y(loc) : bounds[1][1] + t_height,
-                    text.c_str(),
-                    static_cast<unsigned int>(text.size()));
-      }
-    }
-  }
+  virtual void draw();
+
+  // Prepare and draw helpers
+  bool do_arcs(const unsigned int s) const;
+  bool do_arcs() const;
+  bool can_do_arcs() const;
+  bool do_lines(const unsigned int s) const;
+  bool do_lines() const;
+  bool can_do_lines() const;
+  void prepare_log();
+  static std::string long_status(const bool in, const bool y);
+  void draw_status(const bool force = false) const;
+  void draw_controls();
+  void draw_grid() const;
+  void draw_ticks();
+  void redraw();
+  void erase_border();
   void set_clip_rectangle(const unsigned int x, const unsigned int y,
                           const unsigned int width_,
                           const unsigned int height_);
-
-  void draw_grid() const;
-  void erase_border() {
-    XFillRectangle(display(), window, fill_gc,
-                   0, bounds[1][1], width(), height());
-    XFillRectangle(display(), window, fill_gc,
-                   0, 0, bounds[0][0], height());
-  }
-  void draw_controls() {
-    XDrawRectangle(display(), window, border_gc,
-                   bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
-    draw_status();
-    draw_grid();
-    for (const Radio * radio : radios) radio->draw();
-
-    // Draw tick labels
-    draw_ticks();
-
-    // Handle special drawing commands
-    Event nothing;
-    for (unsigned int c{0}; c != call_backs.size(); ++c)
-      if (call_back_radios[c]) call_backs[c](*this, nothing);
-  }
-
-  static std::string long_status(const bool in, const bool y) {
-    return std::string("Pointer (1 - 2/shift - 3/control) clicks ") +
-        "(center - zoom in - zoom out) at point " +
-        "and drags (select - scroll - zoom) for " +
-        (in ? "X and Y axes" : (y ? "Y axis" : "X axis"));
-  }
-
-  void draw_status(const bool force = false) const {
-    XFillRectangle(display(), window, fill_gc, bounds[0][0], 0,
-                   bounds[0][1] - bounds[0][0], bounds[1][0] - border_width);
-    if (force || help_radio || coord_radio) {
-      const double avail_height{bounds[1][0] * 0.65};
-      static X11Font * status_font{nullptr};
-      X11Font * fits{app.fonts.fits(status, bounds[0][2], avail_height)};
-      if (fits != status_font) {
-        status_font = fits;
-        XSetFont(display(), gc, fits->id());
-      }
-      XDrawString(display(), window, gc, bounds[0][0],
-                  fits->centered_y((bounds[1][0] - border_width) / 2),
-                  const_cast<char *>(status.c_str()),
-                  static_cast<unsigned int>(status.size()));
-    }
-  }
-
+  void set_line_widths(std::vector<GC> gcs, const int width_);
   double line_vertical_y(const dPoint low_x, const dPoint high_x,
-                         const double x) const {
-    const double slope((high_x.y - low_x.y) / (high_x.x - low_x.x));
-    return low_x.y + (x - low_x.x) * slope;
-  }
+                         const double x) const;
   double line_horizontal_x(const dPoint low_x, const dPoint high_x,
-                           const double y) const {
-    const double slope((high_x.y - low_x.y) / (high_x.x - low_x.x));
-    return low_x.x + (y - low_x.y) / slope;
-  }
+                           const double y) const;
+  XPoint line_bounds_intersection(const dPoint in, const dPoint out) const;
 
-  XPoint line_bounds_intersection(const dPoint in, const dPoint out) const {
-    // need to do better to include lines between points outside range
-    // but intersecting the range.  also need to reduce unnecessary
-    // computation here and need to place points outside of range...
-
-    const bool out_high[2]{out[0] > range[0][1], out[1] > range[1][1]};
-    const bool out_low[2]{out[0] < range[0][0], out[1] < range[1][0]};
-    const bool is_out[2]{out_high[0] || out_low[0], out_high[1] || out_low[1]};
-    const dPoint limit{range[0][out_high[0]], range[1][out_high[1]]};
-    if (!dne(in.x, out.x)) return xcoord(dPoint{in.x, limit.y});
-    if (!dne(in.y, out.y)) return xcoord(dPoint{limit.x, in.y});
-    const double slope((out.y - in.y) / (out.x - in.x));
-    const dPoint solutions{
-      in.x + (limit.y - in.y) / slope, in.y + (limit.x - in.x) * slope};
-    const dPoint trials[2]{{solutions.x, limit.y}, {limit.x, solutions.y}};
-    const dPoint distance{in.distance(trials[0]), in.distance(trials[1])};
-    const bool best_is_x{(is_out[0] && is_out[1]) ? distance.x < distance.y :
-          is_out[1]};
-    const dPoint intersection{best_is_x ? trials[0] : trials[1]};
-    return xcoord(intersection);
-  }
-
-  virtual void draw();
-  void redraw() {
-    XCopyArea(display(), pixmap, window, gc, bounds[0][0], bounds[1][0],
-              bounds[0][2], bounds[1][2], bounds[0][0], bounds[1][0]);
-    draw_controls();
-  }
-
+  // Assorted functions
+  virtual bool slow() const;
+  bool movie(const bool right);
   virtual void save_image(const std::string & base_name,
-                          std::function<void()> call_back =
-                          std::function<void()>()) {
-    if (!call_back) {
-      call_back = [this]() {
-        status = "Saving Image";
-        draw_controls();
-        draw_status(true);
-        XFlush(display());
-      };
-    }
-    inside = false;
-    const bool help_state = help_radio;
-    help_radio = false;
-    draw_controls();
-    X11Win::save_image(base_name, call_back);
-    inside = true;
-    help_radio = help_state;
-    status = "Done saving image";
-    draw_controls();
-    draw_status(true);
-  }
-
-  virtual ~X11Graph() {
-    // Save accumulated images as pdf
-    if (image_names.size()) {
-      const std::string pdf_name{get_next_file("cn", "pdf")};
-      std::ostringstream pdf_command;
-      pdf_command << "convert -quality 100 -density "
-                  << app.pixels_per_inch(0) << "x" << app.pixels_per_inch(1);
-      for (const std::string & name : image_names) {
-        pdf_command << " " << name;
-      }
-      pdf_command << " " << pdf_name;
-
-      if (system(pdf_command.str().c_str()) == -1) {
-        std::cerr << "Problem creating pdf file" << std::endl;
-      } else {
-        std::cerr << "Saved " << image_names.size() << " image"
-                  << (image_names.size() == 1 ? "" : "s")
-                  << " in pdf file " << pdf_name << std::endl;
-      }
-    }
-
-    for (GC gc_ : {border_gc, minor_gc, major_gc}) XFreeGC(display(), gc_);
-    // FIX Should also free all other GCs...
-  }
-
-  // Bug in code? sometimes movie cannot be started until after zoom out
-  bool movie(const bool right) {
-    status = "Playing the movie - click movie radio button again to stop";
-    using Time = std::chrono::time_point<std::chrono::system_clock>;
-    Time last_time{std::chrono::system_clock::now()};
-    const double rate{0.5};  // page per second
-    XEvent event;
-    XWindowEvent(display(), window, ButtonReleaseMask, &event);
-    while (true) {
-      Time time{std::chrono::system_clock::now()};
-      const double seconds{
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            time - last_time).count() / 1000.0};
-      last_time = time;
-      const double movement{rate * seconds * range[0][2]};
-      range_jump(0, (right ? 1 : -1) * movement);
-      small_move = true;
-      prepare_draw();
-      XFlush(display());
-      if (!(range[0][0] > max_range[0][0] && range[0][1] < max_range[0][1])) {
-        movie_radios[right] = false;
-        return true;
-      }
-      if (XCheckWindowEvent(display(), window, ButtonPressMask, &event)) {
-        XWindowEvent(display(), window, ButtonReleaseMask, &event);
-        if (movie_radios[right].release(event.xbutton)) {
-          movie_radios[right] = false;
-          return true;
-        }
-      }
-    }
-  }
-
-  void show_order(const std::string prefix) const {
-    std::cout << prefix;
-    for (const unsigned int s : series_order) {
-      std::cout << " " << s;
-    }
-    std::cout << std::endl;
-  }
-  void show_range(const std::string prefix) const {
-    std::cout << prefix << " range";
-    for (const bool y : {false, true}) {
-      for (const double val : range[y]) {
-        std::cout << " " << val;
-      }
-    }
-    if (bounds.size()) {
-      std::cout << " bounds";
-      for (const bool y : {false, true}) {
-        for (const double val : bounds[y]) {
-          std::cout << " " << val;
-        }
-      }
-    }
-    std::cout << " scale";
-    for (const double val : scale) {
-      std::cout << " " << val;
-    }
-    std::cout << std::endl;
-  }
-
-
+                          void_fun call_back = void_fun());
 
   // Data is series * (x, y) -> point
   Data input_data{}, log_data{}, log_x_data{}, log_y_data{};
   Data * data{&input_data};
   std::vector<std::unique_ptr<Values> > log_series{};
 
-  // Drawing data for series
-  std::vector<std::vector<XArc> > arcs{};
-  std::vector<std::vector<XPoint> > points{};
+  // Graphics contexts and fonts
+  GC border_gc{}, border_fill_gc{}, minor_gc{}, major_gc{}, tick_label_gc{};
+  mutable X11Font * tick_font{nullptr};
+  mutable X11Font * status_font{nullptr};
 
-  // Graphics contexts
-  GC border_gc{}, border_fill_gc{}, minor_gc{}, major_gc{};
-
-  // Colors for series
+  // Colors and GCs and shapes and names for series
   std::vector<std::string> make_colors() const;
-  std::vector<std::string> color_names{make_colors()};
-  std::vector<XColor> series_colors{color_names.size()};
-  std::vector<GC> series_arc_gcs{color_names.size()};
-  std::vector<GC> series_line_gcs{color_names.size()};
-  std::vector<GC> series_radio_gcs{color_names.size()};
+  void set_color(const unsigned int series, const unsigned int color);
+  void reset_colors();
+  bool colors_changed{false};
+  std::vector<std::string> color_names{};
+  std::vector<std::string> series_names{};
+  std::vector<XColor> series_colors{};
+  std::vector<GC> series_arc_gcs{};
+  std::vector<GC> series_line_gcs{};
+  std::vector<GC> series_radio_gcs{};
   std::vector<Radio> series_radios{};
   std::vector<uint8_t> series_only_arcs{}, series_only_lines{};
+  std::vector<std::vector<XArc> > arcs{};
+  std::vector<std::vector<XPoint> > points{};
 
   // Graph state information
   std::string status{""};
   std::vector<double> scale{};  // x, y, y / x
-  Point last_press{}, last_motion{};
+  Click click{};
+  Point last_motion{};
   bool moved{false};
   bool small_move{false};
-
-  bool_fun radio_tester(const Radio & radio, const bool state = true) {
-    return [&radio, state]() { return radio.toggled == state; };
-  }
-  bool_fun zoom_tester(const bool y) {
-    return [this, y]() { return zoomed[y]; };
-  }
 
   //
   // Radio controls
@@ -1356,43 +1472,11 @@ class X11Graph : public X11Win, public SavedConfig {
       {[this]() { movie(false); }, [this]() { return zoomed[0]; }}, true},
     {"Play a movie traveling right", this, {102.5, -1},
       {[this]() { movie(true); }, [this]() { return zoomed[0]; }}, true}};
-  Radio restrict_range_radios[2]{
+  Radio restrict_range_radios[2]{  // unused
     {"Toggle range restriction on X axis to actual data range", this, {3, -1},
       {[this]() { get_range(0); prepare_draw(); }}, true, true},
     {"Toggle range restriction on Y axis to actual data range", this, {1, -3},
       {[this]() { get_range(1); prepare_draw(); }}, true, true}};
-
-  // Saved history
-  std::deque<SavedConfig> saved_config{};
-  std::vector<Radio *> saved_radios{
-        &arcs_radio, &outlines_radio, &lines_radio};
-  SavedConfig current_config() const {
-    SavedConfig current{*this};
-    current.radio_states.clear();
-    for (Radio * radio : saved_radios) {
-      current.radio_states.push_back(*radio);
-    }
-    return current;
-  }
-
-  void restore_config(const SavedConfig & config) {
-    if (dne(config.line_width, line_width)) {
-      set_line_widths(series_line_gcs,
-                      (config.line_width == 1 ? 0 : config.line_width));
-    }
-    if (dne(config.arc_width, arc_width)) {
-      set_line_widths(series_arc_gcs, config.arc_width);
-    }
-    for (unsigned int r{0}; r != saved_radios.size(); ++r) {
-      saved_radios[r]->toggled = config.radio_states[r];
-    }
-    SavedConfig::restore_config(config);
-  }
-  void save_config(const SavedConfig & config) {
-    saved_config.push_back(std::move(config));
-  }
-
-  // Cannot go into saved config
   Radio previous_views_radio{"Show previous view",
         this, {-1, 1}, {[this]() { },
           [this]() {return saved_config.size() > 1; },
@@ -1402,8 +1486,8 @@ class X11Graph : public X11Win, public SavedConfig {
                 restore_config(saved_config.back());
                 prepare_draw();
               }}}}};
-
-  // All radios
+  std::vector<Radio> unnamed_radios{};
+  std::vector<Radio> extra_radios{};
   std::deque<Radio *> radios{&help_radio, &coord_radio,
         &arcs_radio, &outlines_radio, &lines_radio,
         &tick_radios[0], &tick_radios[1],
@@ -1412,14 +1496,21 @@ class X11Graph : public X11Win, public SavedConfig {
         &grid_radios[1][0], &grid_radios[1][1],
         &movie_radios[0], &movie_radios[1],
         &previous_views_radio};
-  //        &restrict_range_radios[0], &restrict_range_radios[1]};
   std::vector<Radio> create_unnamed_radios();
-  std::vector<Radio> extra_radios{};
+  bool_fun radio_tester(const Radio & radio, const bool state = true);
+  bool_fun zoom_tester(const bool y);
 
-  // Callback functions and radios for customization
+  // Callback functions
   std::vector<CallBack> call_backs{};
   std::vector<Radio> call_back_radios{};
-  std::vector<Radio> unnamed_radios{};
+
+  // Saved configuration history
+  std::deque<SavedConfig> saved_config{};
+  std::vector<Radio *> saved_radios{
+    &arcs_radio, &outlines_radio, &lines_radio};
+  SavedConfig current_config() const;
+  void restore_config(const SavedConfig & config);
+  void save_config(const SavedConfig & config);
 
   // Number of threads to use
   unsigned int n_threads_{std::thread::hardware_concurrency()};
@@ -1429,33 +1520,107 @@ class X11Graph : public X11Win, public SavedConfig {
   }
 };
 
-inline std::vector<std::string> X11Graph::make_colors() const {
-  std::vector<std::string> names{
-    "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "red", "blue", "orange", "green",
-        "brown", "purple", "cyan", "yellow", "black", "gray"};
-  if (data->size() > max_series)
-    throw Error(std::string("Too many series to display (max is ") +
-                std::to_string(max_series) + ")");
-
-  const unsigned int doublings{5};
-  names.reserve(names.size() * pow(2, doublings));
-  for (unsigned int n{0}; n != doublings; ++n) {
-    if (names.size() > data->size()) break;
-    names.insert(names.end(), names.begin(), names.end());
-  }
-  names.resize(data->size());
-  return names;
+// Creation factory from data in exact format needed
+X11Graph & X11Graph::create_whole(
+    X11App & app, const Data & data__,
+    const unsigned int width_, const unsigned int height_,
+    const int x_off_, const int y_off_,
+    const std::string title) {
+  return reinterpret_cast<X11Graph &>(app.add(
+      std::make_unique<X11Graph>(
+          app, data__, width_, height_, x_off_, y_off_, title)));
 }
 
-// Common initialization for constructors
-inline void X11Graph::initialize() {
+// Creation factory from a bunch of vectors x1, y1, x2, y2, ...
+template <class ... Input>
+X11Graph & X11Graph::create(X11App & app, Input && ... input) {
+  return reinterpret_cast<X11Graph &>(app.add(
+      std::make_unique<X11Graph>(app, std::forward<Input>(input)...)));
+}
+
+// Construct from data in exact format needed
+X11Graph::X11Graph(X11App & app__, const Data & data__,
+                   const unsigned int width_,
+                   const unsigned int height_,
+                   const int x_off_, const int y_off_,
+                   const std::string title) :
+    X11Win{app__, width_, height_, x_off_, y_off_, true, title},
+                          input_data{data__}, data{&input_data} {
+                            initialize();
+                          }
+
+// Construct from a bunch of vectors x1, y1, x2, y2, ...
+template <class ... Input>
+X11Graph::X11Graph(X11App & app__, Input && ... input) :
+    X11Win{app__, default_width, default_height, 0, 0, true} {
+  add_input(std::forward<Input>(input)...);
+  data = &input_data;
+  initialize();
+}
+
+// Destroy graph
+X11Graph::~X11Graph() {
+  // Save accumulated images as pdf
+  if (image_names.size()) {
+    const std::string pdf_name{get_next_file("cn", "pdf")};
+    std::ostringstream pdf_command;
+    pdf_command << "convert -quality 100 -density "
+                << app.pixels_per_inch(0) << "x" << app.pixels_per_inch(1);
+    for (const std::string & name : image_names) {
+      pdf_command << " " << name;
+    }
+    pdf_command << " " << pdf_name;
+
+    if (system(pdf_command.str().c_str()) == -1) {
+      std::cerr << "Problem creating pdf file" << std::endl;
+    } else {
+      std::cerr << "Saved " << image_names.size() << " image"
+                << (image_names.size() == 1 ? "" : "s")
+                << " in pdf file " << pdf_name << std::endl;
+    }
+  }
+
+  // Free all graphics contexts
+  for (GC gc_ : {border_gc, border_fill_gc, minor_gc, major_gc,
+          tick_label_gc}) {
+    XFreeGC(display(), gc_);
+  }
+  for (std::vector<GC> * gcs :
+    {&series_arc_gcs, &series_line_gcs, &series_radio_gcs}) {
+    for (GC gc_ : *gcs) {
+      XFreeGC(display(), gc_);
+    }
+  }
+}
+
+// Graph initialization functions
+template <class ... Input>
+void X11Graph::add_input(Values & x__, Values & y__, Input && ... input) {
+  input_data.emplace_back(0);
+  input_data.back().push_back(&x__);
+  input_data.back().push_back(&y__);
+  add_input(std::forward<Input>(input)...);
+}
+
+void X11Graph::add_call_back(const std::string & help_text,
+                             const CallBack & call_back,
+                             const bool full_draw,
+                             const bool initially_on) {
+  call_back_radios.reserve(100);
+  call_backs.reserve(100);
+  call_backs.push_back(call_back);
+  call_back_radios.push_back(Radio{help_text, this,
+      {1, call_backs.size() + 3.0}, {[this, full_draw]() {
+          return full_draw ? draw() : redraw(); }}, true, initially_on});
+  radios.push_back(&call_back_radios.back());
+}
+
+void X11Graph::initialize() {
   scale.resize(3);
 
   // Events to watch out for
   XSelectInput(display(), window, StructureNotifyMask | ExposureMask |
-               KeyPressMask | EnterWindowMask | LeaveWindowMask |
+               EnterWindowMask | LeaveWindowMask | KeyPressMask |
                ButtonPressMask | PointerMotionMask | ButtonReleaseMask);
 
   // Graphics contexts
@@ -1467,13 +1632,21 @@ inline void X11Graph::initialize() {
                        CapButt, JoinMiter);
   major_gc = create_gc(app.black, app.white, 2, LineOnOffDash,
                        CapButt, JoinMiter);
+  tick_label_gc = create_gc(app.black, app.white);
 
-  // Series colors
+  // Series colors and names
+  color_names = make_colors();
+  series_names.resize(color_names.size());
+  series_colors.resize(color_names.size());
+  series_arc_gcs.resize(color_names.size());
+  series_line_gcs.resize(color_names.size());
+  series_radio_gcs.resize(color_names.size());
   for (unsigned int c{0}; c != color_names.size(); ++c) {
+    series_names[c] = std::to_string(c + 1);
     std::string & color_name{color_names[c]};
     XColor & color{series_colors[c]};
     // std::cerr << c << " " << color_name << std::endl;
-    if (!XAllocNamedColor(display(), colormap, color_name.c_str(),
+    if (!XAllocNamedColor(display(), app.colormap, color_name.c_str(),
                           &color, &color))
       throw Error("Could not get color") << color_name;
 
@@ -1487,14 +1660,15 @@ inline void X11Graph::initialize() {
 
     // For colored thin lines to outline radios
     series_radio_gcs[c] = create_gc(color.pixel, app.white, radio_width,
-                                   LineSolid, CapButt, JoinMiter);
+                                    LineSolid, CapButt, JoinMiter);
   }
 
   // Create series radios, and add to master radio list, adjust properties
   series_radios.reserve(data->size());
   for (unsigned int c{0}; c != data->size(); ++c) {
-    series_radios.push_back(Radio{"Toggle display of this series", this,
-        {-1, data->size() + 1.0 - c},
+    series_radios.push_back(Radio{"Pointer clicks toggle display "
+            "or change colors (buttons 2,3) for series " + series_names[c],
+            this, {-1, data->size() + 1.0 - c},
         {[this]() { prepare_draw(); }, [this]() { return inside; }},
             true, true, &series_radio_gcs[c]});
     saved_radios.push_back(&series_radios.back());
@@ -1510,9 +1684,127 @@ inline void X11Graph::initialize() {
   for (std::vector<Radio> * radio_vec : {&series_radios, &unnamed_radios})
     for (Radio & radio : (*radio_vec)) radios.push_back(&radio);
   extra_radios.reserve(1000);
+
+  // Map the window
+  // XMapWindow(display(), window);
 }
 
-// Get range for axes a: x 0, y 1, or both 2
+// Colors
+std::vector<std::string> X11Graph::make_colors() const {
+  std::vector<std::string> names{
+    "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
+        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
+        "rgb:fc/7c/fc", "rgb:00/18/00", "rgb:00/fc/84", "rgb:fc/fc/a0",
+        "rgb:90/a0/8c", "rgb:00/a8/fc", "rgb:74/54/fc", "rgb:fc/08/fc",
+        "rgb:78/4c/30", "rgb:fc/40/78", "rgb:80/fc/68", "rgb:00/2c/fc",
+        "rgb:fc/9c/78", "rgb:20/a8/68", "rgb:4c/fc/04", "rgb:d0/cc/fc",
+        "rgb:70/9c/04", "rgb:00/64/30", "rgb:00/fc/e8", "rgb:70/00/00",
+        "rgb:64/00/f8", "rgb:70/a8/f4", "rgb:a4/50/a0", "rgb:50/d4/ac",
+        "rgb:2c/24/50", "rgb:fc/fc/34", "rgb:30/90/b8", "rgb:d0/40/24",
+        "rgb:c8/40/f4", "rgb:c4/d0/5c", "rgb:ec/00/9c", "rgb:00/f0/34",
+        "rgb:ac/f4/b8", "rgb:54/38/b4", "rgb:bc/78/54", "rgb:54/70/70",
+        "rgb:a8/08/40", "rgb:b0/80/dc", "rgb:58/cc/3c", "rgb:24/6c/f8",
+        "rgb:b4/00/e4", "rgb:38/48/00", "rgb:00/c4/bc", "rgb:cc/bc/ac",
+        "rgb:e8/6c/ac", "rgb:38/d4/fc", "rgb:fc/0c/4c", "rgb:74/2c/70",
+        "rgb:a0/6c/00", "rgb:28/84/00", "rgb:98/a8/40", "rgb:70/70/bc",
+        "rgb:fc/6c/44", "rgb:fc/30/c4", "rgb:c0/28/78", "rgb:00/2c/bc",
+        "rgb:64/00/48", "rgb:20/00/e0", "rgb:9c/2c/00", "rgb:8c/fc/24",
+        "rgb:90/2c/d4", "rgb:fc/ac/d8", "rgb:e8/fc/e8", "rgb:3c/fc/58",
+        "rgb:4c/90/3c", "rgb:90/c4/c4", "rgb:78/d0/00", "rgb:00/00/38",
+        "rgb:00/98/34", "rgb:d8/a4/3c", "rgb:fc/d0/78", "rgb:00/24/80",
+        "rgb:b0/a0/00", "rgb:40/fc/d0", "rgb:44/30/f0", "rgb:74/cc/78",
+        "rgb:00/78/68", "rgb:c8/fc/7c", "rgb:fc/54/00", "rgb:60/04/b8",
+        "rgb:54/24/20", "rgb:3c/54/44", "rgb:00/68/c8", "rgb:00/d4/64",
+        "rgb:c8/90/90", "rgb:8c/5c/68", "rgb:b0/f8/f8", "rgb:c4/24/b8",
+        "rgb:74/fc/a4", "rgb:64/6c/08", "rgb:c4/fc/3c", "rgb:3c/40/7c",
+        "rgb:54/a8/90", "rgb:40/bc/08", "rgb:00/48/5c", "rgb:18/c4/34",
+        "rgb:84/7c/38", "rgb:14/e4/00", "rgb:00/a0/98", "rgb:ac/a8/fc",
+        "rgb:fc/4c/fc", "rgb:00/34/2c", "rgb:ac/00/04", "rgb:fc/28/14",
+        "rgb:fc/c8/38", "rgb:34/00/0c", "rgb:58/04/80", "rgb:90/d8/48",
+        "rgb:8c/d0/fc", "rgb:fc/d8/c8", "rgb:cc/54/74", "rgb:5c/7c/f0",
+        "rgb:38/60/b0", "rgb:3c/f8/90", "rgb:3c/b0/dc", "rgb:a4/38/48",
+        "rgb:e0/fc/00", "rgb:20/c8/90", "rgb:88/98/c4", "rgb:10/f0/b4",
+        "rgb:18/00/68", "rgb:d0/00/68", "rgb:a8/d8/8c", "rgb:00/58/00",
+        "rgb:6c/a4/60", "rgb:9c/58/d8", "rgb:6c/54/94", "rgb:00/d0/ec",
+        "rgb:64/dc/dc", "rgb:28/7c/8c", "rgb:98/78/98", "rgb:1c/48/dc",
+        "rgb:00/90/d4", "rgb:88/28/a0", "rgb:dc/90/c4", "rgb:40/d4/68",
+        "rgb:d4/18/30", "rgb:d8/64/e0", "rgb:dc/9c/fc", "rgb:ac/5c/30",
+        "rgb:dc/44/a4", "rgb:6c/40/00", "rgb:b8/a8/68", "rgb:e8/78/74",
+        "rgb:bc/c0/24", "rgb:fc/44/40", "rgb:34/e8/28", "rgb:30/94/fc",
+        "rgb:e0/08/d0", "rgb:90/84/68", "rgb:84/20/30", "rgb:50/54/d8",
+        "rgb:d4/e4/a4", "rgb:90/14/fc", "rgb:d0/60/04", "rgb:34/1c/c4",
+        "rgb:c0/80/20", "rgb:fc/a0/18", "rgb:8c/88/fc", "rgb:fc/b8/a4",
+        "rgb:30/fc/fc", "rgb:dc/e0/24", "rgb:f4/f4/68", "rgb:68/84/94",
+        "rgb:3c/70/24", "rgb:64/b4/c0", "rgb:60/f8/38", "rgb:2c/d8/d0",
+        "rgb:cc/24/00", "rgb:c0/00/a8", "rgb:d0/18/fc", "rgb:ec/1c/78",
+        "rgb:2c/78/50", "rgb:8c/0c/68", "rgb:34/00/3c", "rgb:90/08/c4",
+        "rgb:fc/c8/fc", "rgb:bc/d4/d0", "rgb:b4/a4/c8", "rgb:bc/6c/b4",
+        "rgb:84/f8/d0", "rgb:78/b8/24", "rgb:30/24/98", "rgb:00/04/bc",
+        "rgb:2c/a0/20", "rgb:58/34/4c", "rgb:fc/e0/00", "rgb:34/b4/b0",
+        "rgb:9c/40/fc", "rgb:dc/b8/7c", "rgb:30/24/00", "rgb:d4/5c/44",
+        "rgb:28/60/70", "rgb:64/20/d4", "rgb:fc/90/48", "rgb:d8/38/54",
+        "rgb:9c/fc/8c", "rgb:b4/64/fc", "rgb:fc/54/c8", "rgb:78/4c/c0",
+        "rgb:74/30/fc", "rgb:9c/3c/78", "rgb:58/94/d0", "rgb:0c/f8/5c",
+        "rgb:00/54/fc", "rgb:00/84/fc", "rgb:00/7c/a4", "rgb:a8/ec/64",
+        "rgb:80/d8/a0", "rgb:1c/18/24", "rgb:68/64/4c", "rgb:fc/8c/a4",
+        "rgb:30/38/2c", "rgb:44/90/68", "rgb:3c/b0/44", "rgb:bc/44/c8",
+        "rgb:2c/74/d0", "rgb:a0/c0/00", "rgb:00/94/0c", "rgb:24/40/b0",
+        "rgb:00/08/fc", "rgb:00/18/54", "rgb:f0/2c/f4", "rgb:3c/10/fc",
+        "rgb:ac/4c/08", "rgb:b0/e0/2c", "rgb:94/8c/14", "rgb:a4/fc/00",
+        "rgb:94/bc/64", "rgb:d4/b4/dc", "rgb:64/4c/6c", "rgb:60/ec/7c",
+        "rgb:8c/00/20", "rgb:78/f4/00", "rgb:5c/20/98", "rgb:3c/50/fc",
+        "rgb:4c/20/6c", "rgb:bc/70/84", "rgb:d8/94/64", "rgb:54/d8/14",
+        "rgb:0c/38/04", "rgb:00/b4/50", "rgb:50/50/20", "rgb:b0/24/24",
+        "rgb:00/b8/7c", "rgb:fc/60/88", "rgb:a4/b8/a0", "rgb:74/fc/fc"};
+  if (data->size() > max_series)
+    throw Error(std::string("Too many series to display (max is ") +
+                std::to_string(max_series) + ")");
+
+  if (names.size() < data->size()) {
+    const unsigned int doublings{5};
+    names.reserve(names.size() * pow(2, doublings));
+    for (unsigned int n{0}; n != doublings; ++n) {
+      if (names.size() > data->size()) break;
+      names.insert(names.end(), names.begin(), names.end());
+    }
+  }
+  names.resize(std::max(100UL, data->size()));
+  return names;
+}
+
+inline void X11Graph::set_color(const unsigned int series,
+                                const unsigned int color) {
+  // Change GCs and redraw
+  XSetForeground(display(), series_arc_gcs[series],
+                 series_colors[color].pixel);
+  XSetForeground(display(), series_line_gcs[series],
+                 series_colors[color].pixel);
+  XSetForeground(display(), series_radio_gcs[series],
+                 series_colors[color].pixel);
+}
+
+inline void X11Graph::reset_colors() {
+  for (unsigned int series{0}; series != series_radios.size(); ++series) {
+    set_color(series, series);
+  }
+}
+
+void color_change_callback(
+    const unsigned int color, const unsigned int series, X11Graph & graph,
+    const X11App & app__, const Window & win__) {
+  // Make sure color chooser does not outlive graph!
+  if (!app__.exists(win__)) {
+    std::cerr << "Parent graph has exited - "
+              << "color chooser is now non-functional" << std::endl;
+    return;
+  }
+
+  if (color != series) graph.colors_changed = true;
+  graph.set_color(series, color);
+  graph.draw();
+}
+
+// Range functions
 inline void X11Graph::get_range(const unsigned int a) {
   constexpr double padding{0.01};
   for (const bool y : {0, 1}) {
@@ -1535,7 +1827,85 @@ inline void X11Graph::get_range(const unsigned int a) {
   if (a == 2) max_range = range;
 }
 
-// Which quadrant of graph is a point in
+inline void X11Graph::set_range(const bool y,
+                                const double low, const double high) {
+  range[y][0] = low;
+  range[y][1] = high;
+  range[y][2] = range[y][1] - range[y][0];
+  zoomed[y] = (dne(range[y][0], max_range[y][0]) ||
+               dne(range[y][1], max_range[y][1]));
+}
+
+inline void X11Graph::range_jump(const bool y, const double dist) {
+  set_range(y, range[y][0] + dist, range[y][1] + dist);
+}
+
+inline bool X11Graph::in_range(const double x, const double y) const {
+  return x >= range[0][0] && x <= range[0][1] &&
+      y >= range[1][0] && y <= range[1][1];
+}
+
+inline bool X11Graph::in_range(const dPoint pos) const {
+  return in_range(pos.x, pos.y);
+}
+
+inline void X11Graph::show_range(const std::string prefix) const {
+  std::cout << prefix << " range";
+  for (const bool y : {false, true}) {
+    for (const double val : range[y]) {
+      std::cout << " " << val;
+    }
+  }
+  if (bounds.size()) {
+    std::cout << " bounds";
+    for (const bool y : {false, true}) {
+      for (const double val : bounds[y]) {
+        std::cout << " " << val;
+      }
+    }
+  }
+  std::cout << " scale";
+  for (const double val : scale) {
+    std::cout << " " << val;
+  }
+  std::cout << std::endl;
+}
+
+// Data to window coordinate transformation
+inline int X11Graph::coord(const bool y, const double val) const {
+  if (y) return bounds[1][1] - (val - range[1][0]) * scale[1];
+  return bounds[0][0] + (val - range[0][0]) * scale[0];
+}
+
+inline Point X11Graph::coord(const dPoint point) const {
+  return Point{coord(0, point.x), coord(1, point.y)};
+}
+
+inline XPoint X11Graph::xcoord(const dPoint point) const {
+  XPoint result;
+  result.x = coord(0, point.x);
+  result.y = coord(1, point.y);
+  return result;
+}
+
+inline XPoint X11Graph::xcoord(const Point point) const {
+  XPoint result;
+  result.x = point.x;
+  result.y = point.y;
+  return result;
+}
+
+// Window to data coordinate transformation
+inline double X11Graph::icoord(const bool y, const int val) const {
+  if (y) return (bounds[1][1] - val) / scale[1] + range[1][0];
+  return (val - bounds[0][0]) / scale[0] + range[0][0];
+}
+inline dPoint X11Graph::icoord(const Point point) const {
+  return dPoint{icoord(0, point.x), icoord(1, point.y)};
+}
+
+// Which quadrant of graph is a point in - picture an X across window
+// which is two lines of positive and negative slope
 inline unsigned int X11Graph::get_quadrant(const Point point) const {
   const bool below_pos{point.y > bounds[1][1] + (point.x - bounds[0][0]) *
         (bounds[1][0] - bounds[1][1]) / (bounds[0][1] - bounds[0][0])};
@@ -1544,12 +1914,97 @@ inline unsigned int X11Graph::get_quadrant(const Point point) const {
   return below_pos ? (below_neg ? 0 : 3) : (below_neg ? 1 : 2);
 }
 
-inline void X11Graph::button_press(const XButtonEvent & event) {
-  last_motion = last_press = event;
-  moved = false;
-  small_move = false;
-  for (Radio * radio : radios) { if (radio->press(event)) return; }
+// Border width
+inline int X11Graph::min_border() const {
+  return 0.05 * std::min(width(), height());
+}
 
+// Call-back functions
+void X11Graph::expose(const XExposeEvent & event) {
+  if (bounds.size() == 0) {
+    get_range();
+    prepare();
+  }
+  if (drawn) {
+    XCopyArea(display(), pixmap, window, gc, event.x, event.y,
+              event.width, event.height, event.x, event.y);
+    draw_controls();
+  } else {
+    draw();
+  }
+}
+
+void X11Graph::enter(const XCrossingEvent &) {
+  inside = true;
+  erase_border();
+  draw_controls();
+}
+
+inline void X11Graph::key(const XKeyEvent & event) {
+  KeySym sym;
+  XComposeStatus compose;
+  const unsigned int kBufLen{10};
+  char buffer[kBufLen];
+  int count{XLookupString(const_cast<XKeyEvent *>(&event),
+                          buffer, kBufLen, &sym, &compose)};
+  if (count == 1 && buffer[0] >= 32 && buffer[0] < 127) {
+    // std::cerr << " key '" << buffer << "'" << endl;
+    bool more{false};
+    unsigned int rgb{0};
+    switch (buffer[0]) {
+      case 'R':
+        more = true;
+        // fall-thru
+      case 'r':
+        rgb = 0;
+        break;
+      case 'G':
+        more = true;
+        // fall-thru
+      case 'g':
+        rgb = 1;
+        break;
+      case 'B':
+        more = true;
+        // fall-thru
+      case 'b':
+        rgb = 2;
+        break;
+      case 'c':
+        more = true;
+        // fall-thru
+      case 'C':
+        rgb = 3;
+        break;
+      default:
+        return;
+    }
+    const std::string RGB{"RGBC"};
+    if (rgb == 3) {
+      for (unsigned int r{0}; r != series_radios.size(); ++r) {
+        Radio & radio{series_radios[r]};
+        if (radio.contains(event)) {
+          static uint64_t next_color{series_radios.size()};
+          XSetForeground(display(), series_arc_gcs[r],
+                         series_colors[next_color % color_names.size()].pixel);
+          XSetForeground(display(), series_line_gcs[r],
+                         series_colors[next_color % color_names.size()].pixel);
+          XSetForeground(display(), series_radio_gcs[r],
+                         series_colors[next_color % color_names.size()].pixel);
+          draw();
+          if (more) {
+            ++next_color;
+          } else {
+            --next_color;
+          }
+          return;
+        }
+      }
+    }
+  }
+}
+
+inline void X11Graph::button_press(const XButtonEvent & event) {
   // Button actions - no work done here other than record last press
   // Inside graph: both dimensions.  Outside graph: one dimension
   //
@@ -1558,10 +2013,39 @@ inline void X11Graph::button_press(const XButtonEvent & event) {
   // none        1: center                   / select a new view
   // shift   or  2: center and zoom in       / scroll
   // control or  3: center and zoom out      / zoom
+
+  // Register initial click
+  click = event;
+  if (click == 0) return;
+  last_motion = event;
+  moved = false;
+  small_move = false;
+
+  // Check for series color change
+  if (click == 2 || click == 3) {
+    for (unsigned int r{0}; r != series_radios.size(); ++r) {
+      Radio & radio{series_radios[r]};
+      if (radio.contains(event)) {
+        return;
+      }
+    }
+  }
+
+  // Check for any normal radio action
+  for (Radio * radio : radios) { if (radio->press(event)) return; }
 }
 
 inline void X11Graph::motion(const XMotionEvent & event) {
-  // std::cerr << "In motion" << std::endl;
+  // Check for series color change
+  if (click == 2 || click == 3) {
+    for (unsigned int r{0}; r != series_radios.size(); ++r) {
+      Radio & radio{series_radios[r]};
+      if (radio.contains(click)) {
+        return;
+      }
+    }
+  }
+
   moved = true;
   if (XPending(display())) return;
 
@@ -1612,64 +2096,64 @@ inline void X11Graph::motion(const XMotionEvent & event) {
     draw_status();
   }
   if (event.state == 0) return;
-  for (Radio * radio : radios) if (radio->contains(last_press)) return;
+  for (Radio * radio : radios) if (radio->contains(click)) return;
 
-  if (!(event.state & (Button1Mask | Button2Mask | Button3Mask))) return;
+  if (click == 0) return;
 
   const Point point{event};
-  const unsigned int quadrant{get_quadrant(last_press)};
+  const unsigned int quadrant{get_quadrant(click)};
   const bool y_press{(quadrant % 2) == 1};
   const Range old_range(range);
 
-  const bool scroll{event.state & Button2Mask || event.state & ShiftMask};
-  const bool zoom{event.state & Button3Mask || event.state & ControlMask};
-  const bool select{event.state & Button1Mask && !scroll && !zoom};
+  const bool scroll{click == 2};
+  const bool zoom{click == 3};
+  const bool select{click == 1};
 
   if (scroll) {
     for (const bool y : {false, true}) {
-      if (!in_bounds(last_press) && y_press != y) continue;
+      if (!in_bounds(click) && y_press != y) continue;
       const int distance{point[y] - last_motion[y]};
       const double move{(y ? 1 : -1) * distance / scale[y]};
       range_jump(y, move);
     }
   } else if (select) {
     draw_controls();
-    if (in_bounds(last_press)) {
-      const Point min_point{min(last_motion.x, last_press.x, point.x),
-            min(last_motion.y, last_press.y, point.y)};
-      const Point max_point{max(last_motion.x, last_press.x, point.x),
-            max(last_motion.y, last_press.y, point.y)};
+    if (in_bounds(click)) {
+      const Point min_point{min(last_motion.x, click.x, point.x),
+            min(last_motion.y, click.y, point.y)};
+      const Point max_point{max(last_motion.x, click.x, point.x),
+            max(last_motion.y, click.y, point.y)};
       // Cover vertical lines
-      const int y_start{min(last_motion.y, last_press.y)};
-      const int y_height{abs(last_motion.y - last_press.y) + 1};
+      const int y_start{min(last_motion.y, click.y)};
+      const int y_height{abs(last_motion.y - click.y) + 1};
       XCopyArea(display(), pixmap, window, gc, last_motion.x, y_start,
                 1, y_height, last_motion.x, y_start);
-      XCopyArea(display(), pixmap, window, gc, last_press.x, y_start,
-                1, y_height, last_press.x, y_start);
+      XCopyArea(display(), pixmap, window, gc, click.x, y_start,
+                1, y_height, click.x, y_start);
 
       // Cover horizontal lines
-      const int x_start{min(last_motion.x, last_press.x)};
-      const int x_width{abs(last_motion.x - last_press.x) + 1};
+      const int x_start{min(last_motion.x, click.x)};
+      const int x_width{abs(last_motion.x - click.x) + 1};
       XCopyArea(display(), pixmap, window, gc, x_start, last_motion.y,
                 x_width, 1, x_start, last_motion.y);
-      XCopyArea(display(), pixmap, window, gc, x_start, last_press.y,
-                x_width, 1, x_start, last_press.y);
+      XCopyArea(display(), pixmap, window, gc, x_start, click.y,
+                x_width, 1, x_start, click.y);
       XDrawRectangle(display(), window, gc,
-                     min(last_press.x, point.x), min(last_press.y, point.y),
-                     abs(last_press.x - point.x), abs(last_press.y - point.y));
+                     min(click.x, point.x), min(click.y, point.y),
+                     abs(click.x - point.x), abs(click.y - point.y));
     } else {
       const bool above(quadrant == 0 || quadrant == 3);
       const int loc{bounds[!y_press][above] + (above ? 2 : -2) * border_width};
       XDrawLine(display(), window, border_fill_gc,
-                y_press ? loc : last_press.x, y_press ? last_press.y : loc,
+                y_press ? loc : click.x, y_press ? click.y : loc,
                 y_press ? loc : last_motion.x, y_press ? last_motion.y : loc);
       XDrawLine(display(), window, border_gc,
-                y_press ? loc : last_press.x, y_press ? last_press.y : loc,
+                y_press ? loc : click.x, y_press ? click.y : loc,
                 y_press ? loc : point.x, y_press ? point.y : loc);
     }
   } else if (zoom) {
     for (const bool y : {false, true}) {
-      if (!in_bounds(last_press) && y_press != y) continue;
+      if (!in_bounds(click) && y_press != y) continue;
       const int distance{point[y] - last_motion[y]};
       const double change{(y ? 1 : -1) * range[y][2] *
             distance / bounds[y][2]};
@@ -1684,45 +2168,69 @@ inline void X11Graph::motion(const XMotionEvent & event) {
 }
 
 inline void X11Graph::button_release(const XButtonEvent & event) {
-  for (Radio * radio : radios) { if (radio->release(last_press)) return; }
+  Click::Resetter resetter{click};
+  if (click == 0) return;
+
+  // Check for series color change
+  if (click == 2 || click == 3) {
+    for (unsigned int r{0}; r != series_radios.size(); ++r) {
+      Radio & radio{series_radios[r]};
+      if (radio.contains(click)) {
+        set_window_offset();
+        const int ccscale{2};
+        X11Colors::create(
+            app, color_names, 0, false,
+            width() / ccscale, height() / ccscale,
+            window_offset.x + width() - (click == 3 ? -4 : width() / ccscale),
+            window_offset.y + click.y - height() / ccscale / 2,
+            X11Colors::CallBack(std::bind(
+                &color_change_callback, std::placeholders::_1, r,
+                std::ref(*this), std::cref(app), window)),
+            click == 2,
+            std::string("Color chooser for series ") + series_names[r]);
+        return;
+      }
+    }
+  }
+
+  for (Radio * radio : radios) { if (radio->release(click)) return; }
 
   Event button_event{Event::X, &app.event};
   for (unsigned int c{0}; c != call_backs.size(); ++c) {
     if (call_back_radios[c]) {
-      if (call_backs[c](*this, button_event)) return;
+      if (call_backs[c](*this, button_event)) {
+        return;
+      }
     }
   }
 
   const Point release{event};
-  const unsigned int quadrant{get_quadrant(last_press)};
+  const unsigned int quadrant{get_quadrant(click)};
   const bool y_press{(quadrant % 2) == 1};
   const Range old_range(range);
-  const bool shift(event.state & ShiftMask);
-  const bool control(event.state & ControlMask);
 
   if (moved) {
-    if (event.button == Button1 && !shift && !control) {
+    if (click == 1) {
       // Drag event defines an x, y zoom
       for (const bool y : {false, true}) {
-        if (!in_bounds(last_press) && y_press != y) continue;
-        const double min_c{icoord(y, std::min(release[y], last_press[y]))};
-        const double max_c{icoord(y, std::max(release[y], last_press[y]))};
+        if (!in_bounds(click) && y_press != y) continue;
+        const double min_c{icoord(y, std::min(release[y], click[y]))};
+        const double max_c{icoord(y, std::max(release[y], click[y]))};
         set_range(y, (y ? max_c : min_c), (y ? min_c : max_c));
       }
     }
     moved = false;
   } else {
     // Button 1, 2, 3 click only behavior
-    const bool in{event.button == Button2 || shift};
-    const bool out{event.button == Button3 || control};
-    const bool center{event.button == Button1 && !out && !in};
-    if (center || in || out) {
+    const bool in{click == 2};
+    const bool center{click == 1};
+    if (click > 0) {
       for (const bool y : {false, true}) {
         // if ((center || out) && range[y] == max_range[y]) continue;
-        if (!in_bounds(last_press) && y_press != y) continue;
+        if (!in_bounds(click) && y_press != y) continue;
         const double zoom{center ? 1.0 : (in ? 0.1 : 10.0)};
         const double half{0.5 * range[y][2] * zoom};
-        const double mid{icoord(y, last_press[y])};
+        const double mid{icoord(y, click[y])};
         set_range(y, std::max(max_range[y][0], mid - half),
                   std::min(max_range[y][1], mid + half));
       }
@@ -1742,58 +2250,7 @@ inline void X11Graph::leave(const XCrossingEvent &) {
   draw_controls();
 }
 
-inline void X11Graph::prepare_log() {
-  // A one time operation to set up
-  if (log_data.size() != input_data.size()) {
-    log_data = Data(input_data.size());
-    log_x_data = log_y_data = input_data;
-    for (unsigned int s{0}; s != input_data.size(); ++s) {
-      for (const bool y : {false, true}) {
-        log_series.emplace_back(
-            std::make_unique<Values>(input_data[s][y]->size()));
-        Values & log_values{*log_series.back()};
-        for (unsigned int p{0}; p != input_data[s][y]->size(); ++p)
-          log_values[p] = log10((*input_data[s][y])[p]);
-        log_data[s].push_back(&log_values);
-      }
-      log_x_data[s][0] = log_data[s][0];
-      log_y_data[s][1] = log_data[s][1];
-    }
-  }
-
-  // Select data view each time (precomputed to avoid log() delay)
-  if (log_radios[0] && log_radios[1]) {
-    data = &log_data;
-  } else if (log_radios[0]) {
-    data = &log_x_data;
-  } else if (log_radios[1]) {
-    data = &log_y_data;
-  } else {
-    data = &input_data;
-  }
-  get_range();
-}
-
-inline void X11Graph::set_clip_rectangle(
-    const unsigned int x, const unsigned int y,
-    const unsigned int width_, const unsigned int height_) {
-  XRectangle clip_rectangle(rect(x, y, width_, height_));
-  static XRectangle last_arc_clip_rectangle(rect(0, 0, 0, 0));
-  if (clip_rectangle != last_arc_clip_rectangle) {
-    for (const GC gc_ : series_arc_gcs) {
-      XSetClipRectangles(display(), gc_, 0, 0, &clip_rectangle, 1, YXBanded);
-      last_arc_clip_rectangle = clip_rectangle;
-    }
-  }
-  static XRectangle last_line_clip_rectangle(rect(0, 0, 0, 0));
-  if (clip_rectangle != last_line_clip_rectangle) {
-    for (const GC gc_ : series_line_gcs)
-      XSetClipRectangles(display(), gc_, 0, 0, &clip_rectangle, 1, YXBanded);
-    last_line_clip_rectangle = clip_rectangle;
-  }
-}
-
-inline void X11Graph::prepare() {
+void X11Graph::prepare() {
   drawn = false;
   // Set graph area and clip rectangle
   const int border{min_border()};
@@ -1880,20 +2337,7 @@ inline void X11Graph::prepare() {
   for (std::future<void> & result : futures) result.get();
 }
 
-inline void X11Graph::draw_grid() const {
-  for (const bool y : {false, true}) {
-    const Axis axis{range[y][0], range[y][1], 3, log_radios[y]};
-    for (const std::pair<double, bool> tick : axis.ticks()) {
-      if (!grid_radios[!tick.second][y]) continue;
-      const int loc{coord(y, tick.first)};
-      XDrawLine(display(), window, tick.second ? major_gc : minor_gc,
-                y ? bounds[0][0] : loc, y ? loc : bounds[1][0],
-                y ? bounds[0][1] : loc, y ? loc : bounds[1][1]);
-    }
-  }
-}
-
-inline void X11Graph::draw() {
+void X11Graph::draw() {
   if (just_configured) {
     XFillRectangle(display(), pixmap, fill_gc, 0, 0, width(), height());
   } else {
@@ -1944,11 +2388,307 @@ inline void X11Graph::draw() {
       draw_controls();
     }
   }
-  // std::cout << "Config stack size is " << saved_config.size() << std::endl;
-  // show_range("After draw");
 }
 
-inline std::vector<Radio> X11Graph::create_unnamed_radios() {
+//
+// Prepare and draw helpers
+//
+
+inline bool X11Graph::do_arcs(const unsigned int s) const {
+  if (!series_radios[s]) return false;
+  return (arcs_radio && !series_only_lines[s]) || series_only_arcs[s];
+}
+
+inline bool X11Graph::do_arcs() const {
+  for (unsigned int s{0}; s != series_only_arcs.size(); ++s)
+    if (do_arcs(s)) return true;
+  return false;
+}
+
+inline bool X11Graph::can_do_arcs() const {
+  for (unsigned int s{0}; s != series_only_arcs.size(); ++s)
+    if (series_radios[s] && !series_only_lines[s]) return true;
+  return false;
+}
+
+inline bool X11Graph::do_lines(const unsigned int s) const {
+  if (!series_radios[s]) return false;
+  return (lines_radio && !series_only_arcs[s]) || series_only_lines[s];
+}
+
+inline bool X11Graph::do_lines() const {
+  for (unsigned int s{0}; s != series_only_lines.size(); ++s)
+    if (do_lines(s)) return true;
+  return false;
+}
+
+inline bool X11Graph::can_do_lines() const {
+  for (unsigned int s{0}; s != series_only_lines.size(); ++s)
+    if (series_radios[s] && !series_only_arcs[s]) return true;
+  return false;
+}
+
+void X11Graph::prepare_log() {
+  // A one time operation to set up
+  if (log_data.size() != input_data.size()) {
+    log_data = Data(input_data.size());
+    log_x_data = log_y_data = input_data;
+    for (unsigned int s{0}; s != input_data.size(); ++s) {
+      for (const bool y : {false, true}) {
+        log_series.emplace_back(
+            std::make_unique<Values>(input_data[s][y]->size()));
+        Values & log_values{*log_series.back()};
+        for (unsigned int p{0}; p != input_data[s][y]->size(); ++p)
+          log_values[p] = log10((*input_data[s][y])[p]);
+        log_data[s].push_back(&log_values);
+      }
+      log_x_data[s][0] = log_data[s][0];
+      log_y_data[s][1] = log_data[s][1];
+    }
+  }
+
+  // Select data view each time (precomputed to avoid log() delay)
+  if (log_radios[0] && log_radios[1]) {
+    data = &log_data;
+  } else if (log_radios[0]) {
+    data = &log_x_data;
+  } else if (log_radios[1]) {
+    data = &log_y_data;
+  } else {
+    data = &input_data;
+  }
+  get_range();
+}
+
+inline std::string X11Graph::long_status(const bool in, const bool y) {
+  return std::string("Pointer (1 - 2/shift - 3/control) clicks ") +
+      "(center - zoom in - zoom out) at point " +
+      "and drags (select - scroll - zoom) for " +
+      (in ? "X and Y axes" : (y ? "Y axis" : "X axis"));
+}
+
+void X11Graph::draw_status(const bool force) const {
+  XFillRectangle(display(), window, fill_gc, bounds[0][0], 0,
+                 bounds[0][1] - bounds[0][0], bounds[1][0] - border_width);
+  if (force || help_radio || coord_radio) {
+    const double avail_height{bounds[1][0] * 0.65};
+    X11Font * fits{app.fonts.fits(status, bounds[0][2], avail_height)};
+    if (fits != status_font) {
+      status_font = fits;
+      XSetFont(display(), gc, fits->id());
+    }
+    XDrawString(display(), window, gc, bounds[0][0],
+                fits->centered_y((bounds[1][0] - border_width) / 2),
+                const_cast<char *>(status.c_str()),
+                static_cast<unsigned int>(status.size()));
+  }
+}
+
+void X11Graph::draw_controls() {
+  XDrawRectangle(display(), window, border_gc,
+                 bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
+  draw_status();
+  draw_grid();
+  for (const Radio * radio : radios) radio->draw();
+
+  // Draw tick labels
+  draw_ticks();
+
+  // Handle special drawing commands
+  Event nothing;
+  for (unsigned int c{0}; c != call_backs.size(); ++c)
+    if (call_back_radios[c]) call_backs[c](*this, nothing);
+}
+
+inline void X11Graph::draw_grid() const {
+  for (const bool y : {false, true}) {
+    const Axis axis{range[y][0], range[y][1], 3, log_radios[y]};
+    for (const std::pair<double, bool> tick : axis.ticks()) {
+      if (!grid_radios[!tick.second][y]) continue;
+      const int loc{coord(y, tick.first)};
+      XDrawLine(display(), window, tick.second ? major_gc : minor_gc,
+                y ? bounds[0][0] : loc, y ? loc : bounds[1][0],
+                y ? bounds[0][1] : loc, y ? loc : bounds[1][1]);
+    }
+  }
+}
+
+void X11Graph::draw_ticks() {
+  if (inside) return;
+  if (!tick_radios[0] && !tick_radios[1]) return;
+  static std::vector<std::string> tick_labels;
+  tick_labels.clear();
+  if (0)
+    std::cerr << "Bounds "
+              << bounds[0][0] << " " << bounds[0][1] << " "
+              << bounds[1][0] << " " << bounds[1][1] << std::endl;
+  const double avail_height{bounds[1][0] * 0.6};
+  X11Font * fits{app.fonts.fits("moo", bounds[0][2], avail_height)};
+  if (fits != tick_font) {
+    tick_font = fits;
+    XSetFont(display(), tick_label_gc, fits->id());
+  }
+  const int t_height{tick_font->height()};
+  for (const bool y : {false, true}) {
+    if (!tick_radios[y]) continue;
+    const Axis axis{range[y][0], range[y][1], 3, log_radios[y]};
+    for (const std::pair<double, bool> tick : axis.ticks()) {
+      if (!tick.second) continue;
+      const int loc{coord(y, tick.first)};
+      std::ostringstream label;
+      label << std::setprecision(6)
+            << (log_radios[y] ? pow(10, tick.first) : tick.first);
+      tick_labels.push_back(label.str());
+      std::string & text{tick_labels.back()};
+      const int t_width{tick_font->string_width(text)};
+      XDrawString(display(), window, tick_label_gc,
+                  y ? std::max(0, bounds[0][0] - t_width - 3) :
+                  loc - t_width / 2,
+                  y ? tick_font->centered_y(loc) : bounds[1][1] + t_height,
+                  text.c_str(),
+                  static_cast<unsigned int>(text.size()));
+    }
+  }
+}
+
+inline void X11Graph::redraw() {
+  XCopyArea(display(), pixmap, window, gc, bounds[0][0], bounds[1][0],
+            bounds[0][2], bounds[1][2], bounds[0][0], bounds[1][0]);
+  draw_controls();
+}
+
+inline void X11Graph::set_clip_rectangle(
+    const unsigned int x, const unsigned int y,
+    const unsigned int width_, const unsigned int height_) {
+  XRectangle clip_rectangle(rect(x, y, width_, height_));
+  static XRectangle last_arc_clip_rectangle(rect(0, 0, 0, 0));
+  if (clip_rectangle != last_arc_clip_rectangle) {
+    for (const GC gc_ : series_arc_gcs) {
+      XSetClipRectangles(display(), gc_, 0, 0, &clip_rectangle, 1, YXBanded);
+      last_arc_clip_rectangle = clip_rectangle;
+    }
+  }
+  static XRectangle last_line_clip_rectangle(rect(0, 0, 0, 0));
+  if (clip_rectangle != last_line_clip_rectangle) {
+    for (const GC gc_ : series_line_gcs)
+      XSetClipRectangles(display(), gc_, 0, 0, &clip_rectangle, 1, YXBanded);
+    last_line_clip_rectangle = clip_rectangle;
+  }
+}
+
+inline void X11Graph::erase_border() {
+  XFillRectangle(display(), window, fill_gc,
+                 0, bounds[1][1], width(), height());
+  XFillRectangle(display(), window, fill_gc,
+                 0, 0, bounds[0][0], height());
+}
+
+inline void X11Graph::set_line_widths(std::vector<GC> gcs, const int width_) {
+  for (unsigned int g{0}; g != data->size(); ++g)
+    XSetLineAttributes(display(), gcs[g], width_, LineSolid,
+                       CapButt, JoinRound);
+}
+
+inline double X11Graph::line_vertical_y(const dPoint low_x, const dPoint high_x,
+                                        const double x) const {
+  const double slope((high_x.y - low_x.y) / (high_x.x - low_x.x));
+  return low_x.y + (x - low_x.x) * slope;
+}
+
+inline double X11Graph::line_horizontal_x(
+    const dPoint low_x, const dPoint high_x,
+    const double y) const {
+  const double slope((high_x.y - low_x.y) / (high_x.x - low_x.x));
+  return low_x.x + (y - low_x.y) / slope;
+}
+
+XPoint X11Graph::line_bounds_intersection(
+    const dPoint in, const dPoint out) const {
+  // need to do better to include lines between points outside range
+  // but intersecting the range.  also need to reduce unnecessary
+  // computation here and need to place points outside of range...
+
+  const bPoint out_high{out[0] > range[0][1], out[1] > range[1][1]};
+  const bPoint out_low{out[0] < range[0][0], out[1] < range[1][0]};
+  const bPoint is_out{out_high[0] || out_low[0], out_high[1] || out_low[1]};
+  const dPoint limit{range[0][out_high[0]], range[1][out_high[1]]};
+  if (!dne(in.x, out.x)) return xcoord(dPoint{in.x, limit.y});
+  if (!dne(in.y, out.y)) return xcoord(dPoint{limit.x, in.y});
+  const double slope((out.y - in.y) / (out.x - in.x));
+  const dPoint solutions{
+    in.x + (limit.y - in.y) / slope, in.y + (limit.x - in.x) * slope};
+  const dPoint trials[2]{{solutions.x, limit.y}, {limit.x, solutions.y}};
+  const dPoint distance{in.distance(trials[0]), in.distance(trials[1])};
+  const bool best_is_x{(is_out[0] && is_out[1]) ? distance.x < distance.y :
+        is_out[1]};
+  const dPoint intersection{best_is_x ? trials[0] : trials[1]};
+  return xcoord(intersection);
+}
+
+//
+// Assorted functions
+//
+inline bool X11Graph::slow() const { return true; }
+
+// Bug in code? sometimes movie cannot be started until after zoom out
+bool X11Graph::movie(const bool right) {
+  status = "Playing the movie - click movie radio button again to stop";
+  using Time = std::chrono::time_point<std::chrono::system_clock>;
+  Time last_time{std::chrono::system_clock::now()};
+  const double rate{0.5};  // page per second
+  XEvent event;
+  XWindowEvent(display(), window, ButtonReleaseMask, &event);
+  while (true) {
+    Time time{std::chrono::system_clock::now()};
+    const double seconds{
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          time - last_time).count() / 1000.0};
+    last_time = time;
+    const double movement{rate * seconds * range[0][2]};
+    range_jump(0, (right ? 1 : -1) * movement);
+    small_move = true;
+    prepare_draw();
+    XFlush(display());
+    if (!(range[0][0] > max_range[0][0] && range[0][1] < max_range[0][1])) {
+      movie_radios[right] = false;
+      return true;
+    }
+    if (XCheckWindowEvent(display(), window, ButtonPressMask, &event)) {
+      XWindowEvent(display(), window, ButtonReleaseMask, &event);
+      if (movie_radios[right].release(event.xbutton)) {
+        movie_radios[right] = false;
+        return true;
+      }
+    }
+  }
+}
+
+void X11Graph::save_image(const std::string & base_name,
+                          void_fun call_back) {
+  if (!call_back) {
+    call_back = [this]() {
+      status = "Saving Image";
+      draw_controls();
+      draw_status(true);
+      XFlush(display());
+    };
+  }
+  inside = false;
+  const bool help_state = help_radio;
+  help_radio = false;
+  draw_controls();
+  X11Win::save_image(base_name, call_back);
+  inside = true;
+  help_radio = help_state;
+  status = "Done saving image";
+  draw_controls();
+  draw_status(true);
+}
+
+//
+// Radio functions
+//
+std::vector<Radio> X11Graph::create_unnamed_radios() {
   return std::vector<Radio>{
     {"Save an image of graph, and add all images so far to a pdf",
           this, {1, 1}, {[this]() { save_image("cn"); }}},
@@ -1992,21 +2732,64 @@ inline std::vector<Radio> X11Graph::create_unnamed_radios() {
           line_width -= 1;
           set_line_widths(series_line_gcs, (line_width == 1 ? 0 : line_width));
           draw(); }, [this]() {return do_lines() && line_width >= 2; }}},
-    {"Set default values for line and marker properties", this, {-1, -1},
+    {"Set default values for color, line and marker properties", this, {-1, -1},
       {[this]() {
           arcs_radio = true; outlines_radio = false; lines_radio = false;
           arc_radius = default_arc_radius; arc_width = default_arc_width;
           line_width = default_line_width;
           set_line_widths(series_arc_gcs, arc_width);
           set_line_widths(series_line_gcs, line_width);
+          reset_colors();
           prepare_draw(); }, [this]() {
           return ((do_lines() &&
-                   (lines_radio || dne(line_width, default_line_width))) ||
+                   (colors_changed || lines_radio ||
+                    dne(line_width, default_line_width))) ||
                   (do_arcs() && (!arcs_radio || outlines_radio ||
                                  dne(arc_radius, default_arc_radius) ||
                                  dne(arc_width, default_arc_width)))); }}}};
 }
 
+inline bool_fun X11Graph::radio_tester(const Radio & radio, const bool state) {
+  return [&radio, state]() { return radio.toggled == state; };
+}
+
+inline bool_fun X11Graph::zoom_tester(const bool y) {
+  return [this, y]() { return zoomed[y]; };
+}
+
+//
+// Saved configuration history
+//
+inline SavedConfig X11Graph::current_config() const {
+  SavedConfig current{*this};
+  current.radio_states.clear();
+  for (Radio * radio : saved_radios) {
+    current.radio_states.push_back(*radio);
+  }
+  return current;
+}
+
+inline void X11Graph::restore_config(const SavedConfig & config) {
+  if (dne(config.line_width, line_width)) {
+    set_line_widths(series_line_gcs,
+                    (config.line_width == 1 ? 0 : config.line_width));
+  }
+  if (dne(config.arc_width, arc_width)) {
+    set_line_widths(series_arc_gcs, config.arc_width);
+  }
+  for (unsigned int r{0}; r != saved_radios.size(); ++r) {
+    saved_radios[r]->toggled = config.radio_states[r];
+  }
+  SavedConfig::restore_config(config);
+}
+
+inline void X11Graph::save_config(const SavedConfig & config) {
+  saved_config.push_back(std::move(config));
+}
+
+//
+// Text grid selector
+//
 class X11TextGrid : public X11Win {
  public:
   using X11Win::X11Win;
@@ -2050,34 +2833,36 @@ class X11TextGrid : public X11Win {
     exclusive_cols{exclusive_cols_}, exclusive_rows{exclusive_rows_},
     cell_status_(n_cols(), std::vector<unsigned char>(n_rows(), 0)),
     max_widths(n_cols()), call_back{call_back_}, cell_test{cell_test_} {
-    // Events to watch out for
-    XSelectInput(display(), window,
-                 StructureNotifyMask | ExposureMask |
-                 ButtonPressMask | ButtonReleaseMask);
+      // Events to watch out for
+      XSelectInput(display(), window,
+                   StructureNotifyMask | ExposureMask |
+                   ButtonPressMask | ButtonReleaseMask);
 
-    // Fonts of various size
-    fonts.reserve(max_font_size);
-    for (unsigned int s{3}; s <= max_font_size; ++s) {
-      fonts.emplace_back(display(), s);
-      if (fonts.back()) {
-        font_sizes.push_back(s);
-      } else {
-        fonts.pop_back();
+      // Fonts of various size
+      fonts.reserve(max_font_size);
+      for (const unsigned int s : {60, 70, 80, 90, 100, 120, 130, 140,
+              150, 160, 170, 180, 190, 200, 230, 240, 250, 300, 400,
+              500, 600, 700, 1000}) {
+        fonts.emplace_back(display(), s);
+        if (fonts.back()) {
+          font_sizes.push_back(s);
+        } else {
+          fonts.pop_back();
+        }
       }
+      if (fonts.empty()) throw Error("No fonts loaded");
+      font = &fonts[fonts.size() / 2];
+
+      XSync(display(), False);
+      XColor grey;
+      if (!XAllocNamedColor(display(), app.colormap, "rgb:cc/cc/cc",
+                            &grey, &grey)) throw Error("Could not get grey");
+      grey_gc = create_gc(grey.pixel, app.white);
+
+      prepare();
+      shrink_window_to_fit();
+      XMapWindow(display(), window);
     }
-    if (fonts.empty()) throw Error("No fonts loaded");
-    font = &fonts[fonts.size() / 2];
-
-    XSync(display(), False);
-    XColor grey;
-    if (!XAllocNamedColor(display(), colormap, "rgb:cc/cc/cc",
-                          &grey, &grey)) throw Error("Could not get grey");
-    grey_gc = create_gc(grey.pixel, app.white);
-
-    prepare();
-    shrink_window_to_fit();
-    XMapWindow(display(), window);
-  }
 
   X11TextGrid(const X11TextGrid &) = delete;
   X11TextGrid & operator=(const X11TextGrid &) = delete;
@@ -2097,7 +2882,7 @@ class X11TextGrid : public X11Win {
       shrink_window_to_fit();
   }
   virtual void button_press(const XButtonEvent & event) {
-    last_motion = last_press = event;
+    last_motion = click = event;
     if (!in_bounds(event)) {
       for (Radio * radio : radios) { if (radio->press(event)) return; }
       return;
@@ -2117,7 +2902,7 @@ class X11TextGrid : public X11Win {
   }
   virtual void motion(const XMotionEvent &) { draw(); }
   virtual void button_release(const XButtonEvent &) {
-    for (Radio * radio : radios) if (radio->release(last_press)) return;
+    for (Radio * radio : radios) if (radio->release(click)) return;
   }
 
   template <class POINT>
@@ -2294,7 +3079,8 @@ class X11TextGrid : public X11Win {
   std::vector<int> max_widths, column_offsets{};
   CallBack call_back, cell_test{};
 
-  Point last_press{}, last_motion{};
+  Point last_motion{};
+  Click click{};
 
   Radio bigger_radio{"Bigger_text", this, {1, 98.5},
     {[this]() { }, [this]() {
@@ -2354,7 +3140,7 @@ class X11Plotter {
         status[1].begin(), status[1].end(), 1) - status[1].begin() - 1]};
     for (unsigned int n{0}; n != names.size(); ++n)
       if (status[2][n + 1]) gd.emplace_back(X11Graph::XYSeries{xs, &data[n]});
-    X11Graph & graph{X11Graph::create_whole(app, gd, 1300, 850)};
+    X11Graph & graph{X11Graph::create_whole(app, gd)};
     graph.arc_radius = 1;
     return true;
   }
@@ -2367,8 +3153,6 @@ class X11Plotter {
   Data data{};
   Names names{};
 };
-
-
 
 #pragma GCC diagnostic pop
 

@@ -94,7 +94,7 @@ class X11MUMdexViewer : public X11Win {
         for (unsigned int c{0}; c != color_names.size(); ++c) {
           const std::string & color_name{std::string("rgb:") + color_names[c]};
           XColor & color{X_colors[c]};
-          if (!XAllocNamedColor(display(), colormap, color_name.c_str(),
+          if (!XAllocNamedColor(display(), app.colormap, color_name.c_str(),
                                 &color, &color))
             throw Error("Could not get color") << color_name;
 
@@ -109,7 +109,7 @@ class X11MUMdexViewer : public X11Win {
         char_gcs['n'] = char_gcs['N'] = gc;
 
         XColor grey;
-        if (!XAllocNamedColor(display(), colormap, "rgb:bb/bb/bb",
+        if (!XAllocNamedColor(display(), app.colormap, "rgb:bb/bb/bb",
                               &grey, &grey)) throw Error("Could not get grey");
         mum_gc = create_gc(grey.pixel, app.white);
 

@@ -5,9 +5,9 @@
 #
 # Allows a user to reproduce the specific figure used in the ggraph paper
 # 
-# Assumes that mumdex code is compiled and available in ~/mumdex,
-# the hg19 genome is located at ~/hg19/chrAll.fa,
-# that gene and cytoband definition files are in ~/hg19/chrAll.fa.bin/ 
+# Assumes that mumdex code is compiled and available in ./mumdex,
+# the hg19 genome is located at ./hg19.fa,
+# that gene and cytoband definition files are in ./hg19.fa.bin/ 
 # and that the sample files {m,f,d,s}.txt are in the current directory.
 # The gene definition, cytoband definition and sample files are available at 
 # http://mumdex.com/ggraph/
@@ -23,9 +23,9 @@ if [ $uname = "Darwin" ] ; then
 fi
 
 abspos_left=2983775000
-geometry=2000x1120+0+0
+geometry=2478x881+0+0
 
-(cd ~/mumdex ; make -j $n_threads ggraph > /dev/null) &&
+(cd ./mumdex ; make -j $n_threads ggraph > /dev/null) &&
 (
 echo 'Note: to exactly reproduce the figure from the paper:'
 echo 'you need to run on a mac, to get the exact fonts and gui used in the paper'
@@ -35,8 +35,8 @@ echo 'you need to manually increase point display size by two levels (near botto
 echo 'have the mouse focus remain in the window, in the central graphing region'
 echo 'take a window-screenshot: command-shift-4 space, then click on window'
 ) &&
-~/mumdex/ggraph --n-threads $n_threads --geometry $geometry --initial-view $abspos_left $((abspos_left+1000000)) 0 2.5 \
-    cn ~/hg19/chrAll.fa abspos,ratio,seg {m,f,d,s}.txt
+./mumdex/ggraph --n-threads $n_threads --geometry $geometry --initial-view $abspos_left $((abspos_left+1000000)) 0 2.5 \
+    cn ./hg19.fa abspos,ratio,seg {m,f,d,s}.txt
 
 
 

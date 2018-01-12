@@ -30,7 +30,6 @@
 #include "genes.h"
 #include "mumdex.h"
 #include "strings.h"
-#include "tsv.h"
 #include "threads.h"
 #include "x11plot.h"
 
@@ -73,7 +72,6 @@ using paa::Point;
 using paa::Radio;
 using paa::Reference;
 using paa::ThreadPool;
-using paa::TSV;
 using paa::X11App;
 using paa::X11Font;
 using paa::X11Graph;
@@ -497,15 +495,15 @@ bool add_chromosomes(const Reference & ref, const CN_abspos & cn_abspos,
   }
 
   // Chromosome name
-  const double avail_height{(graph.bounds[1][0] - graph.border_width) * 0.6};
-  const std::string longest{"22"};
+  const double avail_height{0.8 * (graph.bounds[1][0] - graph.border_width)};
+  const std::string longest{"22"};  // In practice, does "22" fit into chr 21?
   static X11Font * last_font{nullptr};
   static GC gc{[&graph]() {
       GC gc_{XCreateGC(graph.display(), graph.window, 0, nullptr)};
       XSetForeground(graph.display(), gc_, graph.app.black);
       return gc_;
     }()};
-  const X11Font * fits{graph.app.fonts.fits(longest, 1000, avail_height)};
+  const X11Font * fits{graph.app.fonts.fits(longest, min_w, avail_height)};
   if (fits != last_font) XSetFont(graph.display(), gc, fits->id());
 
   static iBounds last_bounds;
@@ -598,7 +596,7 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
         if (inserted.second) {
           GC & gc{inserted.first->second};
           XColor color;
-          if (!XAllocNamedColor(graph.display(), graph.colormap,
+          if (!XAllocNamedColor(graph.display(), graph.app.colormap,
                                 stain_colors.at(stain_name).c_str(),
                                 &color, &color))
             throw Error("Could not get color") << color_name;
@@ -708,11 +706,13 @@ int main(int argc, char* argv[]) try {
   // Process optional command line arguments
   --argc;
 
-  unsigned int width{1200};
-  unsigned int height{1000};
+  bool set_geometry{false};
+  unsigned int width{X11Graph::default_width};
+  unsigned int height{X11Graph::default_height};
   int x_off{0};
   int y_off{0};
   char ** initial{nullptr};
+  bool fullscreen{false};
   while (argc) {
     if (argv[1][0] == '-') {
       const string option{argv[1]};
@@ -724,6 +724,7 @@ int main(int argc, char* argv[]) try {
         if (!geometry_stream) {
           throw Error("Problem parsing geometry") << geometry;
         }
+        set_geometry = true;
         if (false)
           cerr << "Geometry set to width " << width << " height " << height
                << " x offset " << x_off << " y offset " << y_off << endl;
@@ -737,6 +738,10 @@ int main(int argc, char* argv[]) try {
         n_threads = atoi(argv[2]);
         argc -= 2;
         argv += 2;
+      } else if (option == "--fullscreen") {
+        fullscreen = true;
+        argc -= 1;
+        argv += 1;
       } else {
         throw Error("Unrecognized command line option") << option;
       }
@@ -749,12 +754,21 @@ int main(int argc, char* argv[]) try {
     throw Error("usage: ggraph plain|genome|cn ref xn,yn1[:l],yn2[:l]... "
                 "data_file ...");
 
+  if (fullscreen && set_geometry) {
+    cerr << "Note that --fullscreen option overrides --geometry" << endl;
+    sleep(1);
+  }
+
   // Process arguments
   const string type{argv[1]};
   const string ref_name{argv[2]};
   const std::string columns{argv[3]};
   argc -= 3;
   argv += 3;
+
+  // Open reference, if needed
+  unique_ptr<const Reference> ref_ptr{(type == "genome" || type == "cn") ?
+        make_unique<const Reference>(ref_name, true) : nullptr};
 
   // Names of input files
   const vector<string> names{[argc, argv] () {
@@ -811,6 +825,13 @@ int main(int argc, char* argv[]) try {
   // App to display multiple windows
   X11App app;
 
+  if (fullscreen) {
+    width = app.display_size[0];
+    height = app.display_size[1];
+    x_off = 0;
+    y_off = 0;
+  }
+
   // Rearrange data in specific X11Graph format for all individuals
   const int n_sets(static_cast<unsigned int>(results.size()));
   const int n_y(results.front().n_cols() - 1);
@@ -825,7 +846,8 @@ int main(int argc, char* argv[]) try {
 
   // All individuals graph
   X11Graph & graph{X11Graph::create_whole(app, data,
-                                          width, height, x_off, y_off)};
+                                          width, height, x_off, y_off,
+                                          "G-Graph")};
   X11Graph * graphp{&graph};
 
   // Adjust series positions, assign names, and make some series lines only
@@ -838,9 +860,10 @@ int main(int argc, char* argv[]) try {
       const string name{remove_substring(remove_substring(
           remove_including_final(names[r], '/'),
           "_results.txt"), ".varbin.data.txt") + "  " + result.name(y + 1)};
-      graph.series_radios[n_sets * y + r].description =
-          string("Toggle display for ") + name
-          + " " + std::to_string(y) + " " + std::to_string(r);
+      graph.series_names[n_sets * y + r] += ", " + name;
+      graph.series_radios[n_sets * y + r].description +=
+          ", " + name;
+      // + " " + std::to_string(y) + " " + std::to_string(r);
       if (do_lines[y]) graph.series_only_lines[n_sets * y + r] = true;
     }
     if (n_sets > 1) {
@@ -900,7 +923,7 @@ int main(int argc, char* argv[]) try {
 
   future<bool> gene_future;;
   if (type == "genome" || type == "cn") {
-    static const Reference ref{ref_name, true};
+    const Reference & ref{*ref_ptr};
     static const CN_abspos cn_abspos{ref};
 
     // Add drawing callback to add chromosomes and ratio lines

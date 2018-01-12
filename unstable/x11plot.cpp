@@ -29,7 +29,6 @@ int main(int argc, char** argv) try {
 
   TSV tsv{argv[1]};
 
-  cerr << "create plotter" << endl;
   // Create an X11 plotter from TSV
   X11Plotter plotter{tsv};
 

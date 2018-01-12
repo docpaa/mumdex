@@ -16,6 +16,7 @@
 #include "x11plot.h"
 
 using std::cerr;
+using std::cout;
 using std::endl;
 using std::exception;
 using std::max;
@@ -32,9 +33,9 @@ class X11Circles : public X11Win {
     app.add(std::make_unique<X11Circles>(app));
   }
 
-  explicit X11Circles(X11App & app__) :X11Win(app__) {
+  explicit X11Circles(X11App & app__) : X11Win(app__) {
     XSelectInput(display(), window, StructureNotifyMask | ExposureMask |
-                 KeyPressMask | ButtonMotionMask |ButtonPressMask);
+                 KeyPressMask | ButtonMotionMask | ButtonPressMask);
   }
 
   virtual void button_press(const XButtonEvent & event) {
@@ -114,7 +115,6 @@ int main(int argc, char*[]) try {
     {"hello", "there", "my", "friend"},
     {"World", "there", "mistake", "me"}, {"1", "2", "", "4"}};
   X11TextGrid::create(app, text, {0}, {0}, {1});
-
   app.run();
 
   return 0;
