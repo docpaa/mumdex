@@ -138,6 +138,10 @@ for genome in $genomes ; do
         mkdir $bin
         eval mv $config $bin
     fi
+
+    if [ ! -e $bin/ref.seq.bin ] ; then
+        ./mumdex/ggraph --setup-ref cn $genome.fa
+    fi
 done
 
 echo 
@@ -147,11 +151,6 @@ for genome in $genomes ; do
     echo You can now run G-Graph with $genome using the following command:
     echo
     echo $STARTX ./mumdex/ggraph cn $genome.fa abspos,ratio,seg "$data"
-    if [ ! -e $genome.fa.bin/ref.seq.bin ] ; then
-        echo
-        echo Note the first time the command runs it will take a short time \
-            to create a binary reference cache file
-    fi
     if [ $genome = hg38 ] ; then
         echo 
         echo Note the sample data is processed for hg19 \

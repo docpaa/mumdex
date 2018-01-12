@@ -713,6 +713,7 @@ int main(int argc, char* argv[]) try {
   int y_off{0};
   char ** initial{nullptr};
   bool fullscreen{false};
+  bool setup_ref_only{false};
   while (argc) {
     if (argv[1][0] == '-') {
       const string option{argv[1]};
@@ -742,6 +743,10 @@ int main(int argc, char* argv[]) try {
         fullscreen = true;
         argc -= 1;
         argv += 1;
+      } else if (option == "--setup-ref") {
+        setup_ref_only = true;
+        argc -= 1;
+        argv += 1;
       } else {
         throw Error("Unrecognized command line option") << option;
       }
@@ -750,7 +755,7 @@ int main(int argc, char* argv[]) try {
     }
   }
 
-  if (argc < 4)
+  if ((!setup_ref_only && argc < 4) || (setup_ref_only && argc != 2))
     throw Error("usage: ggraph plain|genome|cn ref xn,yn1[:l],yn2[:l]... "
                 "data_file ...");
 
@@ -762,13 +767,16 @@ int main(int argc, char* argv[]) try {
   // Process arguments
   const string type{argv[1]};
   const string ref_name{argv[2]};
+  // Open reference, if needed
+  unique_ptr<const Reference> ref_ptr{(type == "genome" || type == "cn") ?
+        make_unique<const Reference>(ref_name, true) : nullptr};
+  if (setup_ref_only) {
+    return 0;
+  }
   const std::string columns{argv[3]};
   argc -= 3;
   argv += 3;
 
-  // Open reference, if needed
-  unique_ptr<const Reference> ref_ptr{(type == "genome" || type == "cn") ?
-        make_unique<const Reference>(ref_name, true) : nullptr};
 
   // Names of input files
   const vector<string> names{[argc, argv] () {
