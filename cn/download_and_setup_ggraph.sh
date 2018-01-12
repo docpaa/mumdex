@@ -11,6 +11,7 @@ if [ "$genomes" != "hg19" ] &&
 fi
 
 echo This program will download, install, and setup G-Graph for you.
+echo First it will try to install all prerequisites on Mac OSX and Windows
 echo It will also download the "genome(s)" for \
     $genomes, annotations, and sample data.
 echo Please contact Peter Andrews at paa@drpa.us if you encounter difficulties.
@@ -22,14 +23,19 @@ STARTX=""
 if [ "$OSTYPE" = cygwin ] ; then
     STARTX=startxwin
     if [ ! -e /bin/wget.exe ] ; then
-        /cygdrive/c/Users/$USER/Downloads/setup-x86_64.exe -q -d -n -P wget
+        setup=/cygdrive/c/*/$USER/Downloads/setup-x86_64.exe
+        if [ -e $setup ] ; then
+            $setup -q -d -n -P wget
+            while [ ! -e /bin/wget.exe ] ; do
+                echo Waiting for wget install to finish
+                sleep 2 
+            done
+            sleep 1
+        else
+            echo You need wget to be installed in Cygwin before continuing 1>&2
+            exit 1
+        fi
     fi
-
-    while [ ! -e /bin/wget.exe ] ; do
-        echo Waiting for wget install to finish
-        sleep 2 
-    done
-    sleep 1
 
     if [ ! -e /usr/local/bin/apt-cyg ] ; then
         wget https://raw.githubusercontent.com/transcode-open/apt-cyg/master/apt-cyg
@@ -74,10 +80,14 @@ else
     else
         url=http://mumdex.com/mumdex.zip
         echo Downloading $url
-        lwp-request -m GET $url > mumdex.zip
-        echo Unzipping mumdex.zip
-        unzip mumdex.zip > /dev/null
-        rm mumdex.zip
+        if true ; then
+            git clone https://github.com/docpaa/mumdex/
+        else
+            lwp-request -m GET $url > mumdex.zip
+            echo Unzipping mumdex.zip
+            unzip mumdex.zip > /dev/null
+            rm mumdex.zip
+        fi
     fi
     cd mumdex
     echo Compiling mumdex/ggraph and mumdex/x11plot
