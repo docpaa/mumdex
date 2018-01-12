@@ -28,13 +28,18 @@ if [ "$OSTYPE" = cygwin ] ; then
         exit 1
     fi
 
+    if [ ! -e /bin/wget.exe ] ; then
+        echo You need wget to be installed in Cygwin before rerunning this script 1>&2
+        exit 1
+    fi
+
     if [ ! -e /usr/local/bin/apt-cyg ] ; then
         git clone https://github.com/transcode-open/apt-cyg/
         mv apt-cyg/apt-cyg /usr/local/bin
         rm -Rf apt-cyg
     fi
 
-    apt-cyg install git perl-libwww-perl unzip make gcc-g++ libX11-devel xinit ImageMagick xorg-x11-fonts-Type1 libgsl-devel python
+    apt-cyg install perl-libwww-perl unzip make gcc-g++ libX11-devel xinit ImageMagick xorg-x11-fonts-Type1 libgsl-devel python
 
 fi
 
