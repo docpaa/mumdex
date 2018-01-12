@@ -23,18 +23,8 @@ STARTX=""
 if [ "$OSTYPE" = cygwin ] ; then
     STARTX=startxwin
     if [ ! -e /bin/wget.exe ] ; then
-        setup=/cygdrive/c/*/$USER/Downloads/setup-x86_64.exe
-        if [ -e $setup ] ; then
-            $setup -q -d -n -P wget
-            while [ ! -e /bin/wget.exe ] ; do
-                echo Waiting for wget install to finish
-                sleep 2 
-            done
-            sleep 1
-        else
-            echo You need wget to be installed in Cygwin before continuing 1>&2
-            exit 1
-        fi
+        echo You need wget to be installed in Cygwin before continuing 1>&2
+        exit 1
     fi
 
     if [ ! -e /usr/local/bin/apt-cyg ] ; then
