@@ -22,15 +22,22 @@ echo
 STARTX=""
 if [ "$OSTYPE" = cygwin ] ; then
     STARTX=startxwin
-    if [ ! -e /bin/wget.exe ] ; then
-        echo You need wget to be installed in Cygwin before continuing 1>&2
+
+    if [ ! -e /bin/git.exe ] ; then
+        echo You need git to be installed in Cygwin before rerunning this script 1>&2
         exit 1
     fi
 
     if [ ! -e /usr/local/bin/apt-cyg ] ; then
-        wget https://raw.githubusercontent.com/transcode-open/apt-cyg/master/apt-cyg
-        chmod +x apt-cyg
-        mv apt-cyg /usr/local/bin
+        if true ; then
+            git clone https://github.com/transcode-open/apt-cyg/
+            mv apt-cyg /usr/local/bin
+            rm -Rf apt-cyg
+        else
+            wget https://raw.githubusercontent.com/transcode-open/apt-cyg/master/apt-cyg
+            chmod +x apt-cyg
+            mv apt-cyg /usr/local/bin
+        fi
     fi
 
     apt-cyg install git perl-libwww-perl unzip make gcc-g++ libX11-devel xinit ImageMagick xorg-x11-fonts-Type1 libgsl-devel python
