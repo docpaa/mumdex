@@ -187,8 +187,14 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
                 xmotion.x <= graph.bounds[0][1] &&
                 xmotion.y >= graph.bounds[1][0] &&
                 xmotion.y <= graph.bounds[1][1]) {
+              const double abspos{graph.icoord(0, xmotion.x)};
+              if (abspos <= 0 || abspos >= cn_abspos.n_positions()) {
+                graph.status = "";
+                graph.draw_status();
+                return true;
+              }
               const pair<unsigned int, unsigned int> chrpos{
-                cn_abspos.chrpos(graph.icoord(0, xmotion.x))};
+                cn_abspos.chrpos(abspos)};
               std::ostringstream coordinates;
               coordinates << std::setprecision(12) << "("
                           << ref.name(chrpos.first);

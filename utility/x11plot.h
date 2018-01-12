@@ -1829,9 +1829,15 @@ inline void X11Graph::get_range(const unsigned int a) {
 
 inline void X11Graph::set_range(const bool y,
                                 const double low, const double high) {
-  range[y][0] = low;
-  range[y][1] = high;
-  range[y][2] = range[y][1] - range[y][0];
+  if (fabs(high - low) > 0.00000000001 * max_range[y][2]) {
+    range[y][0] = low;
+    range[y][1] = high;
+    range[y][2] = range[y][1] - range[y][0];
+  } else {
+    // Reset range if screwy
+    range = max_range;
+    return;
+  }
   zoomed[y] = (dne(range[y][0], max_range[y][0]) ||
                dne(range[y][1], max_range[y][1]));
 }
@@ -2256,6 +2262,12 @@ void X11Graph::prepare() {
   const int border{min_border()};
   set_bounds(border, extent(0) - border, border, extent(1) - border);
   set_clip_rectangle(bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
+
+  // Make sure range is reasonable
+  if (range[0][0] >= max_range[0][1] || range[0][1] <= max_range[0][0] ||
+      range[1][0] >= max_range[1][1] || range[1][1] <= max_range[1][0]) {
+    range = max_range;
+  }
 
   // Set scales
   for (const bool y : {false, true}) { scale[y] = bounds[y][2] / range[y][2]; }

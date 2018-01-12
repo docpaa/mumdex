@@ -50,11 +50,13 @@ if [ "$(uname)" = Darwin ] ; then
         echo Installing Homebrew
         ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
     fi
+
     if [ ! -e /usr/local/include/gsl ] ||
         [ ! -e /usr/local/bin/convert ] ; then
         echo Installing ImageMagick and gsl
         brew install imagemagick gsl
     fi
+
     if [ ! -e /opt/X11/bin/xterm ] ; then
         echo Installing XQuartz
         lwp-request -m GET http://dl.bintray.com/xquartz/downloads/XQuartz-2.7.11.dmg > XQuartz-2.7.11.dmg
@@ -76,23 +78,23 @@ else
     else
         url=http://mumdex.com/mumdex.zip
         echo Downloading $url
-        if true ; then
-            git clone https://github.com/docpaa/mumdex/
-        else
-            lwp-request -m GET $url > mumdex.zip
-            echo Unzipping mumdex.zip
-            unzip mumdex.zip > /dev/null
-            rm mumdex.zip
-        fi
+        git clone https://github.com/docpaa/mumdex/
     fi
-    cd mumdex
+
     echo Compiling mumdex/ggraph and mumdex/x11plot
+    cd mumdex
+    which make 1>&2 > /dev/null
+    if [ "$?" = 1 ] ; then
+        echo You need make to be installed before re-running this script - quitting 1>&2
+        exit 1
+    fi
     make -j 4 ggraph x11plot > /dev/null
     if [ $? != 0 ] ; then
         (
             echo Problem compiling ggraph and x11plot
             echo Please try to copile manually before continuing
-            echo You probably need a more recent compiler "(gcc 4.9 or later)"
+            echo Look at above messages for a hint as to why it failed
+            echo You may need a more recent compiler "(gcc 4.9 or later)"
             echo Quitting
         ) 1>&2
         exit 1
