@@ -14,8 +14,29 @@ echo This program will download, install, and setup G-Graph for you.
 echo It will also download the "genome(s)" for \
     $genomes, annotations, and sample data.
 echo Please contact Peter Andrews at paa@drpa.us if you encounter difficulties.
-echo This has been tested on Linux and Mac.
+echo This has been tested on Linux, Mac, and Windows under Cygwin.
 echo
+
+# Special Cygwin setup on Windows
+STARTX=""
+if [ "$OSTYPE" = cygwin ] ; then
+    STARTX=startxwin
+    if [ ! -e /bin/wget.exe ] ; then
+        /cygdrive/c/Users/$USER/Downloads/setup-x86_64.exe -q -d -n -P wget
+        sleep 5
+        echo Run this script again when the Cygwin setup script finishes
+        exit 0
+    fi
+
+    if [ ! -e /usr/local/bin/apt-cyg ] ; then
+        wget https://raw.githubusercontent.com/transcode-open/apt-cyg/master/apt-cyg
+        chmod +x apt-cyg
+        mv apt-cyg /usr/local/bin
+    fi
+
+    apt-cyg install git perl-libwww-perl unzip make gcc-g++ libX11-devel xinit ImageMagick xorg-x11-fonts-Type1
+
+fi
 
 # Get and compile ggraph
 if [ -e mumdex/ggraph ] ; then
