@@ -14,7 +14,7 @@ echo This program will download, install, and setup G-Graph for you.
 echo It will also download the "genome(s)" for \
     $genomes, annotations, and sample data.
 echo Please contact Peter Andrews at paa@drpa.us if you encounter difficulties.
-echo This has been tested on Linux, Mac, and Windows under Cygwin.
+echo This has been tested on CentOS Linux, Mac OSX, and Windows under Cygwin.
 echo
 
 # Special Cygwin setup on Windows
@@ -39,6 +39,30 @@ if [ "$OSTYPE" = cygwin ] ; then
 
     apt-cyg install git perl-libwww-perl unzip make gcc-g++ libX11-devel xinit ImageMagick xorg-x11-fonts-Type1 libgsl-devel python
 
+fi
+
+if [ "$(uname)" = Darwin ] ; then
+    xcode-select --install 2>&1 | grep -v 'already installed'
+
+    if [ ! -e /usr/local/Homebrew ] ; then
+        echo Installing Homebrew
+        ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+    fi
+    if [ ! -e /usr/local/include/gsl ] ||
+        [ ! -e /usr/local/bin/convert ] ; then
+        echo Installing ImageMagick and gsl
+        brew install imagemagick gsl
+    fi
+    if [ ! -e /opt/X11/bin/xterm ] ; then
+        echo Installing XQuartz
+        lwp-request -m GET http://dl.bintray.com/xquartz/downloads/XQuartz-2.7.11.dmg > XQuartz-2.7.11.dmg
+        hdiutil attach XQuartz-2.7.11.dmg
+        open /Volumes/XQuartz-2.7.11/XQuartz.pkg
+        while [ ! -e /opt/X11/bin/xterm ] ; do
+            echo waiting for XQuartz install to almost finish
+            sleep 30
+        done
+    fi
 fi
 
 # Get and compile ggraph
@@ -124,3 +148,4 @@ for genome in $genomes ; do
             but it will still display "(slightly incorrectly)" for hg38
     fi
 done
+

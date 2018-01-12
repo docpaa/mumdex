@@ -138,8 +138,8 @@ COMPILE.cpp = $(CXX) $(CXXFLAGS) -c
 
 # Do not compile gsl programs under Mac OS (remove if gsl available)
 ifeq ($(UNAME),Darwin)
-%.gslo : %.cpp ; touch $@ && echo skipping compilation of gsl $@ on mac
-% : %.gslo ; touch $@ && echo skipping compilation of gsl $@ on mac
+# %.gslo : %.cpp ; touch $@ && echo skipping compilation of gsl $@ on mac
+# % : %.gslo ; touch $@ && echo skipping compilation of gsl $@ on mac
 endif
 
 # Do not delete .o files when a chain is used

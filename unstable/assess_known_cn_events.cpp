@@ -175,7 +175,7 @@ int main(int argc, char* argv[])  try {
         e.chr = chr_lookup[chr_str];
         e.start = atoi(start_str.c_str());
         e.stop = atoi(stop_str.c_str());
-        e.start_bin = bins.size();
+        e.start_bin = static_cast<unsigned int>(bins.size());
         e.stop_bin = 0;
         for (unsigned int b{0}; b != bins.size(); ++b) {
           const Bin & bin{bins[b]};

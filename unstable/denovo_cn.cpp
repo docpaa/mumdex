@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) try {
   const Population pop{argv[2]};
   const string bins_name{argv[3]};
   const vector<Bin> all_bins{load_bins(bins_name, ref)};
-  const unsigned int n_bins(all_bins.size());
+  const unsigned int n_bins(static_cast<unsigned int>(all_bins.size()));
 
   const unsigned int x{ref.find_x_chromosome()};
   const unsigned int y{ref.find_y_chromosome()};
