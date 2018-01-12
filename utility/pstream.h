@@ -60,6 +60,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // The library version.
 #define PSTREAMS_VERSION 0x0070   // 0.7.0
 
+// kill not available in cygwin
+#ifdef __CYGWIN__
+  bool kill(pid_t, int) {
+    exit(1);
+  }
+#endif
+
 /**
  *  @namespace redi
  *  @brief  All PStreams classes are declared in namespace redi.
@@ -343,7 +350,6 @@ class basic_ipstream
     , virtual public pstreams {
   typedef std::basic_istream<CharT, Traits>     istream_type;
   typedef pstream_common<CharT, Traits>         pbase_type;
-
   using pbase_type::buf_;  // declare name in this scope
 
   pmode readable(pmode mode) {
