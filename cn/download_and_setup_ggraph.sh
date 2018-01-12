@@ -29,15 +29,9 @@ if [ "$OSTYPE" = cygwin ] ; then
     fi
 
     if [ ! -e /usr/local/bin/apt-cyg ] ; then
-        if true ; then
-            git clone https://github.com/transcode-open/apt-cyg/
-            mv apt-cyg /usr/local/bin
-            rm -Rf apt-cyg
-        else
-            wget https://raw.githubusercontent.com/transcode-open/apt-cyg/master/apt-cyg
-            chmod +x apt-cyg
-            mv apt-cyg /usr/local/bin
-        fi
+        git clone https://github.com/transcode-open/apt-cyg/
+        mv apt-cyg/apt-cyg /usr/local/bin
+        rm -Rf apt-cyg
     fi
 
     apt-cyg install git perl-libwww-perl unzip make gcc-g++ libX11-devel xinit ImageMagick xorg-x11-fonts-Type1 libgsl-devel python
