@@ -23,10 +23,13 @@ if [ "$OSTYPE" = cygwin ] ; then
     STARTX=startxwin
     if [ ! -e /bin/wget.exe ] ; then
         /cygdrive/c/Users/$USER/Downloads/setup-x86_64.exe -q -d -n -P wget
-        sleep 5
-        echo Run this script again when the Cygwin setup script finishes
-        exit 0
     fi
+
+    while [ ! -e /bin/wget.exe ] ; do
+        echo Waiting for wget install to finish
+        sleep 2 
+    done
+    sleep 1
 
     if [ ! -e /usr/local/bin/apt-cyg ] ; then
         wget https://raw.githubusercontent.com/transcode-open/apt-cyg/master/apt-cyg
@@ -109,7 +112,7 @@ for genome in $genomes ; do
     echo
     echo You can now run G-Graph with $genome using the following command:
     echo
-    echo ./mumdex/ggraph cn $genome.fa abspos,ratio,seg "$data"
+    echo $STARTX ./mumdex/ggraph cn $genome.fa abspos,ratio,seg "$data"
     if [ ! -e $genome.fa.bin/ref.seq.bin ] ; then
         echo
         echo Note the first time the command runs it will take a short time \
