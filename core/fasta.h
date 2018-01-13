@@ -215,7 +215,8 @@ class Sequence : public RefArgs {
         throw Error("problem closing reference file");
 
       // Create simple reference output for use later after mapping
-      const GrowingReference ref(*this, true, true);
+      const GrowingReference ref(*this,
+                                 GrowingReference::CreateFromAlignerSequence());
       ref.save(ref_fasta);
     }
 

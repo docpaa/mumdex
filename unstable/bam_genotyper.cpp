@@ -237,7 +237,7 @@ int main(int argc, char ** argv) try {
   if (argc != 2 && argc != 3) throw Error("usage: bam_genotyper ref bam [chr]");
 
   // Read command line arguments
-  const Reference reference{argv[1], true};  // true = create bin if needed
+  const Reference reference{argv[1]};
   const string bam_name{argv[2]};
 
   // Get start and stop chromosome range

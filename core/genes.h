@@ -204,7 +204,6 @@ class JunctionCount {
   // unsigned int anchor_count = 0;
 };
 
-// class Reference;
 class KnownGenes {
  public:
   // Empty gene information in case UCSC files are unavailable

@@ -135,6 +135,10 @@ class X11Font {
     return x - (string_width(text) + 1) / 2 -
         font->per_char[static_cast<int>(text[0])].lbearing + 1;
   }
+  double d_centered_x(const std::string & text, const double x) const {
+    return x - (string_width(text) + 1) / 2.0 -
+        font->per_char[static_cast<int>(text[0])].lbearing + 1;
+  }
 
   ~X11Font() {
     if (true && font) {
@@ -1343,6 +1347,7 @@ class X11Graph : public X11Win, public SavedConfig {
 
   // Coordinates and transformations
   int coord(const bool y, const double val) const;
+  double dcoord(const bool y, const double val) const;
   Point coord(const dPoint point) const;
   XPoint xcoord(const dPoint point) const;
   XPoint xcoord(const Point point) const;
@@ -1513,11 +1518,13 @@ class X11Graph : public X11Win, public SavedConfig {
   void save_config(const SavedConfig & config);
 
   // Number of threads to use
-  unsigned int n_threads_{std::thread::hardware_concurrency()};
-  unsigned int n_threads(const unsigned int n_threads__ = 0) {
-    if (n_threads__ != 0) n_threads_ = n_threads__;
-    return n_threads_;
-  }
+  unsigned int n_threads_{std::max(std::thread::hardware_concurrency(), 1U)};
+  ThreadPool pool{n_threads()};
+  unsigned int n_threads() const;
+  void n_threads(const unsigned int n_threads__);
+
+  // Web url open
+  void open_url(const std::string & url) const;
 };
 
 // Creation factory from data in exact format needed
@@ -1611,7 +1618,8 @@ void X11Graph::add_call_back(const std::string & help_text,
   call_backs.push_back(call_back);
   call_back_radios.push_back(Radio{help_text, this,
       {1, call_backs.size() + 3.0}, {[this, full_draw]() {
-          return full_draw ? draw() : redraw(); }}, true, initially_on});
+          return (true || full_draw) ? draw() : redraw(); }},
+                                        true, initially_on});
   radios.push_back(&call_back_radios.back());
 }
 
@@ -1882,6 +1890,10 @@ inline int X11Graph::coord(const bool y, const double val) const {
   if (y) return bounds[1][1] - (val - range[1][0]) * scale[1];
   return bounds[0][0] + (val - range[0][0]) * scale[0];
 }
+inline double X11Graph::dcoord(const bool y, const double val) const {
+  if (y) return bounds[1][1] - (val - range[1][0]) * scale[1];
+  return bounds[0][0] + (val - range[0][0]) * scale[0];
+}
 
 inline Point X11Graph::coord(const dPoint point) const {
   return Point{coord(0, point.x), coord(1, point.y)};
@@ -1947,6 +1959,25 @@ void X11Graph::enter(const XCrossingEvent &) {
 }
 
 inline void X11Graph::key(const XKeyEvent & event) {
+  // std::cerr << event.keycode << std::endl;
+
+  // Arrow key motion
+  const unsigned int arrow_codes[2][2]{{113, 114}, {116, 111}};
+  for (const bool y : {false, true}) {
+    if (event.keycode == arrow_codes[y][0] ||
+        event.keycode == arrow_codes[y][1]) {
+      const double distance{((event.state == (ShiftMask | ControlMask)) ?
+                             1.0 * range[y][2] :
+                             ((event.state & ShiftMask) ? 0.05 * range[y][2] :
+                              ((event.state & ControlMask) ? 0.5 * range[y][2] :
+                               1 / scale[y])))};
+      range_jump(y, (event.keycode == arrow_codes[y][1] ? 1 : -1) * distance);
+      prepare_draw();
+      XSync(display(), true);
+      return;
+    }
+  }
+
   KeySym sym;
   XComposeStatus compose;
   const unsigned int kBufLen{10};
@@ -2123,7 +2154,7 @@ inline void X11Graph::motion(const XMotionEvent & event) {
       range_jump(y, move);
     }
   } else if (select) {
-    draw_controls();
+    // draw_controls();
     if (in_bounds(click)) {
       const Point min_point{min(last_motion.x, click.x, point.x),
             min(last_motion.y, click.y, point.y)};
@@ -2341,7 +2372,6 @@ void X11Graph::prepare() {
     }
   };
 
-  ThreadPool pool{n_threads()};
   std::vector<std::future<void>> futures;
   for (unsigned int s{0}; s != data->size(); ++s)
     futures.emplace_back(pool.run(series_fun, s));
@@ -2385,7 +2415,12 @@ void X11Graph::draw() {
       }
     }
   }
-  if (true || just_configured) {
+  // Handle special drawing commands
+  Event nothing;
+  for (unsigned int c{0}; c != call_backs.size(); ++c)
+    if (call_back_radios[c]) call_backs[c](*this, nothing);
+
+  if (just_configured) {
     just_configured = false;
     XCopyArea(display(), pixmap, window, gc, 0, 0, width(), height(), 0, 0);
     draw_controls();
@@ -2397,7 +2432,7 @@ void X11Graph::draw() {
     const SavedConfig current{current_config()};
     if (saved_config.empty() || current != saved_config.back()) {
       save_config(std::move(current));
-      draw_controls();
+      // draw_controls();
     }
   }
 }
@@ -2505,11 +2540,6 @@ void X11Graph::draw_controls() {
 
   // Draw tick labels
   draw_ticks();
-
-  // Handle special drawing commands
-  Event nothing;
-  for (unsigned int c{0}; c != call_backs.size(); ++c)
-    if (call_back_radios[c]) call_backs[c](*this, nothing);
 }
 
 inline void X11Graph::draw_grid() const {
@@ -2646,32 +2676,42 @@ inline bool X11Graph::slow() const { return true; }
 bool X11Graph::movie(const bool right) {
   status = "Playing the movie - click movie radio button again to stop";
   using Time = std::chrono::time_point<std::chrono::system_clock>;
-  Time last_time{std::chrono::system_clock::now()};
-  const double rate{0.5};  // page per second
+  const Time start_time{std::chrono::system_clock::now()};
+  Time last_time{start_time};
+  const double page_rate{0.35};  // pages per second scroll rate
   XEvent event;
   XWindowEvent(display(), window, ButtonReleaseMask, &event);
-  while (true) {
-    Time time{std::chrono::system_clock::now()};
-    const double seconds{
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          time - last_time).count() / 1000.0};
-    last_time = time;
-    const double movement{rate * seconds * range[0][2]};
-    range_jump(0, (right ? 1 : -1) * movement);
-    small_move = true;
-    prepare_draw();
-    XFlush(display());
-    if (!(range[0][0] > max_range[0][0] && range[0][1] < max_range[0][1])) {
-      movie_radios[right] = false;
-      return true;
-    }
-    if (XCheckWindowEvent(display(), window, ButtonPressMask, &event)) {
+  const double frames_per_second{60.0};
+  const size_t milliseconds_per_frame{
+    static_cast<uint64_t>(1000 / frames_per_second)};
+  for (uint64_t frame{0}; ; ++frame) {
+    while (XCheckWindowEvent(display(), window, ButtonPressMask, &event)) {
       XWindowEvent(display(), window, ButtonReleaseMask, &event);
       if (movie_radios[right].release(event.xbutton)) {
         movie_radios[right] = false;
         return true;
       }
     }
+
+    const std::chrono::milliseconds frame_elapsed{
+      frame * milliseconds_per_frame};
+    const Time frame_time{start_time + frame_elapsed};
+    const Time time{std::chrono::system_clock::now()};
+    if (time > frame_time) continue;
+    if (time < frame_time) std::this_thread::sleep_until(frame_time);
+
+    const double seconds{std::chrono::duration_cast<std::chrono::milliseconds>(
+        frame_time - last_time).count() / 1000.0};
+    const double movement{page_rate * seconds * range[0][2]};
+    range_jump(0, (right ? 1 : -1) * movement);
+    last_time = frame_time;
+    if (!(range[0][0] > max_range[0][0] && range[0][1] < max_range[0][1])) {
+      movie_radios[right] = false;
+      return true;
+    }
+    small_move = true;
+    prepare_draw();
+    XSync(display(), false);
   }
 }
 
@@ -2744,6 +2784,8 @@ std::vector<Radio> X11Graph::create_unnamed_radios() {
           line_width -= 1;
           set_line_widths(series_line_gcs, (line_width == 1 ? 0 : line_width));
           draw(); }, [this]() {return do_lines() && line_width >= 2; }}},
+    {"Open G-Graph tutorial webpage to the GUI help section", this, {-6.25, -1},
+      {[this]() { open_url("http://mumdex.com/ggraph/#gui"); }}},
     {"Set default values for color, line and marker properties", this, {-1, -1},
       {[this]() {
           arcs_radio = true; outlines_radio = false; lines_radio = false;
@@ -2798,6 +2840,29 @@ inline void X11Graph::restore_config(const SavedConfig & config) {
 inline void X11Graph::save_config(const SavedConfig & config) {
   saved_config.push_back(std::move(config));
 }
+
+inline unsigned int X11Graph::n_threads() const {
+  return n_threads_;
+}
+
+inline void X11Graph::n_threads(const unsigned int n_threads__) {
+  n_threads_ = n_threads__;
+}
+
+void X11Graph::open_url(const std::string & url) const {
+  std::ostringstream browser;
+#ifdef __linux__
+  const bool mac{false};
+#else
+  const bool mac{true};
+#endif
+  browser << std::string(!mac ? "firefox" : "open -a safari")
+          << " " << url << " &";
+  if (system(browser.str().c_str()) == -1) {
+    std::cerr << "Problem starting browser" << std::endl;
+  }
+}
+
 
 //
 // Text grid selector

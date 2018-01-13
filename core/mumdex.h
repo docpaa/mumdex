@@ -21,6 +21,7 @@
 
 #include "error.h"
 #include "files.h"
+#include "strings.h"
 
 /*
 
@@ -163,17 +164,21 @@ template <template <class ...> class VECTOR>
 class TReference {
  public:
   using const_iterator = typename VECTOR<char>::const_iterator;
-  // deleted and defaulted
-  // TReference() = delete;
   TReference() {}
   TReference(const TReference &) = delete;
   TReference(TReference &&) = delete;
   TReference & operator=(const TReference &) = delete;
   TReference & operator=(TReference &&) = delete;
+  TReference(const std::string & fasta, bool) = delete;  // just in case
+  TReference(const std::string & fasta, double) = delete;  // just in case
 
-  // construct from mummer reference
+  // To distinguish constructor usage
+  class ReadFromBinary {};
+  class CreateFromAlignerSequence {};
+
+  // construct from mummer rc ref aligner reference
   template <class Sequence>
-  TReference(const Sequence & mref, bool, bool) :
+  TReference(const Sequence & mref, const CreateFromAlignerSequence) :
       seq{mref.rcref ? mref.N / 2 : mref.N} {
     for (unsigned int c{0}; c != mref.descr.size();
          (mref.rcref ? c += 2 : ++c)) {
@@ -192,85 +197,66 @@ class TReference {
     }
   }
 
-  // read from binary file (not from fasta)
-  //  template<>
-  explicit TReference(const std::string & fasta) :
-      seq{fasta + ".bin/ref.seq.bin"},
-    chr_len{fasta + ".bin/ref.chr_len.bin"},
+  // read from fasta file or binary - and do not use too much physical memory
+  explicit TReference(const std::string & fasta,
+                      const size_t max_bytes = 4906) :
+      seq{"/dev/null", false},
+    chr_len{"/dev/null", false},
     fasta_file_{fasta} {
-      std::string chr_names_filename{fasta + ".bin/ref.chr_name.bin"};
-      std::ifstream chr_names_file{chr_names_filename.c_str()};
-      if (!chr_names_file) {
-        throw Error("Could not open chromosome names file for reading")
-            << chr_names_filename;
+      const std::string ref_bin_name{fasta + ".bin/ref.seq.bin"};
+      if (readable(ref_bin_name)) {
+        new (this) TReference{fasta, ReadFromBinary()};  // placement new
+        return;
       }
-      std::string line;
-      uint64_t pos{0};
-      for (unsigned int c{0}; c != chr_len.size(); ++c) {
-        if (!std::getline(chr_names_file, line)) {
-          throw Error("Problem reading name for chromosome") << c;
-        }
-        chr_name.push_back(line);
-        chr.push_back(seq.begin() + pos);
-        chrs.push_back(c);
-        pos += chr_len[c];
+      std::cerr << "Creating binary reference cache from "
+                << fasta << std::endl;
+      {
+        mkdir(fasta + ".bin/");
+        FILE * output = fopen(ref_bin_name.c_str(), "wb");
+        TReference<GrowingVector> ref;
+        ref.read_and_write_from_fasta(fasta, output, max_bytes);
+        if (fclose(output) != 0)
+          throw Error("problem closing output file") << ref_bin_name;
+        ref.save(fasta, false);
       }
+      new (this) TReference{fasta};
     }
 
-  // read from fasta file or binary
-  TReference(const std::string & fasta, bool) :
-      seq{"/dev/null", false}, chr_len{"/dev/null", false}, fasta_file_{fasta} {
-    const std::string ref_bin_name{fasta + ".bin/ref.seq.bin"};
-    if (readable(ref_bin_name)) {
-      new (this) TReference{fasta};  // placement new
-      return;
-    }
-    std::cerr << "Creating binary reference cache from "
-              << fasta << std::endl;
-    TReference<GrowingVector> ref;
-    ref.read_from_fasta(fasta);
-    mkdir(fasta + ".bin/");
-    ref.save(fasta);
-    new (this) TReference{fasta};
-  }
-
-  void read_from_fasta(const std::string & fasta) {
+  void read_and_write_from_fasta(const std::string & fasta,
+                                 FILE * out_file,
+                                 const uint64_t max_bytes) {
     std::ifstream input{fasta.c_str()};
     if (!input) {
       throw Error("Could not open fasta file") << fasta;
     }
     std::string line;
     unsigned int chr_end{0};
+    uint64_t seq_size{0};
     while (input >> line) {
       if (line[0] == '>') {
         if (chr_name.size()) {
-          chr_len.push_back(static_cast<unsigned int>(seq.size() - chr_end));
+          chr_len.push_back(static_cast<unsigned int>(seq_size - chr_end));
         }
-        chr_end = static_cast<unsigned int>(seq.size());
+        chr_end = static_cast<unsigned int>(seq_size);
         chrs.push_back(static_cast<unsigned int>(chr_name.size()));
         chr_name.push_back(line.substr(1));
         input.ignore(10000, '\n');
       } else {
         for (unsigned int b{0}; b != line.size(); ++b) {
           seq.push_back(toupper(line[b]));
+          ++seq_size;
         }
       }
+      if (seq.size() > max_bytes) {
+        seq.write(out_file);
+        seq.clear();
+      }
     }
-    chr_len.push_back(static_cast<unsigned int>(seq.size() - chr_end));
-  }
-
-  // save to binary file
-  void save(const std::string & fasta) const {
-    seq.save(fasta + ".bin/ref.seq.bin");
-    chr_len.save(fasta + ".bin/ref.chr_len.bin");
-    std::string chr_names_filename{fasta + ".bin/ref.chr_name.bin"};
-    std::ofstream chr_names_file{chr_names_filename.c_str()};
-    if (!chr_names_file)
-      throw Error("Could not open chromosome names file for writing")
-          << chr_names_filename;
-    for (const std::string & name_ : chr_name) {
-      chr_names_file << name_ << '\n';
+    if (seq.size()) {
+      seq.write(out_file);
+      seq.clear();
     }
+    chr_len.push_back(static_cast<unsigned int>(seq_size - chr_end));
   }
 
   // output fasta - only used for validation or if fasta was deleted
@@ -298,7 +284,10 @@ class TReference {
     return out;
   }
 
-  const std::string & name() const { return seq.name(); }
+  const std::string name() const {
+    return remove_including_initial(
+        remove_including_final(fasta_file_, '/'), '.');
+  }
 
   // direct access
   uint64_t size() const { return seq.size(); }
@@ -362,7 +351,48 @@ class TReference {
     throw Error("Could not determine Y chromosome");
   }
 
+  // save to binary file
+  void save(const std::string & fasta, const bool save_seq = true) const {
+    if (save_seq) {
+      seq.save(fasta + ".bin/ref.seq.bin");
+    }
+
+    chr_len.save(fasta + ".bin/ref.chr_len.bin");
+    std::string chr_names_filename{fasta + ".bin/ref.chr_name.bin"};
+    std::ofstream chr_names_file{chr_names_filename.c_str()};
+    if (!chr_names_file)
+      throw Error("Could not open chromosome names file for writing")
+          << chr_names_filename;
+    for (const std::string & name_ : chr_name) {
+      chr_names_file << name_ << '\n';
+    }
+  }
+
  private:
+  // read from binary file (not from fasta)
+  explicit TReference(const std::string & fasta, const ReadFromBinary) :
+      seq{fasta + ".bin/ref.seq.bin"},
+    chr_len{fasta + ".bin/ref.chr_len.bin"},
+    fasta_file_{fasta} {
+      std::string chr_names_filename{fasta_file_ + ".bin/ref.chr_name.bin"};
+      std::ifstream chr_names_file{chr_names_filename.c_str()};
+      if (!chr_names_file) {
+        throw Error("Could not open chromosome names file for reading")
+            << chr_names_filename;
+      }
+      std::string line;
+      uint64_t pos{0};
+      for (unsigned int c{0}; c != chr_len.size(); ++c) {
+        if (!std::getline(chr_names_file, line)) {
+          throw Error("Problem reading name for chromosome") << c;
+        }
+        chr_name.push_back(line);
+        chr.push_back(seq.begin() + pos);
+        chrs.push_back(c);
+        pos += chr_len[c];
+      }
+    }
+
   VECTOR<char> seq{};
   VECTOR<unsigned int> chr_len{};
   std::vector<std::string> chr_name{};

@@ -80,6 +80,16 @@ inline std::string remove_including_final(const std::string & str_,
   return str;
 }
 
+inline std::string remove_including_initial(const std::string & str_,
+                                            const char c) {
+  std::string str{str_};
+  const size_t pos = str.find_first_of(c);
+  if (pos != std::string::npos) {
+    str.resize(pos);
+  }
+  return str;
+}
+
 inline void replace_substring(std::string & str,
                              const char * const oldstr,
                              const char * const newstr) {

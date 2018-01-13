@@ -45,6 +45,7 @@ using std::make_unique;
 using std::map;
 using std::max;
 using std::min;
+using std::multimap;
 using std::mutex;
 using std::ostringstream;
 using std::pair;
@@ -55,6 +56,7 @@ using std::unique_lock;
 using std::unique_ptr;
 using std::vector;
 
+using paa::dne;
 using paa::rect;
 using paa::remove_substring;
 using paa::remove_including_final;
@@ -70,6 +72,7 @@ using paa::KnownGene;
 using paa::KnownGenes;
 using paa::Point;
 using paa::Radio;
+// using Reference = paa::UnMappedReference;
 using paa::Reference;
 using paa::ThreadPool;
 using paa::X11App;
@@ -77,7 +80,7 @@ using paa::X11Font;
 using paa::X11Graph;
 using paa::X11Win;
 
-unsigned int n_threads{std::thread::hardware_concurrency()};
+unsigned int n_threads{std::max(std::thread::hardware_concurrency(), 1U)};
 
 const unsigned int max_gene_mb{100};
 const unsigned int max_name_mb{5};
@@ -98,16 +101,37 @@ class GeneInfo {
 };
 
 struct BestVariant {
-  BestVariant(const string description_, const int start_, const int stop_) :
+  BestVariant(const string description_,
+              const double start_, const double stop_) :
       description{description_}, start{start_}, stop{stop_},
     low{start}, high{stop} { }
   string description;
-  int start;
-  int stop;
-  int low;
-  int high;
-  int middle() const { return (start + stop) / 2; }
-  int width() const { return stop - start; }
+  double start;
+  double stop;
+  double middle() const { return (start + stop) / 2; }
+  bool overlaps(const BestVariant & rhs) const {
+    return start <= rhs.stop && rhs.start <= stop;
+  }
+  bool merge(const BestVariant & rhs) {
+    if (overlaps(rhs)) {
+      start = min(start, rhs.start);
+      stop = min(stop, rhs.stop);
+      if (width() < rhs.width()) {
+        low = rhs.low;
+        high = rhs.high;
+        description = rhs.description;
+      }
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+ private:
+  // Longest isoform
+  double low;
+  double high;
+  double width() const { return high - low; }
 };
 
 bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
@@ -225,7 +249,6 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
                 xbutton.x <= gene.bounds[0][1] &&
                 xbutton.y >= gene.bounds[1][0] &&
                 xbutton.y <= gene.bounds[1][1]) {
-              ostringstream firefox;
               const pair<unsigned int, unsigned int> chrpos_start{
                 cn_abspos.chrpos(graph.icoord(0, gene.low))};
               const pair<unsigned int, unsigned int> chrpos_stop{
@@ -239,19 +262,12 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
               const unsigned int display_stop(
                   chrpos_stop.second + 0.1 * range < ref.size(chr) ?
                   chrpos_stop.second + 0.1 * range : ref.size(chr));
-#ifdef __linux__
-              const bool mac{false};
-#else
-              const bool mac{true};
-#endif
-              firefox << std::string(!mac ? "firefox" : "open -a safari")
-                      << " 'http://genome-mirror.cshl.edu/"
-                      << "cgi-bin/hgTracks?db=hg19&"
-                      << "position=" << ref.name(chr) << ":"
-                      << display_start << "-" << display_stop << "' &";
-              if (system(firefox.str().c_str()) == -1) {
-                std::cerr << "Problem starting browser" << std::endl;
-              }
+              ostringstream gene_url;
+              gene_url << "'http://genome-mirror.cshl.edu/"
+                       << "cgi-bin/hgTracks?db=" << ref.name() << "&"
+                       << "position=" << ref.name(chr) << ":"
+                       << display_start << "-" << display_stop << "'";
+              graph.open_url(gene_url.str());
               return true;
             }
           }
@@ -268,87 +284,87 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
   gene_info.clear();
   if (graph.range[0][2] > max_gene_mb * 1000000.0) return false;
 
-  // Get chrpos from range of graph
-  unsigned int chr[2];
-  unsigned int pos[2];
-  for (const bool high : {false, true}) {
-    const unsigned int abspos(max(0.0, graph.range[0][high]));
-    const pair<unsigned int, unsigned int> chrpos{cn_abspos.chrpos(abspos)};
-    chr[high] = chrpos.first;
-    pos[high] = chrpos.second;
-  }
-
-  // Get genes in range
+  // Get gene limits from graph range
+  using ChromPos = pair<unsigned int, unsigned int>;
   std::vector<KnownGene>::const_iterator gene_limits[2];
   for (const bool high : {false, true}) {
-    const unsigned int e{500000};
-    const unsigned int chrpos[2]{chr[high],
-          high ? pos[high] + e : (pos[high] > e ? pos[high] - e : 0)};
+    const unsigned int abspos{min(
+        cn_abspos.n_positions(),
+        max(0U, static_cast<unsigned int>(graph.range[0][high])))};
+    const ChromPos chrpos_bound{cn_abspos.chrpos(abspos)};
     gene_limits[high] = upper_bound(
-        genes.begin(), genes.end(), chrpos,
-        [high](const unsigned int * cp, const KnownGene & gene) {
-          if (gene.chr == cp[0]) {
-            return (high ? gene.t_stop : gene.t_start) >= cp[1];
+        genes.begin(), genes.end(), chrpos_bound,
+        [high](const ChromPos cp, const KnownGene & gene) {
+          if (gene.chr == cp.first) {
+            const double e{1000000};
+            if (high) {
+              return gene.t_stop >= cp.second + e;
+            } else {
+              return gene.t_start + e >= cp.second;
+            }
           }
-          return gene.chr >= cp[0];
+          return gene.chr >= cp.first;
         });
   }
+
   if (gene_limits[0] > gene_limits[1]) gene_limits[0] = gene_limits[1];
 
   // Draw all exons and genes in range
-  const int exon_height{10};
-  const unsigned int gene_y(graph.bounds[1][0] * 1.2);
+  const int exon_height{10};  // Should scale with window?
+  const unsigned int gene_y(graph.bounds[1][0] * 1.3);
   const unsigned int exon_y{gene_y - exon_height / 2};
   using Item = pair<string, BestVariant>;
-  map<string, BestVariant> names;
+  multimap<string, BestVariant> names;
   for (std::vector<KnownGene>::const_iterator g{gene_limits[0]};
        g != gene_limits[1]; ++g) {
     // Gene line
     const KnownGene & gene{*g};
-    const double min_gene{max(graph.range[0][0],
-                              1.0 * cn_abspos(gene.chr, gene.t_start))};
-    const double max_gene{min(graph.range[0][1],
-                              1.0 * cn_abspos(gene.chr, gene.t_stop))};
-    if (max_gene <= graph.range[0][0] || min_gene >= graph.range[0][1])
+    const unsigned int min_gene{cn_abspos(gene.chr, gene.t_start)};
+    const unsigned int max_gene{cn_abspos(gene.chr, gene.t_stop)};
+    if (max_gene <= graph.range[0][0] - 0.2 * graph.range[0][2] ||
+        min_gene >= graph.range[0][1] + 0.2 * graph.range[0][2])
       continue;
-    const int gene_start{graph.coord(0, min_gene)};
-    const int gene_stop{max(graph.coord(0, max_gene), gene_start + 1)};
+    const double gene_start{graph.dcoord(0, min_gene)};
+    const double gene_stop{max(graph.dcoord(0, max_gene), gene_start + 1)};
     if (graph.range[0][2] <= max_gene_mb * 1000000.0) {
-      const pair<string, BestVariant> to_add{
+      const Item to_add{
         xref[gene.name].geneSymbol,
         {xref[gene.name].description, gene_start, gene_stop}};
-      auto item = names.insert(to_add);
-      if (!item.second) {
-        BestVariant & inside{(*item.first).second};
-        if (inside.low > to_add.second.low)
-          inside.low = to_add.second.low;
-        if (inside.high < to_add.second.high)
-          inside.high = to_add.second.high;
-        if (inside.width() < to_add.second.width()) {
-          inside.start = to_add.second.start;
-          inside.stop = to_add.second.stop;
-          inside.description = to_add.second.description;
+      auto bounds = names.equal_range(to_add.first);
+      bool merged{false};
+      for (auto i = bounds.first; i != bounds.second; ++i) {
+        if (i->second.merge(to_add.second)) {
+          merged = true;
+          for (auto j = next(i); j != bounds.second; ++j) {
+            if (i->second.merge(j->second)) {
+              --j;
+              names.erase(next(j));
+            }
+          }
         }
       }
+      if (!merged) names.insert(bounds.second, to_add);
     }
-    XDrawLine(graph.display(), graph.window, graph.border_gc,
-              gene_start, gene_y,
-              gene_stop, gene_y);
+    XDrawLine(graph.display(), graph.pixmap, graph.border_gc,
+              max(graph.bounds[0][0], static_cast<int>(gene_start)), gene_y,
+              min(graph.bounds[0][1], static_cast<int>(gene_stop)), gene_y);
 
     // Exon boxes
     for (unsigned int e{0}; e != gene.exon_starts.size(); ++e) {
-      const double exon_start(cn_abspos(gene.chr, gene.exon_starts[e]));
-      const double exon_stop(cn_abspos(gene.chr, gene.exon_stops[e]));
+      const unsigned int exon_start{cn_abspos(gene.chr, gene.exon_starts[e])};
+      const unsigned int exon_stop{cn_abspos(gene.chr, gene.exon_stops[e])};
       if (exon_start >= graph.range[0][1] || exon_stop <= graph.range[0][0])
         continue;
-      const double mod_start{max(graph.range[0][0], exon_start)};
-      const double mod_stop{min(graph.range[0][1], exon_stop)};
-      const int box_start{graph.coord(0, mod_start)};
+      const unsigned int mod_start{
+        max(static_cast<unsigned int>(graph.range[0][0]), exon_start)};
+      const unsigned int mod_stop{
+        min(static_cast<unsigned int>(graph.range[0][1]), exon_stop)};
       const double frac_pixel{(mod_stop - mod_start) * graph.scale[0]};
       if (frac_pixel < 0.5) continue;
+      const int box_start{graph.coord(0, mod_start)};
       const int box_stop{frac_pixel < 1.5 ? box_start + 1 :
             graph.coord(0, mod_stop)};
-      XFillRectangle(graph.display(), graph.window, graph.border_gc,
+      XFillRectangle(graph.display(), graph.pixmap, graph.border_gc,
                      box_start, exon_y, box_stop - box_start, exon_height);
     }
   }
@@ -370,7 +386,6 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
   // Set clip rectangle
   static iBounds last_bounds;
   if (graph.bounds != last_bounds) {
-    // if (paa::bne(graph.bounds, last_bounds)) {
     XRectangle clip_rectangle(rect(graph.bounds));
     XSetClipRectangles(graph.display(), gc, 0, 0, &clip_rectangle, 1, YXBanded);
   }
@@ -378,48 +393,34 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
   // Draw gene names nicely
   std::vector<Item> snames(names.begin(), names.end());
   sort(snames.begin(), snames.end(), [](const Item & lhs, const Item & rhs) {
-      const int l{lhs.second.low + lhs.second.high};
-      const int r{rhs.second.low + rhs.second.high};
-      if (l == r) return lhs.first < rhs.first;
+      return lhs.second.middle() < rhs.second.middle();
+      const double l{lhs.second.middle()};
+      const double r{rhs.second.middle()};
+      if (!dne(l, r)) return lhs.first < rhs.first;
       return l < r;
     });
-  vector<int> last_right(100);
+  static vector<double> last_right(100);
+  last_right.clear();
+  last_right.resize(100, -1000000.0);
   for (const Item & entry : snames) {
     const string & name{entry.first};
-
-    if (false && name == "ZNF462") {
-      const double del_start{cn_abspos(chr[0], 109694531) + 0.0};
-      const double del_stop{cn_abspos(chr[0], 109700021) + 0.0};
-      const int box_start{graph.coord(0, del_start)};
-      const int box_stop{graph.coord(0, del_stop)};
-      const int height{graph.coord(1, 1.25)};
-      XFillRectangle(graph.display(), graph.window, graph.border_gc,
-                     box_start, height, box_stop - box_start, 10);
-      const std::string descr{
-        "SSC02971 proband 5492 base deletion chr9 109694531 - 109700021"};
-      const int xpos{fits->centered_x(descr, (box_start + box_stop) / 2)};
-      XDrawString(graph.display(), graph.window, gc, xpos,
-                    height - 20, const_cast<char *>(descr.c_str()),
-                    static_cast<unsigned int>(descr.size()));
-    }
-
-    const int tpos{entry.second.middle()};
+    const double tpos{entry.second.middle()};
     const int width(fits->string_width(name + "  "));
-    const int left(tpos - width / 2);
-    const int xpos{fits->centered_x(name, tpos)};
+    const double left(tpos - width / 2.0);
+    const double xpos{fits->d_centered_x(name, tpos)};
     for (unsigned int i{0}; i != last_right.size(); ++i) {
       if (left > last_right[i]) {
         const int ypos(exon_y + 2 * graph.border_width +
                        exon_height + i * fits->height());
-        XDrawString(graph.display(), graph.window, gc, xpos,
+        XDrawString(graph.display(), graph.pixmap, gc, xpos,
                     fits->below_y(ypos), const_cast<char *>(name.c_str()),
                     static_cast<unsigned int>(name.size()));
-        const int right{tpos + width / 2};
+        const double right{tpos + width / 2};
         last_right[i] = right;
-        const Rect gene_rect{{left, right},
+        const Rect gene_rect{{static_cast<int>(left), static_cast<int>(right)},
           {ypos, ypos + fits->height()}};
         gene_info.emplace_back(name, entry.second.description, gene_rect,
-                               entry.second.low, entry.second.high);
+                               entry.second.start, entry.second.stop);
         break;
       }
     }
@@ -444,7 +445,7 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
       const int x_pos{bfont->centered_x(base, x_coord)};
       if (x_coord - actual_width / 2 > graph.bounds[0][0] &&
           x_coord + actual_width / 2 < graph.bounds[0][1]) {
-        XDrawString(graph.display(), graph.window, gc,
+        XDrawString(graph.display(), graph.pixmap, gc,
                     x_pos, y_pos, base.c_str(), 1);
         ++n_bases;
       }
@@ -461,7 +462,7 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
         if (!tick.second) continue;
         const int x_coord{graph.coord(0, tick.first)};
         const int x_pos{bfont->centered_x(turtle, x_coord)};
-        XDrawString(graph.display(), graph.window, gc,
+        XDrawString(graph.display(), graph.pixmap, gc,
                     x_pos, y_pos - 1.5 * bfont->height(),
                     turtle.c_str(), static_cast<unsigned int>(turtle.size()));
       }
@@ -493,7 +494,7 @@ bool add_chromosomes(const Reference & ref, const CN_abspos & cn_abspos,
       const int th{graph.coord(0, h)};
       const int m{(th + tl) / 2};
       const int w{th - tl};
-      min_w = min(min_w, w);
+      if (cl > gl && ch < gh) min_w = min(min_w, w);
       widths.push_back(w);
       chr.push_back(chromosomes[c]);
       pos.push_back(m + 1);
@@ -520,7 +521,7 @@ bool add_chromosomes(const Reference & ref, const CN_abspos & cn_abspos,
   for (unsigned int c{0}; c != chr.size(); ++c) {
     const std::string name{remove_substring(ref.name(chr[c]), "chr")};
     if (fits->string_width(name) < widths[c]) {
-      XDrawString(graph.display(), graph.window, gc, fits->centered_x(
+      XDrawString(graph.display(), graph.pixmap, gc, fits->centered_x(
           name, pos[c]), fits->centered_y(
               graph.bounds[1][1] - graph.border_width - avail_height / 2),
                   const_cast<char *>(name.c_str()),
@@ -534,7 +535,7 @@ bool add_chromosomes(const Reference & ref, const CN_abspos & cn_abspos,
     if (graph.log_radios[0]) chr_start = log10(chr_start);
     if (chr_start > graph.range[0][0] && chr_start < graph.range[0][1]) {
       const unsigned int x_pos(graph.coord(0, chr_start));
-      XDrawLine(graph.display(), graph.window, graph.gc,
+      XDrawLine(graph.display(), graph.pixmap, graph.gc,
                 x_pos, graph.bounds[1][0], x_pos, graph.bounds[1][1]);
     }
   }
@@ -553,7 +554,7 @@ bool add_ratio_lines(const vector<double> cn_lines,
     }
     if (y > graph.range[1][0] && y < graph.range[1][1]) {
       const unsigned int y_pos(graph.coord(1, y));
-      XDrawLine(graph.display(), graph.window, graph.gc,
+      XDrawLine(graph.display(), graph.pixmap, graph.gc,
                 graph.bounds[0][0], y_pos, graph.bounds[0][1], y_pos);
     }
   }
@@ -775,7 +776,7 @@ int main(int argc, char* argv[]) try {
   const string ref_name{argv[2]};
   // Open reference, if needed
   unique_ptr<const Reference> ref_ptr{(type == "genome" || type == "cn") ?
-        make_unique<const Reference>(ref_name, true) : nullptr};
+        make_unique<const Reference>(ref_name) : nullptr};
   if (setup_ref_only) {
     return 0;
   }
@@ -862,6 +863,7 @@ int main(int argc, char* argv[]) try {
   X11Graph & graph{X11Graph::create_whole(app, data,
                                           width, height, x_off, y_off,
                                           "G-Graph")};
+  // graph.pool(move(pool));  // done for a strange reason
   X11Graph * graphp{&graph};
 
   // Adjust series positions, assign names, and make some series lines only
@@ -954,9 +956,9 @@ int main(int argc, char* argv[]) try {
                                      std::cref(cn_abspos), _1, _2)});
 
     // Preload gene info to avoid wait time after zoom
-    static ThreadPool pool(1);
-    gene_future = pool.run(add_genes, std::cref(ref), std::cref(cn_abspos),
-                            std::ref(graph), Event());
+    gene_future = graph.pool.run(
+        add_genes, std::cref(ref),
+        std::cref(cn_abspos), std::ref(graph), Event());
 
     // Cytobands
     graph.add_call_back("Toggle cytobands and names",

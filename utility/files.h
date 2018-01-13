@@ -156,7 +156,7 @@ class Columns {
     while (getline(input, line)) {
       std::istringstream stream{line.c_str()};
       std::vector<ColumnLookup>::const_iterator nc{column_numbers.begin()};
-      unsigned int c{0};
+     unsigned int c{0};
       while (stream) {
         if (nc != column_numbers.end() && nc->first == c) {
           if (stream >> value) data[nc++->second].push_back(value);
