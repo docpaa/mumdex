@@ -1968,32 +1968,31 @@ void X11Graph::enter(const XCrossingEvent &) {
 }
 
 inline void X11Graph::key(const XKeyEvent & event) {
-  // std::cerr << event.keycode << std::endl;
-
-  // Arrow key motion
-  const unsigned int arrow_codes[2][2]{{113, 114}, {116, 111}};
-  for (const bool y : {false, true}) {
-    if (event.keycode == arrow_codes[y][0] ||
-        event.keycode == arrow_codes[y][1]) {
-      const double distance{((event.state == (ShiftMask | ControlMask)) ?
-                             1.0 * range[y][2] :
-                             ((event.state & ShiftMask) ? 0.05 * range[y][2] :
-                              ((event.state & ControlMask) ? 0.5 * range[y][2] :
-                               1 / scale[y])))};
-      range_jump(y, (event.keycode == arrow_codes[y][1] ? 1 : -1) * distance);
-      prepare_draw();
-      XSync(display(), true);
-      return;
-    }
-  }
-
   KeySym sym;
   XComposeStatus compose;
   const unsigned int kBufLen{10};
   char buffer[kBufLen];
   int count{XLookupString(const_cast<XKeyEvent *>(&event),
                           buffer, kBufLen, &sym, &compose)};
-  if (count == 1 && buffer[0] >= 32 && buffer[0] < 127) {
+
+  // Arrow key motion
+  const unsigned int arrow_codes[2][2]{{XK_Left, XK_Right},
+    {XK_Down, XK_Up}};
+  for (const bool y : {false, true}) {
+    if (sym == arrow_codes[y][0] || sym == arrow_codes[y][1]) {
+      const double distance{((event.state == (ShiftMask | ControlMask)) ?
+                             1.0 * range[y][2] :
+                             ((event.state & ShiftMask) ? 0.05 * range[y][2] :
+                              ((event.state & ControlMask) ? 0.5 * range[y][2] :
+                               1 / scale[y])))};
+      range_jump(y, (sym == arrow_codes[y][1] ? 1 : -1) * distance);
+      prepare_draw();
+      XSync(display(), true);
+      return;
+    }
+  }
+
+  if (count == 1 && buffer[0] >= XK_space && buffer[0] < XK_asciitilde) {
     // std::cerr << " key '" << buffer << "'" << endl;
     bool more{false};
     unsigned int rgb{0};
