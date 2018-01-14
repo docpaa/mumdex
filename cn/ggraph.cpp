@@ -289,8 +289,8 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
   std::vector<KnownGene>::const_iterator gene_limits[2];
   for (const bool high : {false, true}) {
     const unsigned int abspos{min(
-        cn_abspos.n_positions(),
-        max(0U, static_cast<unsigned int>(graph.range[0][high])))};
+        cn_abspos.n_positions(), static_cast<unsigned int>(
+            max(0.0, static_cast<double>(graph.range[0][high]))))};
     const ChromPos chrpos_bound{cn_abspos.chrpos(abspos)};
     gene_limits[high] = upper_bound(
         genes.begin(), genes.end(), chrpos_bound,
