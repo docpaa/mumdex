@@ -52,11 +52,8 @@ class X11MUMdexViewer : public X11Win {
   X11MUMdexViewer(X11App & app__,
                   const std::vector<std::string> & mumdex_names__,
                   const std::vector<MUMDEX> & mumdexes__,
-                  const unsigned int width_ = 1200,
-                  const unsigned int height_ = 1000,
-                  const int x_off_ = 0,
-                  const int y_off_ = 0) :
-      X11Win{app__, width_, height_, x_off_, y_off_},
+                  const  Geometry geometry_ = {{1200, 1000}, {0, 0}}) :
+      X11Win{app__, geometry_},
     mumdex_names_{mumdex_names__},
     mumdexes_{mumdexes__},
     mumdex_{&mumdexes_.front()},
@@ -180,7 +177,7 @@ class X11MUMdexViewer : public X11Win {
     moved = true;
     if (XPending(display())) return;
 
-    Event motion_event{Event::X, &app.event};
+    Event motion_event{Event::X, &event};
     const Point point{event};
 
     // Status text
@@ -847,19 +844,13 @@ class X11MUMdexViewer : public X11Win {
   bool moved{false};
 };
 
-class X11CandidateViewer {
+class X11CandidateViewer : public Geometry {
  public:
   X11CandidateViewer(const std::string & cand_file_name,
                      const std::string & samples_dir,
                      const std::string & pop_file_name,
-                     const unsigned int width__ = 1200,
-                     const unsigned int height__ = 1000,
-                     const int x_off__ = 0,
-                     const int y_off__ = 0) :
-      pop{pop_file_name},
-    launch_width{static_cast<int>(width__)},
-    launch_height{static_cast<int>(height__)},
-    launch_x_off{x_off__}, launch_y_off{y_off__} {
+                     const Geometry & geometry_ = {{1200, 1000}, {0, 0}}) :
+      Geometry{geometry_}, pop{pop_file_name} {
     std::ifstream cand_list_file{cand_file_name.c_str()};
     if (!cand_list_file) throw Error("Could not open candidates file")
                              << cand_file_name;
@@ -925,19 +916,18 @@ class X11CandidateViewer {
       std::bind(&X11CandidateViewer::launch_ready, this,
                 std::placeholders::_1)};
     X11TextGrid::create(app, text, {0, 1, 3}, {0}, {0, 2},
-                        exclusive_rows, call_back, cell_test,
-                        width__, height__, x_off__, y_off__);
+                        exclusive_rows, call_back, cell_test, *this);
     launch_graph2(0);
     app.run();
   }
-
+#if 0
   bool close_views() {
     for (auto i = next(app.windows.begin()); i != app.windows.end(); ++i) {
       app.close_window((*i)->window);
     }
     return true;
   }
-
+#endif
   bool launch_graph(const X11TextGrid::CellStatus & status) {
     const unsigned int selected_cand{static_cast<unsigned int>(
         std::find(status[2].begin(), status[2].end(), 1) -
@@ -954,8 +944,8 @@ class X11CandidateViewer {
     const int n_samples{static_cast<int>(family_samples.size())};
     const int n_x{n_samples < 4 ? 1 : (n_samples < 9 ? 2 : 3)};
     const int n_y{(n_samples + (n_x - 1)) / n_x};
-    const int sx{launch_width / n_x};
-    const int sy{launch_height / n_y};
+    const int sx{width() / n_x};
+    const int sy{height() / n_y};
     for (unsigned int s{0}; s != family_samples.size(); ++s) {
       const unsigned int xi{n_x > 1 ? (s % n_x) : 0};
       const unsigned int yi{s / n_x};
@@ -968,12 +958,13 @@ class X11CandidateViewer {
                 << " " << xi << " " << yi << " " << n_x << " " << n_y
                 << std::endl;
       paa::X11MUMdexViewer & viewer{paa::X11MUMdexViewer::create(
-          app, mumdex_names, mumdexes, sx - launch_x_off, sy - launch_y_off,
-          xi * sx, yi * sy)};
-      viewer.set_mumdex(mumdex_id);
-      viewer.set_position(chrs[selected_cand], pos[selected_cand]);
-    }
-    return true;
+          app, mumdex_names, mumdexes,
+          Geometry{{sx - x_offset(), sy - y_offset()},
+            {static_cast<int>(xi * sx), static_cast<int>(yi * sy)}})};
+        viewer.set_mumdex(mumdex_id);
+        viewer.set_position(chrs[selected_cand], pos[selected_cand]);
+      }
+      return true;
   }
   bool launch_ready(const X11TextGrid::CellStatus & status) const {
     return std::find(status[2].begin(), status[2].end(), 1) != status[2].end();
@@ -987,10 +978,6 @@ class X11CandidateViewer {
   std::vector<std::string> mumdex_names{};
   std::map<std::string, unsigned int> mumdex_lookup{};
   Population pop;
-  int launch_width;
-  int launch_height;
-  int launch_x_off;
-  int launch_y_off;
 };
 
 }  // namespace paa

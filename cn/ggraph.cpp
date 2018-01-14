@@ -68,6 +68,7 @@ using paa::CN_abspos;
 using paa::Error;
 using paa::Event;
 using paa::GeneXrefs;
+using paa::Geometry;
 using paa::KnownGene;
 using paa::KnownGenes;
 using paa::Point;
@@ -718,10 +719,7 @@ int main(int argc, char* argv[]) try {
   --argc;
 
   bool set_geometry{false};
-  unsigned int width{X11Graph::default_width};
-  unsigned int height{X11Graph::default_height};
-  int x_off{0};
-  int y_off{0};
+  Geometry geometry{X11Graph::default_geometry()};
   char ** initial{nullptr};
   bool fullscreen{false};
   bool setup_ref_only{false};
@@ -729,17 +727,16 @@ int main(int argc, char* argv[]) try {
     if (argv[1][0] == '-') {
       const string option{argv[1]};
       if (option == "--geometry") {
-        const string geometry{argv[2]};
-        istringstream geometry_stream{geometry.c_str()};
+        const string geometry_string{argv[2]};
+        istringstream geometry_stream{geometry_string.c_str()};
         char dummy;
+        int width, height, x_off, y_off;
         geometry_stream >> width >> dummy >> height >> x_off >> y_off;
         if (!geometry_stream) {
-          throw Error("Problem parsing geometry") << geometry;
+          throw Error("Problem parsing geometry") << geometry_string;
         }
+        geometry = {{width, height}, {x_off, y_off}};
         set_geometry = true;
-        if (false)
-          cerr << "Geometry set to width " << width << " height " << height
-               << " x offset " << x_off << " y offset " << y_off << endl;
         argv += 2;
         argc -= 2;
       } else if (option == "--initial-view") {
@@ -782,16 +779,20 @@ int main(int argc, char* argv[]) try {
   // Process arguments
   const string type{argv[1]};
   const string ref_name{argv[2]};
+
   // Open reference, if needed
   unique_ptr<const Reference> ref_ptr{(type == "genome" || type == "cn") ?
         make_unique<const Reference>(ref_name) : nullptr};
+  unique_ptr<const CN_abspos> abspos_ptr{(type == "genome" || type == "cn") ?
+        make_unique<const CN_abspos>(*ref_ptr) : nullptr};
   if (setup_ref_only) {
     return 0;
   }
+
+  // Columns to show
   const std::string columns{argv[3]};
   argc -= 3;
   argv += 3;
-
 
   // Names of input files
   const vector<string> names{[argc, argv] () {
@@ -804,7 +805,7 @@ int main(int argc, char* argv[]) try {
     }()};
 
   // Read in columns from data file
-  const vector<Columns> results{[&names, &columns] () {
+  const vector<Columns> input_data{[&names, &columns] () {
       ThreadPool pool(n_threads);
       vector<future<Columns>> futures;
       for (const string & name : names) {
@@ -823,10 +824,10 @@ int main(int argc, char* argv[]) try {
       return result;
     }()};
 
-  const vector<unsigned char> do_lines{[&results] () {
+  const vector<unsigned char> do_lines{[&input_data] () {
       vector<unsigned char> result;
-      // Assumes all loaded files share the same column names, as is expected
-      const Columns & cols{results[0]};
+      // Assumes all loaded files share the same column names
+      const Columns & cols{input_data[0]};
       for (unsigned int c{1}; c != cols.n_cols(); ++c) {
         if (cols.type(c).empty() || cols.type(c)[0] == 'p') {
           result.push_back(0);
@@ -837,7 +838,7 @@ int main(int argc, char* argv[]) try {
         }
       }
       // Special case for two dependent variables and no type specifications
-      // make the second dependent variable lines
+      // make the second dependent variable display as lines
       if (cols.n_cols() == 3 && cols.type(1).empty() && cols.type(2).empty()) {
         result[1] = 1;
       }
@@ -849,56 +850,50 @@ int main(int argc, char* argv[]) try {
   X11App app;
 
   if (fullscreen) {
-    width = app.display_size[0];
-    height = app.display_size[1];
-    x_off = 0;
-    y_off = 0;
+    geometry = {{app.display_size[0], app.display_size[1]}, {0, 0}};
   }
 
   // Rearrange data in specific X11Graph format for all individuals
-  const int n_sets(static_cast<unsigned int>(results.size()));
-  const int n_y(results.front().n_cols() - 1);
-  std::vector<std::vector<const std::vector<double> *>> data(
-      n_sets * n_y, std::vector<const std::vector<double> *>(2));
+  const int n_sets(static_cast<unsigned int>(input_data.size()));
+  const int n_y(input_data.front().n_cols() - 1);
+  using Data = std::vector<const std::vector<double> *>;
+  using AllData = std::vector<Data>;
+  AllData data(n_sets * n_y, Data(2));
   for (int r{0}; r != n_sets; ++r) {
     for (int y{0}; y != n_y; ++y) {
-      data[n_sets * y + r][0] = &results[r][0];
-      data[n_sets * y + r][1] = &results[r][y + 1];
+      data[n_sets * y + r][0] = &input_data[r][0];
+      data[n_sets * y + r][1] = &input_data[r][y + 1];
     }
   }
 
-  // All individuals graph
-  X11Graph & graph{X11Graph::create_whole(app, data,
-                                          width, height, x_off, y_off,
-                                          "G-Graph", n_threads)};
-  X11Graph * graphp{&graph};
-
-  // Adjust series positions, assign names, and make some series lines only
-  for (int r{0}; r != n_sets; ++r) {
-    const Columns & result{results[r]};
-    const double scale{n_sets <= 4 ? 1.0 : 4.5 / n_sets};
-    for (int y{0}; y != n_y; ++y) {
-      graph.series_radios[n_sets * y + r].specification.y =
-          2 + scale * (1.25 * n_y * (n_sets - r - 1) + (n_y - y - 1));
-      const string name{remove_substring(remove_substring(
-          remove_including_final(names[r], '/'),
-          "_results.txt"), ".varbin.data.txt") + "  " + result.name(y + 1)};
-      graph.series_names[n_sets * y + r] += ", " + name;
-      graph.series_radios[n_sets * y + r].description +=
-          ", " + name;
-      // + " " + std::to_string(y) + " " + std::to_string(r);
-      if (do_lines[y]) graph.series_only_lines[n_sets * y + r] = true;
-    }
-    if (n_sets > 1) {
-      Radio testradio{"Place this series on top", graphp, {-1, 2}};
-      graph.extra_radios.push_back(Radio{
+  auto add_special_features = [&type, &names, &input_data, &do_lines,
+                               n_sets, n_y, &ref_ptr, &abspos_ptr]
+      (X11Graph & graph) {
+    // Adjust series positions, assign names, and make some series lines only
+    for (int r{0}; r != n_sets; ++r) {
+      const Columns & result{input_data[r]};
+      const double scale{n_sets <= 4 ? 1.0 : 4.5 / n_sets};
+      for (int y{0}; y != n_y; ++y) {
+        graph.series_radios[n_sets * y + r].specification.y =
+            2 + scale * (1.25 * n_y * (n_sets - r - 1) + (n_y - y - 1));
+        const string name{remove_substring(remove_substring(
+            remove_including_final(names[r], '/'),
+            "_results.txt"), ".varbin.data.txt") + "  " + result.name(y + 1)};
+        graph.series_names[n_sets * y + r] += ", " + name;
+        graph.series_radios[n_sets * y + r].description +=
+            ", " + name;
+        if (do_lines[y]) graph.series_only_lines[n_sets * y + r] = true;
+      }
+      if (n_sets > 1) {
+        Radio testradio{"Place this series on top", &graph, {-1, 2}};
+        graph.extra_radios.push_back(Radio{
             string("Place series") + (n_y > 1 ? " group" : "") +
-                " on top", graphp,
+                " on top", &graph,
             {-0.7, 2 + scale *
                   (1.25 * n_y * (n_sets - r - 1) + (n_y - 0.5 - 1))},
-            {[graphp, r, n_y, n_sets]() {
+            {[&graph, r, n_y, n_sets]() {
                 // Find location of series in ordering list
-                vector<unsigned int> & order{graphp->series_order};
+                vector<unsigned int> & order{graph.series_order};
                 vector<unsigned int>::iterator riter{
                   find(order.begin(), order.end(), r)};
                 const unsigned int rindex{
@@ -911,73 +906,79 @@ int main(int argc, char* argv[]) try {
                     order.begin() + y * n_sets + rindex};
                   order.erase(toremove);
                 }
-                // graphp->show_order("after");
-                graphp->draw();
+                graph.draw();
               },
-                  [r, graphp, n_sets]() {
-                    return (graphp->series_order[n_sets - 1]) !=
+                  [r, &graph, n_sets]() {
+                    return (graph.series_order[n_sets - 1]) !=
                         static_cast<unsigned int>(r);
                   }}});
-      graph.extra_radios.back().radius_scale = 0.5;
-      graph.extra_radios.back().id = r;
-      graph.radios.push_front(&graph.extra_radios.back());
+        graph.extra_radios.back().radius_scale = 0.5;
+        graph.extra_radios.back().id = r;
+        graph.radios.push_front(&graph.extra_radios.back());
+      }
     }
-  }
 
-  if (type == "cn") {
-    // Are some Ys ratios?  Then change scale for ratio lines
-    const vector<double> cn_lines{[&results]() {
-        bool some_ratios{false};
-        for (unsigned int c{1}; c != results.front().n_cols(); ++c)
-          if (results.front().name(c).find("ratio") != string::npos ||
-              results.front().name(c).find("seg.mean") != string::npos)
-            some_ratios = true;
-        vector<double> result{0.0, 1.0, 2.0, 3.0, 4.0, 5.0};
-        if (some_ratios) for (double & line : result) line /= 2;
-        return result;
-      }()};
+    if (type == "cn") {
+      // Are some Ys ratios?  Then change scale for ratio lines
+      const vector<double> cn_lines{[&input_data]() {
+          bool some_ratios{false};
+          for (unsigned int c{1}; c != input_data.front().n_cols(); ++c)
+            if (input_data.front().name(c).find("ratio") != string::npos ||
+                input_data.front().name(c).find("seg.mean") != string::npos)
+              some_ratios = true;
+          vector<double> result{0.0, 1.0, 2.0, 3.0, 4.0, 5.0};
+          if (some_ratios) for (double & line : result) line /= 2;
+          return result;
+        }()};
 
-    graph.add_call_back("Toggle ratio lines", X11Graph::CallBack{std::bind(
-        &add_ratio_lines, cn_lines, _1, _2)});
+      graph.add_call_back("Toggle ratio lines", X11Graph::CallBack{std::bind(
+          &add_ratio_lines, cn_lines, _1, _2)});
 
-    graph.grid_radios[1][1].toggled = false;
-    graph.grid_radios[0][1].toggled = false;
-  }
+      graph.grid_radios[1][1].toggled = false;
+      graph.grid_radios[0][1].toggled = false;
+    }
 
-  future<bool> gene_future;;
+    if (type == "genome" || type == "cn") {
+      // Add drawing callback to add chromosomes and ratio lines
+      graph.add_call_back("Toggle chromosome boundaries and names",
+                          X11Graph::CallBack{std::bind(
+                              &add_chromosomes, std::cref(*ref_ptr),
+                              std::cref(*abspos_ptr), _1, _2)});
+
+      graph.add_call_back(
+          "Toggle chrpos and gene display (only shown for X axis range below " +
+          std::to_string(max_gene_mb) + "MB for genes and " +
+          std::to_string(max_name_mb) + " MB for names)",
+          X11Graph::CallBack{std::bind(&add_genes, std::cref(*ref_ptr),
+                                       std::cref(*abspos_ptr), _1, _2)});
+
+      // Cytobands
+      graph.add_call_back("Toggle cytobands and names",
+                          X11Graph::CallBack{std::bind(
+                              &add_cytobands, std::cref(*ref_ptr),
+                              std::cref(*abspos_ptr), _1, _2)}, true, false);
+
+      // Other genome-specific tweaks
+      graph.grid_radios[0][0].toggled = false;
+      graph.grid_radios[1][0].toggled = false;
+      graph.log_radios[0].actions.visible = [] () { return false; };
+    }
+  };
+
+  // All individuals graph
+  X11Graph & graph{X11Graph::create_whole(
+      app, data, geometry, "G-Graph", n_threads)};
+
+  // Preload gene info to avoid wait time after zoom
+  future<bool> gene_future;
   if (type == "genome" || type == "cn") {
-    const Reference & ref{*ref_ptr};
-    static const CN_abspos cn_abspos{ref};
-
-    // Add drawing callback to add chromosomes and ratio lines
-    graph.add_call_back("Toggle chromosome boundaries and names",
-                        X11Graph::CallBack{std::bind(
-                            &add_chromosomes, std::cref(ref),
-                            std::cref(cn_abspos), _1, _2)});
-
-    graph.add_call_back(
-        "Toggle chrpos and gene display (only shown for X axis range below " +
-        std::to_string(max_gene_mb) + "MB for genes and " +
-        std::to_string(max_name_mb) + " MB for names)",
-        X11Graph::CallBack{std::bind(&add_genes, std::ref(ref),
-                                     std::cref(cn_abspos), _1, _2)});
-
-    // Preload gene info to avoid wait time after zoom
     gene_future = graph.pool.run(
-        add_genes, std::cref(ref),
-        std::cref(cn_abspos), std::ref(graph), Event());
-
-    // Cytobands
-    graph.add_call_back("Toggle cytobands and names",
-                        X11Graph::CallBack{std::bind(
-                            &add_cytobands, std::cref(ref),
-                            std::cref(cn_abspos), _1, _2)}, true, false);
-
-    // Other genome-specific tweaks
-    graph.grid_radios[0][0].toggled = false;
-    graph.grid_radios[1][0].toggled = false;
-    graph.log_radios[0].actions.visible = [] () { return false; };
+        add_genes, std::cref(*ref_ptr),
+        std::cref(*abspos_ptr), std::ref(graph), Event());
   }
+
+  // Add special G-Graph features to X11plot graph
+  add_special_features(graph);
 
   // Process initial view command line arguments
   if (initial) {

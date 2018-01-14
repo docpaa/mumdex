@@ -23,12 +23,13 @@ using std::cerr;
 using std::endl;
 using std::exception;
 using paa::Error;
+using paa::Geometry;
 
 int main(int argc, char* argv[]) try {
   // Process optional command line arguments
   --argc;
-  unsigned int width{2560};
-  unsigned int height{1600};
+  int width{2560};
+  int height{1600};
   int x_off{10};
   int y_off{40};
   while (argc) {
@@ -92,7 +93,8 @@ int main(int argc, char* argv[]) try {
 
     // Read viewer class
     paa::X11MUMdexViewer & viewer{paa::X11MUMdexViewer::create(
-        app, mumdex_names, mumdexes, width, height, x_off, y_off)};
+        app, mumdex_names, mumdexes,
+        Geometry{{width, height}, {x_off, y_off}})};
 
     viewer.set_position(chr, pos);
 
@@ -104,7 +106,7 @@ int main(int argc, char* argv[]) try {
     const std::string samples_dir{argv[2]};
     const std::string pop_file_name{argv[3]};
     paa::X11CandidateViewer viewer{cand_file_name, samples_dir, pop_file_name,
-          width, height, x_off, y_off};
+      {{width, height}, {x_off, y_off}}};
   }
 
   return 0;

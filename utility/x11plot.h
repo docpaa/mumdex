@@ -83,15 +83,17 @@ using dPoint = PointT<double>;  // Double point
 
 class X11Font {
  public:
-  X11Font(Display * display_, const unsigned int point_size,
-          const std::string font_name = "helvetica",
+  X11Font(Display * display_,
+          const unsigned int point_size,
+          const std::string font_name = "",
           const std::string font_weight = "bold",
           const unsigned int x_ppi = 100,
           const unsigned int y_ppi = 100,
           const bool fallback = false) : display{display_} {
-    if (0) std::cerr << font_name << std::endl;
-    const std::vector<std::string> font_name_trials{"*sans*", "utopia", "*"};
+    const std::vector<std::string> font_name_trials{
+      font_name, "*sans*", "utopia", "*"};
     for (const std::string & trial_name : font_name_trials) {
+      if (trial_name.empty()) continue;
       const std::string font_spec{std::string("-*-") + trial_name +
             "-" + font_weight + "-r-normal-*-*-" +
             std::to_string(point_size) + "-" +
@@ -155,7 +157,8 @@ class X11Fonts {
   static constexpr unsigned int max_font_size{500};
 
   template <class App>
-  explicit X11Fonts(const App & app, const std::string & name = "helvetica") {
+  explicit X11Fonts(const App & app,
+                    const std::string & font_name = "") {
     Display * display{app.display};
     fonts.reserve(max_font_size);
     std::vector<uint64_t> indexes;
@@ -164,7 +167,7 @@ class X11Fonts {
     std::vector<unsigned int> temp_sizes;
     for (unsigned int tenth_points{40}; tenth_points <= max_font_size;
          tenth_points += 10) {
-      X11Font font{display, tenth_points, name, "bold",
+      X11Font font{display, tenth_points, font_name, "bold",
             app.pixels_per_inch(0), app.pixels_per_inch(1),
             tenth_points == max_font_size && fonts.empty()};
       if (font) {
@@ -237,9 +240,122 @@ std::string hex(const XColor & color) {
   return result;
 }
 
-// Due to X11 Macros using hidden casts
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wold-style-cast"
+class Geometry {
+ public:
+  // Defaults
+  static constexpr int default_width{1280};
+  static constexpr int default_height{720};
+  static constexpr int default_x_offset{0};
+  static constexpr int default_y_offset{0};
+  static Geometry default_geometry() {
+    return {{default_width, default_height},
+      {default_x_offset, default_y_offset}};
+  }
+
+  // Construct
+  Geometry(const Point & size__, const Point & offset__) :
+      size_{size__}, offset_{offset__} { }
+  Geometry(const int width_, const int height_,
+           const int x_offset_, const int y_offset_) :
+      size_{width_, height_}, offset_{x_offset_, y_offset_} { }
+
+  // Comparisons - slice warning!
+  bool operator==(const Geometry & rhs) const {
+    return size() == rhs.size() && offset() == rhs.offset();
+  }
+  bool operator!=(const Geometry & rhs) const {
+    return size() != rhs.size() || offset() != rhs.offset();
+  }
+
+  // Get values
+  Geometry geometry() const { return *this; }
+  Point size() const { return size_; }
+  int size(const bool y) const { return size_[y]; }
+  int width() const { return size_.x; }
+  int height() const { return size_.y; }
+  Point offset() const { return offset_; }
+  int offset(const bool y) const { return offset_[y]; }
+  int x_offset() const { return offset_.x; }
+  int y_offset() const { return offset_.y; }
+
+  // Calculated values
+  int area() const { return width() * height(); }
+  int max_size() const { return std::max(width(), height()); }
+  int min_size() const { return std::min(width(), height()); }
+  int x_low() const { return x_offset(); }
+  int x_high() const { return x_offset() + width(); }
+  int y_low() const { return y_offset(); }
+  int y_high() const { return y_offset() + height(); }
+  int low(const bool y) const { return y ? y_low() : x_low(); }
+  int high(const bool y) const { return y ? y_high() : x_high(); }
+
+  // Set values
+  Geometry & geometry(const Geometry & geometry_) {
+    *this = geometry_;
+    return *this;
+  }
+  Geometry & size(const int width_, const int height_) {
+    size_ = {width_, height_};
+    return *this;
+  }
+  Geometry & width(const int width_) {
+    size_.x = width_;
+    return *this;
+  }
+  Geometry & height(const int height_) {
+    size_.y = height_;
+    return *this;
+  }
+  Geometry & offset(const int x_, const int y_) {
+    offset_ = {x_, y_};
+    return *this;
+  }
+  Geometry & x_offset(const int x_) {
+    offset_.x = x_;
+    return *this;
+  }
+  Geometry & y_offset(const int y_) {
+    offset_.y = y_;
+    return *this;
+  }
+
+  // iBounds-like behavior
+  class BoundsHelper {
+   public:
+    class BoundsHelper2 {
+     public:
+      BoundsHelper2(Geometry & geometry_, const bool y_) :
+          geometry{geometry_}, y{y_} { }
+      int operator[](const int i) {
+        switch (i) {
+          case 0:
+            return geometry.low(y);
+          case 1:
+            return geometry.high(y);
+          case 2:
+            return geometry.size(y);
+          default:
+            throw Error("Bad bounds index") << i;
+        }
+      }
+
+     private:
+      Geometry & geometry;
+      int y;
+    };
+    explicit BoundsHelper(Geometry & geometry_) : geometry{geometry_} {}
+    BoundsHelper2 operator[](const bool y) {
+      return BoundsHelper2{geometry, y};
+    }
+
+   private:
+    Geometry & geometry;
+  };
+
+ private:
+  Point size_{default_width, default_height};
+  Point offset_{default_x_offset, default_y_offset};
+};
 
 // X11 convenience functions
 void draw_centered_oval(Display * display, Window window, GC gc_,
@@ -275,6 +391,10 @@ XRectangle rect(const unsigned int x, const unsigned int y,
   rect_.height = height_;
   return rect_;
 }
+XRectangle rect(const Geometry & geometry) {
+  return rect(geometry.x_offset(), geometry.y_offset(),
+              geometry.width(), geometry.height());
+}
 XRectangle rect(const iBounds & bounds) {
   return rect(bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
 }
@@ -288,7 +408,7 @@ bool operator!=(const XPoint lhs, const XPoint & rhs) {
 
 // Window class in an app
 template <class X11App>
-class X11WindowT {
+class X11WindowT : public Geometry {
  public:
   using X11Win = X11WindowT<X11App>;
   static constexpr unsigned int default_window_width{default_doc_width};
@@ -302,13 +422,15 @@ class X11WindowT {
   }
 
   X11WindowT(X11App & app_,
-             const unsigned int width__ = default_window_width * window_scale,
-             const unsigned int height__ = default_window_height * window_scale,
-             const int x__ = 0, const int y__ = 0, const bool map_ = true,
+             const Geometry & geometry_ =
+             {{static_cast<int>(default_window_width * window_scale),
+                     static_cast<int>(default_window_height * window_scale)},
+               {0, 0}},
+             const bool map_ = true,
              const std::string title = "") :
-      app{app_}, size_{width__, height__},
-    window{XCreateSimpleWindow(display(), DefaultRootWindow(display()),
-                               x__, y__, width(), height(),
+      Geometry{geometry_}, app{app_},
+    window{XCreateSimpleWindow(display(), app.root,
+                               x_offset(), y_offset(), width(), height(),
                                0, app.white, app.white)}
   {
     // Window properties
@@ -317,13 +439,10 @@ class X11WindowT {
     XSetWMProtocols(display(), window, app.wmDeleteMessage(), 1);
     XSetWindowBackgroundPixmap(display(), window, None);
     if (true) {
-      if (0) std::cerr << "Resizing to "
-                       << width() << "x" << height() << " "
-                       << x__ << " " << y__ << std::endl;
       XSizeHints hints;
       hints.flags = PPosition | PSize;
-      hints.x = x__;
-      hints.y = y__;
+      hints.x = x_offset();
+      hints.y = y_offset();
       hints.width = width();
       hints.height = height();
       XSetNormalHints(display(), window, &hints);
@@ -361,9 +480,6 @@ class X11WindowT {
 
   // Window information
   Display * display() const { return app.display; }
-  int width() const { return size_[0]; }
-  int height() const { return size_[1]; }
-  int extent(const bool y) { return size_[y]; }
   virtual bool slow() const { return false; }
 
   void set_window_offset() {
@@ -373,11 +489,11 @@ class X11WindowT {
     XGetWindowAttributes(display(), window, &xwa);
     // std::cerr << "xwa " << xwa.x << " " << xwa.y << std::endl;
     Window child;
-    XTranslateCoordinates(display(), window, DefaultRootWindow(display()),
+    XTranslateCoordinates(display(), window, app.root,
                           0, 0, &xo, &yo, &child);
     // std::cerr << "trans " << xo << " " << yo << std::endl;
-    window_offset[0] = xo - xwa.x;
-    window_offset[1] = yo - xwa.y;
+    x_offset(xo - xwa.x);
+    y_offset(yo - xwa.y);
   }
 
   GC create_gc(const uint64_t foreground, const uint64_t background,
@@ -398,12 +514,14 @@ class X11WindowT {
     // std::cerr << "mapped" << std::endl;
     set_window_offset();
   }
+  virtual void configure_request(const XConfigureRequestEvent &) {
+    std::cerr << "Configure request" << std::endl;
+  }
   virtual void configure(const XConfigureEvent & event) {
-    if (size_[0] != static_cast<unsigned int>(event.width) ||
-        size_[1] != static_cast<unsigned int>(event.height)) {
+    if (width() != event.width || height() != event.height) {
       just_configured = true;
-      size_[0] = event.width;
-      size_[1] = event.height;
+      width(event.width);
+      height(event.height);
       set_window_offset();
       prepare_draw();
     }
@@ -420,7 +538,11 @@ class X11WindowT {
   virtual void motion(const XMotionEvent &) { }
   virtual void button_release(const XButtonEvent &) { }
   virtual void leave(const XCrossingEvent &) { }
-  virtual void client_message(const XClientMessageEvent &) { }
+  virtual void client_message(const XClientMessageEvent & event) {
+    if (static_cast<uint64_t>(event.data.l[0]) == *app.wmDeleteMessage()) {
+      app.close_window(window);
+    }
+  }
 
   void set_bounds(const bool y, const int l, const int h) {
     bounds[y][2] = (bounds[y][1] = h) - (bounds[y][0] = l);
@@ -450,6 +572,7 @@ class X11WindowT {
                           void_fun call_back = [] () {}) {
     const std::string image_name{get_next_file(base_name, "xpm")};
     const std::string png_name{replace_substring(image_name, "xpm", "png")};
+    draw();
     save_image(image_name, window, 0, 0, width(), height(), call_back);
     image_names.push_back(image_name);
     std::ostringstream png_command;
@@ -465,9 +588,8 @@ class X11WindowT {
                   const int xp, const int yp,
                   const unsigned int w, const unsigned int h,
                   void_fun call_back = [] () {}) {
-    if (0) std::cerr << xp << " " << yp << " "
-                     << w << " " << h << " " << std::endl;
-    XImage * image{XGetImage(display(), d, xp, yp, w, h, AllPlanes, XYPixmap)};
+    XImage * image{
+      XGetImage(display(), d, xp, yp, w, h, XAllPlanes(), XYPixmap)};
     if (!image) throw Error("Could not get image");
     call_back();
     std::map<uint64_t, char> colors;
@@ -513,9 +635,6 @@ class X11WindowT {
   void prepare_draw() { prepare(); draw(); }
 
   X11App & app;
-  // unsigned int size_[2]{0, 0};
-  uPoint size_{};
-  Point window_offset{};
   iBounds bounds{};
   Window window{};
   Pixmap pixmap{};
@@ -546,19 +665,25 @@ class X11App {
   using WinList = std::list<WinPtr>;
   using WinIter = WinList::iterator;
 
+// Due to X11 Macros using hidden casts
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+
   X11App() : display{open_default_display()},
-    screen{DefaultScreen(display)}, depth{DefaultDepth(display, screen)},
+    root{DefaultRootWindow(display)},
+    screen{DefaultScreen(display)},
+    display_size{DisplayWidth(display, screen),
+          DisplayHeight(display, screen)},
+    display_mm{DisplayWidthMM(display, screen),
+          DisplayHeightMM(display, screen)},
+    depth{DefaultDepth(display, screen)},
     colormap{DefaultColormap(display, screen)},
-    display_size{static_cast<unsigned int>(DisplayWidth(display, screen)),
-          static_cast<unsigned int>(DisplayHeight(display, screen))},
-    display_mm{static_cast<unsigned int>(DisplayWidthMM(display, screen)),
-          static_cast<unsigned int>(DisplayHeightMM(display, screen))},
     fonts{*this},
     black{BlackPixel(display, screen)},
-    white{WhitePixel(display, screen)} {
-      if (!display) throw Error("Problem opening X11 display");
-      wmDeleteMessage_ = {XInternAtom(display, "WM_DELETE_WINDOW", False)};
-    }
+    white{WhitePixel(display, screen)},
+    wmDeleteMessage_{XInternAtom(display, "WM_DELETE_WINDOW", False)} { }
+
+#pragma GCC diagnostic pop
 
   X11App(const X11App &) = delete;
   X11App & operator=(const X11App &) = delete;
@@ -577,6 +702,10 @@ class X11App {
     return **win;
   }
 
+  X11Win & window(const Window win) {
+    return **window_lookups[win];
+  }
+
   unsigned int pixels_per_inch(const bool y) const {
     return 25.4 * display_size[y] / display_mm[y];
   }
@@ -590,11 +719,12 @@ class X11App {
     std::map<Window, XConfigureEvent> configures;
 
     // Event loop
+    XEvent event{};
     while (windows.size()) {
       // Configure only when no events are pending
       if (!XPending(display)) {
         for (auto pair : configures) {
-          (*window_lookups[pair.first])->configure(pair.second);
+          window(pair.first).configure(pair.second);
         }
         configures.clear();
       }
@@ -606,61 +736,57 @@ class X11App {
       switch (event.type) {
         case ConfigureNotify:
           {
-            const Window win{event.xconfigure.window};
-            WinIter win_iter{window_lookups[win]};
-            if ((*win_iter)->slow()) {
-              configures[win] = event.xconfigure;
+            X11Win & win{window(event.xconfigure.window)};
+            if (win.slow()) {
+              configures[win.window] = event.xconfigure;
             } else {
-              (*win_iter)->configure(event.xconfigure);
+              win.configure(event.xconfigure);
             }
           }
           break;
 
         case MapNotify:
-          (*window_lookups[event.xmap.window])->mapped(event.xmap);
+          window(event.xmap.window).mapped(event.xmap);
           break;
 
         case VisibilityNotify:
           break;
 
         case Expose:
-          (*window_lookups[event.xcrossing.window])->expose(event.xexpose);
+          window(event.xcrossing.window).expose(event.xexpose);
           break;
 
         case EnterNotify:
-          (*window_lookups[event.xcrossing.window])->enter(event.xcrossing);
+          window(event.xcrossing.window).enter(event.xcrossing);
           break;
 
         case KeyPress:
-          (*window_lookups[event.xkey.window])->key(event.xkey);
+          window(event.xkey.window).key(event.xkey);
           break;
 
         case ButtonPress:
-          (*window_lookups[event.xbutton.window])->button_press(event.xbutton);
+          window(event.xbutton.window).button_press(event.xbutton);
           break;
 
         case MotionNotify:
-          (*window_lookups[event.xmotion.window])->motion(event.xmotion);
+          window(event.xmotion.window).motion(event.xmotion);
           break;
 
         case ButtonRelease:
-          (*window_lookups[event.xbutton.window])->
-              button_release(event.xbutton);
+          window(event.xbutton.window).button_release(event.xbutton);
           break;
 
         case LeaveNotify:
-          (*window_lookups[event.xcrossing.window])->leave(event.xcrossing);
+          window(event.xcrossing.window).leave(event.xcrossing);
           break;
 
         case ClientMessage:
-          if (static_cast<uint64_t>(event.xclient.data.l[0]) ==
-              *wmDeleteMessage()) {
-            const Window window{event.xclient.window};
-            close_window(window);
-          } else {
-            (*window_lookups[event.xmotion.window])->
-                client_message(event.xclient);
-          }
+          window(event.xclient.window).client_message(event.xclient);
+          break;
+
+        case ConfigureRequest:
+          window(event.xconfigurerequest.window).configure_request(
+              event.xconfigurerequest);
           break;
 
         case DestroyNotify:
@@ -672,11 +798,13 @@ class X11App {
     }
   }
 
-  void close_window(const Window window) {
-    XSelectInput(display, window, 0);
-    while (XCheckWindowEvent(display, window, -1UL, &event)) { }
-    windows.erase(window_lookups[window]);
-    window_lookups.erase(window);
+  void close_window(const Window win) {
+    XSelectInput(display, win, 0);
+    XSync(display, false);
+    XEvent event{};
+    while (XCheckWindowEvent(display, win, -1UL, &event)) { }
+    windows.erase(window_lookups[win]);
+    window_lookups.erase(win);
   }
 
   Atom * wmDeleteMessage() const {  // Allows proper pass of window kill
@@ -688,21 +816,19 @@ class X11App {
   }
 
   Display * display{};
+  Window root{};
   int screen{};
+  Point display_size{};
+  Point display_mm{};
   int depth{};
   Colormap colormap{};
-  // unsigned int display_size[2]{0, 0};
-  // unsigned int display_mm[2]{0, 0};
-  uPoint display_size{};
-  uPoint display_mm{};
   X11Fonts fonts;
-  uint64_t black{}, white{};
-  XEvent event{};
-
-  Atom wmDeleteMessage_{};
-  WinList windows{};
+  uint64_t black{};
+  uint64_t white{};
 
  private:
+  Atom wmDeleteMessage_{};
+  WinList windows{};
   std::map<Window, WinIter> window_lookups{};
   Point last_position{-1, -1};
 };
@@ -726,9 +852,10 @@ class Event {
     Draw,
     X
   };
+  template <class XEVENT = XEvent>
   explicit Event(const EventType type_ = Draw,
-                 const XEvent * x_ = nullptr) :
-      type{type_}, x{x_} {}
+                 const XEVENT * x_ = nullptr) :
+      type{type_}, x{reinterpret_cast<const XEvent *>(x_)} { }
 
   EventType type{Draw};
   const XEvent * x{nullptr};
@@ -947,9 +1074,6 @@ class Color {
     g = strtol(hex.c_str(), nullptr, 16);
     getline(name, hex, '/');
     b = strtol(hex.c_str(), nullptr, 16);
-    if (0) std::cerr << "Converted " << color_name << " to "
-                     << r << " " << g << " " << b << " "
-                     << to_string() << std::endl;
   }
 
   Color(const unsigned int r_, const unsigned int g_, const unsigned int b_) :
@@ -1024,39 +1148,37 @@ class X11Colors : public X11Win {
   X11Colors & operator=(const X11Colors &) = delete;
 
   static const int side{600};
-  static X11Colors & create(X11App & app,
-                            const std::vector<std::string> & starting_colors,
-                            const size_t n_colors_ = 0,
-                            const bool order = false,
-                            const unsigned int width_ = side,
-                            const unsigned int height_ = side,
-                            const int x_off_ = 0,
-                            const int y_off_ = 0,
-                            const CallBack call_back_ =
-                            [] (const unsigned int) { },
-                            const bool close_on_click_ = false,
-                            const std::string title = "") {
+  static X11Colors & create(
+      X11App & app,
+      const std::vector<std::string> & starting_colors,
+      const size_t n_colors_ = 0,
+      const bool order = false,
+      const Geometry & geometry_ = Geometry{{side, side}, {0, 0}},
+      const CallBack call_back_ =
+      [] (const unsigned int) { },
+      const bool close_on_click_ = false,
+      const std::string title = "") {
     return reinterpret_cast<X11Colors &>(
         app.add(std::make_unique<X11Colors>(
             app, starting_colors,
-            n_colors_ ? n_colors_ : starting_colors.size(), order,
-            width_, height_, x_off_, y_off_,
+            n_colors_ ? n_colors_ : starting_colors.size(), order, geometry_,
             call_back_, close_on_click_, title)));
   }
 
-  explicit X11Colors(X11App & app__,
-                     const std::vector<std::string> & starting_colors,
-                     const size_t n_colors_ = 0,
-                     const bool order = false,
-                     const unsigned int width_ = side,
-                     const unsigned int height_ = side,
-                     const int x_off_ = 0,
-                     const int y_off_ = 0,
-                     const CallBack call_back_ = [] (const unsigned int) { },
-                     const bool close_on_click_ = false,
-                     const std::string title = "") :
-      X11Win{app__, width_, height_,
-        static_cast<int>(x_off_ + (order ? width_ + width_ / 20: 0)), y_off_,
+  explicit X11Colors(
+      X11App & app__,
+      const std::vector<std::string> & starting_colors,
+      const size_t n_colors_ = 0,
+      const bool order = false,
+      const Geometry & geometry_ = Geometry{{side, side}, {0, 0}},
+      const CallBack call_back_ = [] (const unsigned int) { },
+      const bool close_on_click_ = false,
+      const std::string title = "") :
+      X11Win{app__,
+        Geometry{{geometry_.width(), geometry_.height()},
+      {geometry_.x_offset() +
+            (order ? geometry_.width() + geometry_.width() / 20 : 0),
+            geometry_.y_offset()}},
         true, title},
     color_names{starting_colors},
     n_colors{n_colors_ ? n_colors_ : starting_colors.size()},
@@ -1064,8 +1186,6 @@ class X11Colors : public X11Win {
     n_y{static_cast<unsigned int>(ceil(1.0 * n_colors / n_x))},
     call_back{call_back_},
     close_on_click{close_on_click_} {
-      if (false) std::cerr << n_colors << " " << n_x * n_y << " "
-                           << n_x << " " << n_y << std::endl;
       XSelectInput(display(), window,
                    StructureNotifyMask | ExposureMask |
                    ButtonPressMask | ButtonReleaseMask);
@@ -1296,8 +1416,8 @@ class X11Graph : public X11Win, public SavedConfig {
   // Graph constants
   static constexpr unsigned int max_series{512};
   static constexpr int border_width{3};
-  static constexpr unsigned int default_width{1280};
-  static constexpr unsigned int default_height{720};
+  static constexpr int default_width{1280};
+  static constexpr int default_height{720};
 
   // Graph data typedefs
   using Values = std::vector<double>;
@@ -1308,9 +1428,7 @@ class X11Graph : public X11Win, public SavedConfig {
   // Graph factories
   static X11Graph & create_whole(
       X11App & app, const Data & data__,
-      const unsigned int width_ = default_width,
-      const unsigned int height_ = default_height,
-      const int x_off_ = 0, const int y_off_ = 0,
+      const Geometry & geometry_ = default_geometry(),
       const std::string title = "",
       const unsigned int n_threads__ = std::thread::hardware_concurrency());
   template <class ... Input>
@@ -1318,9 +1436,8 @@ class X11Graph : public X11Win, public SavedConfig {
 
   // Graph constructors and destructors and copying
   X11Graph(X11App & app__, const Data & data__,
-           const unsigned int width_ = default_width,
-           const unsigned int height_ = default_height,
-           const int x_off_ = 0, const int y_off_ = 0,
+           const Geometry & geometry_ =
+           Geometry{{default_width, default_height}, {0, 0}},
            const std::string title = "",
            const unsigned int n_threads__ =
            std::thread::hardware_concurrency());
@@ -1340,10 +1457,16 @@ class X11Graph : public X11Win, public SavedConfig {
                      const bool initially_on = true);
   void initialize();
 
+  static Geometry default_geometry() {
+    return {{default_width, default_height}, {0, 0}};
+  }
+
   // Range functions
   void get_range(const unsigned int a = 2);
   void set_range(const bool y, const double low, const double high);
   void range_jump(const bool y, const double dist);
+  void zoom(const bool y, const double factor);
+  void zoom(const double factor);
   bool in_range(const double x, const double y) const;
   bool in_range(const dPoint pos) const;
   void show_range(const std::string prefix) const;
@@ -1397,7 +1520,7 @@ class X11Graph : public X11Win, public SavedConfig {
 
   // Assorted functions
   virtual bool slow() const;
-  bool movie(const bool right);
+  void movie(const bool right);
   virtual void save_image(const std::string & base_name,
                           void_fun call_back = void_fun());
 
@@ -1532,18 +1655,19 @@ class X11Graph : public X11Win, public SavedConfig {
 
   // Web url open
   void open_url(const std::string & url) const;
+
+  // Movement directions
+  bool x_movement{true};
+  bool y_movement{false};
 };
 
 // Creation factory from data in exact format needed
 X11Graph & X11Graph::create_whole(
-    X11App & app, const Data & data__,
-    const unsigned int width_, const unsigned int height_,
-    const int x_off_, const int y_off_,
-    const std::string title,
-    const unsigned int n_threads__) {
+    X11App & app, const Data & data__, const Geometry & geometry_,
+    const std::string title, const unsigned int n_threads__) {
   return reinterpret_cast<X11Graph &>(app.add(
       std::make_unique<X11Graph>(
-    app, data__, width_, height_, x_off_, y_off_, title, n_threads__)));
+          app, data__, geometry_, title, n_threads__)));
 }
 
 // Creation factory from a bunch of vectors x1, y1, x2, y2, ...
@@ -1554,13 +1678,10 @@ X11Graph & X11Graph::create(X11App & app, Input && ... input) {
 }
 
 // Construct from data in exact format needed
-X11Graph::X11Graph(X11App & app__, const Data & data__,
-                   const unsigned int width_,
-                   const unsigned int height_,
-                   const int x_off_, const int y_off_,
-                   const std::string title,
-                   const unsigned int n_threads__) :
-    X11Win{app__, width_, height_, x_off_, y_off_, true, title},
+X11Graph::X11Graph(
+    X11App & app__, const Data & data__, const Geometry & geometry_,
+    const std::string title, const unsigned int n_threads__) :
+    X11Win{app__, geometry_, true, title},
       input_data{data__}, data{&input_data}, n_threads_{n_threads__} {
                             initialize();
                           }
@@ -1568,7 +1689,7 @@ X11Graph::X11Graph(X11App & app__, const Data & data__,
 // Construct from a bunch of vectors x1, y1, x2, y2, ...
 template <class ... Input>
 X11Graph::X11Graph(X11App & app__, Input && ... input) :
-    X11Win{app__, default_width, default_height, 0, 0, true} {
+    X11Win{app__, {{default_width, default_height}, {0, 0}}, true} {
   add_input(std::forward<Input>(input)...);
   data = &input_data;
   initialize();
@@ -1863,6 +1984,14 @@ inline void X11Graph::range_jump(const bool y, const double dist) {
   set_range(y, range[y][0] + dist, range[y][1] + dist);
 }
 
+inline void X11Graph::zoom(const bool y, const double factor) {
+  const double change{range[y][2] * factor};
+  set_range(y, range[y][0] - change, range[y][1] + change);
+}
+inline void X11Graph::zoom(const double factor) {
+  for (const bool y : {false, true}) zoom(y, factor);
+}
+
 inline bool X11Graph::in_range(const double x, const double y) const {
   return x >= range[0][0] && x <= range[0][1] &&
       y >= range[1][0] && y <= range[1][1];
@@ -1974,20 +2103,18 @@ inline void X11Graph::key(const XKeyEvent & event) {
   char buffer[kBufLen];
   int count{XLookupString(const_cast<XKeyEvent *>(&event),
                           buffer, kBufLen, &sym, &compose)};
+  XEvent new_event;
 
   // Arrow key motion
   const unsigned int arrow_codes[2][2]{{XK_Left, XK_Right},
     {XK_Down, XK_Up}};
   for (const bool y : {false, true}) {
     if (sym == arrow_codes[y][0] || sym == arrow_codes[y][1]) {
-      const double distance{((event.state == (ShiftMask | ControlMask)) ?
-                             1.0 * range[y][2] :
-                             ((event.state & ShiftMask) ? 0.05 * range[y][2] :
-                              ((event.state & ControlMask) ? 0.5 * range[y][2] :
-                               1 / scale[y])))};
+      const double distance{(event.state & ShiftMask) ? 0.05 * range[y][2] :
+            ((event.state & ControlMask) ? 0.5 * range[y][2] : 1 / scale[y])};
       range_jump(y, (sym == arrow_codes[y][1] ? 1 : -1) * distance);
       prepare_draw();
-      XSync(display(), true);
+      while (XCheckWindowEvent(display(), window, KeyPressMask, &new_event)) { }
       return;
     }
   }
@@ -1995,6 +2122,8 @@ inline void X11Graph::key(const XKeyEvent & event) {
   if (count == 1 && buffer[0] >= XK_space && buffer[0] < XK_asciitilde) {
     // std::cerr << " key '" << buffer << "'" << endl;
     bool more{false};
+    bool do_zoom{false};
+    bool zoom_in{false};
     unsigned int rgb{0};
     switch (buffer[0]) {
       case 'R':
@@ -2021,8 +2150,56 @@ inline void X11Graph::key(const XKeyEvent & event) {
       case 'C':
         rgb = 3;
         break;
+      case 'x':
+        x_movement = true;
+        y_movement = false;
+        break;
+      case 'y':
+        y_movement = true;
+        x_movement = false;
+        break;
+      case 'z':
+        x_movement = true;
+        y_movement = true;
+        break;
+      case '+':
+        // fall-thru
+      case '=':
+        do_zoom = true;
+        zoom_in = true;
+        break;
+      case '-':
+        // fall-thru
+      case '_':
+        do_zoom = true;
+        break;
+      case 'q':
+        app.close_window(window);
+        return;
+      case 'd':
+        // Duplicate graph!
+        // Very difficult to do with gene stuff!
+        {
+          X11Graph & graph{X11Graph::create_whole(
+              app, *data,
+              {{width(), height()}, {x_offset() + 100, y_offset() + 100}},
+              "G-Graph", n_threads())};
+          XSync(display(), false);
+          graph.restore_config(current_config());
+          graph.prepare_draw();
+        }
+        break;
       default:
         return;
+    }
+    if (do_zoom) {
+      const double factor{event.state & ControlMask ? 0.3 :
+            (event.state & ShiftMask ? 0.1 : 0.001)};
+      if (x_movement) zoom(0, factor * (zoom_in ? -1 : 1));
+      if (y_movement) zoom(1, factor * (zoom_in ? -1 : 1));
+      prepare_draw();
+      while (XCheckWindowEvent(display(), window, KeyPressMask, &new_event)) { }
+      return;
     }
     const std::string RGB{"RGBC"};
     if (rgb == 3) {
@@ -2094,7 +2271,7 @@ inline void X11Graph::motion(const XMotionEvent & event) {
   moved = true;
   if (XPending(display())) return;
 
-  Event motion_event{Event::X, &app.event};
+  Event motion_event{Event::X, &event};
   bool call_back_acted{false};
   for (unsigned int c{0}; c != call_backs.size(); ++c) {
     if (call_back_radios[c]) {
@@ -2225,9 +2402,9 @@ inline void X11Graph::button_release(const XButtonEvent & event) {
         const int ccscale{2};
         X11Colors::create(
             app, color_names, 0, false,
-            width() / ccscale, height() / ccscale,
-            window_offset.x + width() - (click == 3 ? -4 : width() / ccscale),
-            window_offset.y + click.y - height() / ccscale / 2,
+            {{width() / ccscale, height() / ccscale},
+              {x_offset() + width() - (click == 3 ? -4 : width() / ccscale),
+                    y_offset() + click.y - height() / ccscale / 2}},
             X11Colors::CallBack(std::bind(
                 &color_change_callback, std::placeholders::_1, r,
                 std::ref(*this), std::cref(app), window)),
@@ -2240,7 +2417,7 @@ inline void X11Graph::button_release(const XButtonEvent & event) {
 
   for (Radio * radio : radios) { if (radio->release(click)) return; }
 
-  Event button_event{Event::X, &app.event};
+  Event button_event{Event::X, &event};
   for (unsigned int c{0}; c != call_backs.size(); ++c) {
     if (call_back_radios[c]) {
       if (call_backs[c](*this, button_event)) {
@@ -2299,7 +2476,7 @@ void X11Graph::prepare() {
   drawn = false;
   // Set graph area and clip rectangle
   const int border{min_border()};
-  set_bounds(border, extent(0) - border, border, extent(1) - border);
+  set_bounds(border, width() - border, border, height() - border);
   set_clip_rectangle(bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
 
   // Make sure range is reasonable
@@ -2568,10 +2745,6 @@ void X11Graph::draw_ticks() {
   if (!tick_radios[0] && !tick_radios[1]) return;
   static std::vector<std::string> tick_labels;
   tick_labels.clear();
-  if (0)
-    std::cerr << "Bounds "
-              << bounds[0][0] << " " << bounds[0][1] << " "
-              << bounds[1][0] << " " << bounds[1][1] << std::endl;
   const double avail_height{bounds[1][0] * 0.6};
   X11Font * fits{app.fonts.fits("moo", bounds[0][2], avail_height)};
   if (fits != tick_font) {
@@ -2681,7 +2854,7 @@ XPoint X11Graph::line_bounds_intersection(
 inline bool X11Graph::slow() const { return true; }
 
 // Bug in code? sometimes movie cannot be started until after zoom out
-bool X11Graph::movie(const bool right) {
+void X11Graph::movie(const bool right) {
   status = "Playing the movie - click movie radio button again to stop";
   using Time = std::chrono::time_point<std::chrono::system_clock>;
   const Time start_time{std::chrono::system_clock::now()};
@@ -2697,8 +2870,13 @@ bool X11Graph::movie(const bool right) {
       XWindowEvent(display(), window, ButtonReleaseMask, &event);
       if (movie_radios[right].release(event.xbutton)) {
         movie_radios[right] = false;
-        return true;
+        return;
       }
+    }
+
+    if (XCheckTypedWindowEvent(display(), window, ClientMessage, &event)) {
+      client_message(event.xclient);
+      return;
     }
 
     const std::chrono::milliseconds frame_elapsed{
@@ -2715,7 +2893,7 @@ bool X11Graph::movie(const bool right) {
     last_time = frame_time;
     if (!(range[0][0] > max_range[0][0] && range[0][1] < max_range[0][1])) {
       movie_radios[right] = false;
-      return true;
+      return;
     }
     small_move = true;
     prepare_draw();
@@ -2894,29 +3072,24 @@ class X11TextGrid : public X11Win {
                      const std::vector<unsigned int> & exclusive_rows_ = {},
                      CallBack call_back_ = CallBack(),
                      CallBack cell_test_ = CallBack(),
-                     const unsigned int width__ = 1000,
-                     const unsigned int height__ = 800,
-                     const int x_off__ = 0,
-                     const int y_off__ = 0) {
+                     const Geometry & geometry_ =
+                     Geometry{{1000, 800}, {0, 0}}) {
     app.add(std::make_unique<X11TextGrid>(
         app, data_, inactive_cols_, inactive_rows_,
         exclusive_cols_, exclusive_rows_,
-        call_back_, cell_test_,
-        width__, height__, x_off__, y_off__));
+        call_back_, cell_test_, geometry_));
   }
 
-  explicit X11TextGrid(X11App & app__, const Data & data_,
-                       const std::vector<unsigned int> & inactive_cols_ = {},
-                       const std::vector<unsigned int> & inactive_rows_ = {},
-                       const std::vector<unsigned int> & exclusive_cols_ = {},
-                       const std::vector<unsigned int> & exclusive_rows_ = {},
-                       CallBack call_back_ = CallBack(),
-                       CallBack cell_test_ = CallBack(),
-                       const unsigned int width__ = 1000,
-                       const unsigned int height__ = 800,
-                       const int x_off__ = 0,
-                       const int y_off__ = 0) :
-      X11Win(app__, width__, height__, x_off__, y_off__, false),
+  explicit X11TextGrid(
+      X11App & app__, const Data & data_,
+      const std::vector<unsigned int> & inactive_cols_ = {},
+      const std::vector<unsigned int> & inactive_rows_ = {},
+      const std::vector<unsigned int> & exclusive_cols_ = {},
+      const std::vector<unsigned int> & exclusive_rows_ = {},
+      CallBack call_back_ = CallBack(),
+      CallBack cell_test_ = CallBack(),
+      const Geometry & geometry_ = Geometry{{1000, 800}, {0, 0}}) :
+      X11Win(app__, geometry_, false),
       data{data_.size() ? data_ : Data(1, Column{"Empty"})},
     inactive_cols{inactive_cols_}, inactive_rows{inactive_rows_},
     exclusive_cols{exclusive_cols_}, exclusive_rows{exclusive_rows_},
@@ -3073,23 +3246,11 @@ class X11TextGrid : public X11Win {
 
     if (layout_width() > width()) return false;
     if (layout_height() > height()) return false;
-    if (0)
-      std::cerr << "Layout "
-                << n_cols() << " " << n_rows() << " "
-                << width() << " " << height() << " "
-                << grid_width() << " " << grid_height() << " "
-                << total_text_max_width << " " << font_size() << std::endl;
     return true;
   }
 
   virtual void prepare() {
     // Get optimal layout to just fit
-    if (0) {
-      while (layout()) {
-        if (font == &fonts.back()) break;
-        ++font;
-      }
-    }
     font = &fonts.back();
     while (!layout()) {
       if (font == &fonts.front()) break;
@@ -3242,8 +3403,6 @@ class X11Plotter {
   Data data{};
   Names names{};
 };
-
-#pragma GCC diagnostic pop
 
 }  // namespace paa
 
