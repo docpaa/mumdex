@@ -1322,8 +1322,8 @@ class X11Graph : public X11Win, public SavedConfig {
            const unsigned int height_ = default_height,
            const int x_off_ = 0, const int y_off_ = 0,
            const std::string title = "",
-	   const unsigned int n_threads__ =
-	   std::thread::hardware_concurrency());
+           const unsigned int n_threads__ =
+           std::thread::hardware_concurrency());
   template <class ... Input>
   X11Graph(X11App & app__, Input && ... input);
   virtual ~X11Graph();
@@ -1559,7 +1559,7 @@ X11Graph::X11Graph(X11App & app__, const Data & data__,
                    const unsigned int height_,
                    const int x_off_, const int y_off_,
                    const std::string title,
-		   const unsigned int n_threads__) :
+                   const unsigned int n_threads__) :
     X11Win{app__, width_, height_, x_off_, y_off_, true, title},
       input_data{data__}, data{&input_data}, n_threads_{n_threads__} {
                             initialize();

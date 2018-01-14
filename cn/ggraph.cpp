@@ -748,9 +748,9 @@ int main(int argc, char* argv[]) try {
         argv += 5;
       } else if (option == "--n-threads") {
 #ifndef __CYGWIN__
-	n_threads = atoi(argv[2]);
+        n_threads = atoi(argv[2]);
 #else
-	cerr << "Ignoring --n-threads under Cygwin OS" << endl;
+        cerr << "Ignoring --n-threads under Cygwin OS" << endl;
 #endif
         argc -= 2;
         argv += 2;
