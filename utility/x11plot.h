@@ -1311,7 +1311,8 @@ class X11Graph : public X11Win, public SavedConfig {
       const unsigned int width_ = default_width,
       const unsigned int height_ = default_height,
       const int x_off_ = 0, const int y_off_ = 0,
-      const std::string title = "");
+      const std::string title = "",
+      const unsigned int n_threads__ = std::thread::hardware_concurrency());
   template <class ... Input>
   static X11Graph & create(X11App & app, Input && ... input);
 
@@ -1320,7 +1321,9 @@ class X11Graph : public X11Win, public SavedConfig {
            const unsigned int width_ = default_width,
            const unsigned int height_ = default_height,
            const int x_off_ = 0, const int y_off_ = 0,
-           const std::string title = "");
+           const std::string title = "",
+	   const unsigned int n_threads__ =
+	   std::thread::hardware_concurrency());
   template <class ... Input>
   X11Graph(X11App & app__, Input && ... input);
   virtual ~X11Graph();
@@ -1518,7 +1521,11 @@ class X11Graph : public X11Win, public SavedConfig {
   void save_config(const SavedConfig & config);
 
   // Number of threads to use
-  unsigned int n_threads_{std::max(std::thread::hardware_concurrency(), 1U)};
+#ifdef __CYGWIN__
+  unsigned int n_threads_{1};
+#else
+  unsigned int n_threads_{std::thread::hardware_concurrency()};
+#endif
   ThreadPool pool{n_threads()};
   unsigned int n_threads() const;
   void n_threads(const unsigned int n_threads__);
@@ -1532,10 +1539,11 @@ X11Graph & X11Graph::create_whole(
     X11App & app, const Data & data__,
     const unsigned int width_, const unsigned int height_,
     const int x_off_, const int y_off_,
-    const std::string title) {
+    const std::string title,
+    const unsigned int n_threads__) {
   return reinterpret_cast<X11Graph &>(app.add(
       std::make_unique<X11Graph>(
-          app, data__, width_, height_, x_off_, y_off_, title)));
+    app, data__, width_, height_, x_off_, y_off_, title, n_threads__)));
 }
 
 // Creation factory from a bunch of vectors x1, y1, x2, y2, ...
@@ -1550,9 +1558,10 @@ X11Graph::X11Graph(X11App & app__, const Data & data__,
                    const unsigned int width_,
                    const unsigned int height_,
                    const int x_off_, const int y_off_,
-                   const std::string title) :
+                   const std::string title,
+		   const unsigned int n_threads__) :
     X11Win{app__, width_, height_, x_off_, y_off_, true, title},
-                          input_data{data__}, data{&input_data} {
+      input_data{data__}, data{&input_data}, n_threads_{n_threads__} {
                             initialize();
                           }
 
@@ -2681,7 +2690,7 @@ bool X11Graph::movie(const bool right) {
   const double page_rate{0.35};  // pages per second scroll rate
   XEvent event;
   XWindowEvent(display(), window, ButtonReleaseMask, &event);
-  const double frames_per_second{60.0};
+  const double frames_per_second{15.0};
   const size_t milliseconds_per_frame{
     static_cast<uint64_t>(1000 / frames_per_second)};
   for (uint64_t frame{0}; ; ++frame) {
@@ -2851,13 +2860,17 @@ inline void X11Graph::n_threads(const unsigned int n_threads__) {
 
 void X11Graph::open_url(const std::string & url) const {
   std::ostringstream browser;
-#ifdef __linux__
-  const bool mac{false};
+#ifdef __APPLE__
+  const std::string open_browser{"open -a safari"};
 #else
-  const bool mac{true};
+#ifdef __CYGWIN__
+  const std::string open_browser{
+    "/cygdrive/c/Program*Files/Internet*Explorer/iexplore.exe"};
+#else
+  const std::string open_browser{"firefox"};
 #endif
-  browser << std::string(!mac ? "firefox" : "open -a safari")
-          << " " << url << " &";
+#endif
+  browser << open_browser << " " << url << " &";
   if (system(browser.str().c_str()) == -1) {
     std::cerr << "Problem starting browser" << std::endl;
   }

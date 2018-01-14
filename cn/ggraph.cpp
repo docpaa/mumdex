@@ -80,7 +80,11 @@ using paa::X11Font;
 using paa::X11Graph;
 using paa::X11Win;
 
+#ifdef __CYGWIN__
+unsigned int n_threads{1};
+#else
 unsigned int n_threads{std::max(std::thread::hardware_concurrency(), 1U)};
+#endif
 
 const unsigned int max_gene_mb{100};
 const unsigned int max_name_mb{5};
@@ -743,7 +747,11 @@ int main(int argc, char* argv[]) try {
         argc -= 5;
         argv += 5;
       } else if (option == "--n-threads") {
-        n_threads = atoi(argv[2]);
+#ifndef __CYGWIN__
+	n_threads = atoi(argv[2]);
+#else
+	cerr << "Ignoring --n-threads under Cygwin OS" << endl;
+#endif
         argc -= 2;
         argv += 2;
       } else if (option == "--fullscreen") {
@@ -862,8 +870,7 @@ int main(int argc, char* argv[]) try {
   // All individuals graph
   X11Graph & graph{X11Graph::create_whole(app, data,
                                           width, height, x_off, y_off,
-                                          "G-Graph")};
-  // graph.pool(move(pool));  // done for a strange reason
+                                          "G-Graph", n_threads)};
   X11Graph * graphp{&graph};
 
   // Adjust series positions, assign names, and make some series lines only
@@ -971,8 +978,6 @@ int main(int argc, char* argv[]) try {
     graph.grid_radios[1][0].toggled = false;
     graph.log_radios[0].actions.visible = [] () { return false; };
   }
-
-  graph.n_threads(n_threads);
 
   // Process initial view command line arguments
   if (initial) {
