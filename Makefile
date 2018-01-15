@@ -104,9 +104,8 @@ ifeq ($(UNAME),Darwin)
 endif
 
 # For gcc under cygwin
-ifeq ($(UNAME),Windows_NT)
-#	INCFLAGS += -I /usr/include/
-#	LIBFLAGS += -L /usr/lib
+ifneq (,$(findstring /cygdrive/,$(PATH)))
+	LIBS += -pthread
 endif
 
 LDFLAGS += $(LIBFLAGS)
