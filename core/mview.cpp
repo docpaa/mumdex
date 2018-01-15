@@ -28,8 +28,8 @@ using paa::Geometry;
 int main(int argc, char* argv[]) try {
   // Process optional command line arguments
   --argc;
-  int width{2560};
-  int height{1600};
+  int width{1000};
+  int height{800};
   int x_off{10};
   int y_off{40};
   while (argc) {

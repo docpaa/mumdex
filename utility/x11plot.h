@@ -258,6 +258,7 @@ class Geometry {
   Geometry(const int width_, const int height_,
            const int x_offset_, const int y_offset_) :
       size_{width_, height_}, offset_{x_offset_, y_offset_} { }
+  virtual ~Geometry() { }
 
   // Comparisons - slice warning!
   bool operator==(const Geometry & rhs) const {
@@ -1966,10 +1967,11 @@ inline void X11Graph::get_range(const unsigned int a) {
 }
 
 inline void X11Graph::set_range(const bool y,
-                                const double low, const double high) {
-  if (fabs(high - low) > 0.00000000001 * max_range[y][2]) {
-    range[y][0] = low;
-    range[y][1] = high;
+                                const double new_low,
+                                const double new_high) {
+  if (fabs(new_high - new_low) > 0.00000000001 * max_range[y][2]) {
+    range[y][0] = new_low;
+    range[y][1] = new_high;
     range[y][2] = range[y][1] - range[y][0];
   } else {
     // Reset range if screwy
@@ -2327,18 +2329,18 @@ inline void X11Graph::motion(const XMotionEvent & event) {
   const bool y_press{(quadrant % 2) == 1};
   const Range old_range(range);
 
-  const bool scroll{click == 2};
-  const bool zoom{click == 3};
-  const bool select{click == 1};
+  const bool do_scroll{click == 2};
+  const bool do_zoom{click == 3};
+  const bool do_select{click == 1};
 
-  if (scroll) {
+  if (do_scroll) {
     for (const bool y : {false, true}) {
       if (!in_bounds(click) && y_press != y) continue;
       const int distance{point[y] - last_motion[y]};
       const double move{(y ? 1 : -1) * distance / scale[y]};
       range_jump(y, move);
     }
-  } else if (select) {
+  } else if (do_select) {
     // draw_controls();
     if (in_bounds(click)) {
       const Point min_point{min(last_motion.x, click.x, point.x),
@@ -2373,7 +2375,7 @@ inline void X11Graph::motion(const XMotionEvent & event) {
                 y_press ? loc : click.x, y_press ? click.y : loc,
                 y_press ? loc : point.x, y_press ? point.y : loc);
     }
-  } else if (zoom) {
+  } else if (do_zoom) {
     for (const bool y : {false, true}) {
       if (!in_bounds(click) && y_press != y) continue;
       const int distance{point[y] - last_motion[y]};
@@ -2450,8 +2452,8 @@ inline void X11Graph::button_release(const XButtonEvent & event) {
       for (const bool y : {false, true}) {
         // if ((center || out) && range[y] == max_range[y]) continue;
         if (!in_bounds(click) && y_press != y) continue;
-        const double zoom{center ? 1.0 : (in ? 0.1 : 10.0)};
-        const double half{0.5 * range[y][2] * zoom};
+        const double zoom_factor{center ? 1.0 : (in ? 0.1 : 10.0)};
+        const double half{0.5 * range[y][2] * zoom_factor};
         const double mid{icoord(y, click[y])};
         set_range(y, std::max(max_range[y][0], mid - half),
                   std::min(max_range[y][1], mid + half));
@@ -2538,9 +2540,9 @@ void X11Graph::prepare() {
             if ((last.y < erange[1][0]) != (vals.y < erange[1][0]) ||
                 (last.y < erange[1][1]) != (vals.y < erange[1][1])) {
               const bool last_low{last.y < erange[1][0]};
-              for (const bool high :
+              for (const bool high_ :
                 {last_low ? false : true, last_low ? true : false}) {
-                const double y_horizontal{high ? erange[1][1] : erange[1][0]};
+                const double y_horizontal{high_ ? erange[1][1] : erange[1][0]};
                 if ((last.y > y_horizontal) == (vals.y > y_horizontal))
                   continue;
                 const double x_int{line_horizontal_x(last, vals, y_horizontal)};

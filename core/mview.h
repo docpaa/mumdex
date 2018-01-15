@@ -52,7 +52,7 @@ class X11MUMdexViewer : public X11Win {
   X11MUMdexViewer(X11App & app__,
                   const std::vector<std::string> & mumdex_names__,
                   const std::vector<MUMDEX> & mumdexes__,
-                  const  Geometry geometry_ = {{1200, 1000}, {0, 0}}) :
+                  const Geometry geometry_ = {{1200, 1000}, {0, 0}}) :
       X11Win{app__, geometry_},
     mumdex_names_{mumdex_names__},
     mumdexes_{mumdexes__},
@@ -116,7 +116,7 @@ class X11MUMdexViewer : public X11Win {
 
         std::cout << "Window id is " << window << std::endl;
         return;
-
+#if 0
         // continuous data pre-loading
         for (unsigned int m{0}; m != mumdexes_.size(); ++m) {
           futures.push_back(
@@ -130,6 +130,7 @@ class X11MUMdexViewer : public X11Win {
                   }
                 }, std::ref(mumdexes_[m]), std::ref(read_mutexes[m])));
         }
+#endif
     }
 
   ~X11MUMdexViewer() {
@@ -141,7 +142,6 @@ class X11MUMdexViewer : public X11Win {
 
   X11MUMdexViewer(const X11MUMdexViewer &) = delete;
   X11MUMdexViewer & operator=(const X11MUMdexViewer &) = delete;
-
 
   virtual void button_press(const XButtonEvent & event) {
     last_motion = last_press = event;
@@ -294,8 +294,10 @@ class X11MUMdexViewer : public X11Win {
   }
 
   int read_position(const MUMindex & mindex) const {
-    const Pair pair{mumdex_->pair(mindex)};
     const MUM mum{mumdex_->mum(mindex)};
+    return mum.read_position0(mumdex_->pair(mindex).length(mum.read_2()));
+    // should be equivalent to...
+    const Pair pair{mumdex_->pair(mindex)};
     const unsigned int read_length{pair.length(mum.read_2())};
     return mum.read_position0(read_length);
   }
@@ -305,6 +307,10 @@ class X11MUMdexViewer : public X11Win {
   }
 
   virtual void client_message(const XClientMessageEvent & event) {
+    X11Win::client_message(event);
+    if (static_cast<uint64_t>(event.data.l[0]) == *app.wmDeleteMessage()) {
+      return;
+    }
     const unsigned int c{static_cast<unsigned int>(event.data.l[1])};
     const unsigned int p{static_cast<unsigned int>(event.data.l[2])};
     std::cout << "Setting view to position "
@@ -522,36 +528,34 @@ class X11MUMdexViewer : public X11Win {
             if (empty) {
               const char base{mum.flipped() ? complement(sequence[b]) :
                     sequence[b]};
-              const unsigned int offset{mum.flipped() ?
+              const unsigned int base_offset{mum.flipped() ?
                     read_length - b - 1 : b};
-              const int64_t pos{read_pos + static_cast<int>(offset)};
+              const int64_t pos{read_pos + static_cast<int>(base_offset)};
               const GC base_gc{base == ref[mum.chromosome()][pos] ?
                     color_gcs[0] : char_gcs[base]};
-              rectangle(base_gc, read_x + offset * pixels_per_base, y,
+              rectangle(base_gc, read_x + base_offset * pixels_per_base, y,
                         pixels_per_base,
                         height__, true);
             }
           }
         }
       } else {
-        unsigned int low(static_cast<unsigned int>(base_seen.size()));
+        unsigned int low_(static_cast<unsigned int>(base_seen.size()));
         for (unsigned int b{0}; b != base_seen.size(); ++b) {
           const bool empty{!base_seen[b]};
-          if (empty && low == base_seen.size()) low = b;
-          if ((!empty && low != base_seen.size()) ||
+          if (empty && low_ == base_seen.size()) low_ = b;
+          if ((!empty && low_ != base_seen.size()) ||
               (empty && b + 1 == base_seen.size())) {
-            const unsigned int high{b + (empty ? 1 : 0)};
-            const unsigned int wid{pixels_per_base * (high - low)};
-            const unsigned int offset{mum.flipped() ?
-                  read_length - high : low};
-            rectangle(gc, read_x + offset * pixels_per_base, y, wid,
+            const unsigned int high_{b + (empty ? 1 : 0)};
+            const unsigned int wid{pixels_per_base * (high_ - low_)};
+            const unsigned int off{mum.flipped() ?
+                  read_length - high_ : low_};
+            rectangle(gc, read_x + off * pixels_per_base, y, wid,
                       height__, true);
-            low = static_cast<unsigned int>(base_seen.size());
+            low_ = static_cast<unsigned int>(base_seen.size());
           }
         }
       }
-
-      // std::cout << endl;
     }
     draw_controls();
 
@@ -570,6 +574,7 @@ class X11MUMdexViewer : public X11Win {
       smallest_index = new_smallest_index;
       biggest_index = new_biggest_index;
     }
+    XFlush(display());
   }
 
   OneBridgeInfo bridge(const MUM mumA, const MUM mumB) const {
@@ -718,6 +723,7 @@ class X11MUMdexViewer : public X11Win {
   unsigned int chromosome{0};
   int selected_position{0};
   int start_position{0};
+
   bool exited{false};
   std::mutex exited_mutex{};
   ThreadPool pool;
@@ -774,7 +780,6 @@ class X11MUMdexViewer : public X11Win {
         draw();
         draw_status(mumdex_names_[mumdex_ - &*mumdexes_.begin()]);
       }, [this]() { return mumdex_names_.size() > 1; }}};
-
 
   std::vector<Radio *> radios{&dupes_radio,
         &border_radio, &bases_radio, &invariants_radio,
