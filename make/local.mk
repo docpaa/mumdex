@@ -35,7 +35,7 @@ ifeq ($(SGE_CLUSTER_NAME), wigclust)
     LIBFLAGS += -L$(tclib) -L$(unwindlib)
     LIBS += $(tclibs)
   endif
-else ifeq ($(SGE_ROOT), /opt/sge)
+else ifeq ($(SGE_ROOT), /opt/uge)
 # NYGC special definitions 
 ifeq ($(USER), andrewsp-488)
   # for Peter

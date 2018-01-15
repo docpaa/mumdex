@@ -713,7 +713,7 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
   return false;
 }
 
-int main(int argc, char* argv[]) try {
+int main(int argc, char * argv[]) try {
   // Process optional command line arguments
   --argc;
 
@@ -810,7 +810,7 @@ int main(int argc, char* argv[]) try {
       for (const string & name : names) {
         futures.push_back(
             pool.run([&columns] (const string & file_name) {
-                return Columns{file_name, 1000000,
+                return Columns{file_name, 500000,
                       columns, columns.find_first_not_of(
                           "0123456789,") != string::npos};
               }, name));
