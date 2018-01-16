@@ -574,7 +574,7 @@ class X11WindowT : public Geometry {
     const std::string image_name{get_next_file(base_name, "xpm")};
     const std::string png_name{replace_substring(image_name, "xpm", "png")};
     draw();
-    save_image(image_name, window, 0, 0, width(), height(), call_back);
+    save_image(image_name, pixmap, 0, 0, width(), height(), call_back);
     image_names.push_back(image_name);
     std::ostringstream png_command;
     png_command << "convert " << image_names.back() << " "
@@ -1506,9 +1506,9 @@ class X11Graph : public X11Win, public SavedConfig {
   void draw_status(const bool force = false) const;
   void draw_controls();
   void draw_grid() const;
-  void draw_ticks();
+  void draw_ticks(Drawable drawable);
   void redraw();
-  void erase_border();
+  void erase_border(Drawable drawable);
   void set_clip_rectangle(const unsigned int x, const unsigned int y,
                           const unsigned int width_,
                           const unsigned int height_);
@@ -2094,7 +2094,7 @@ void X11Graph::expose(const XExposeEvent & event) {
 
 void X11Graph::enter(const XCrossingEvent &) {
   inside = true;
-  erase_border();
+  erase_border(window);
   draw_controls();
 }
 
@@ -2341,7 +2341,6 @@ inline void X11Graph::motion(const XMotionEvent & event) {
       range_jump(y, move);
     }
   } else if (do_select) {
-    // draw_controls();
     if (in_bounds(click)) {
       const Point min_point{min(last_motion.x, click.x, point.x),
             min(last_motion.y, click.y, point.y)};
@@ -2472,6 +2471,10 @@ inline void X11Graph::leave(const XCrossingEvent &) {
   //  for (Radio * radio : radios) radio->erase();
   status = "";
   draw_controls();
+  if (0)
+  XDrawRectangle(display(), window, border_gc,
+                 bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
+  draw_ticks(window);
 }
 
 void X11Graph::prepare() {
@@ -2607,6 +2610,11 @@ void X11Graph::draw() {
   for (unsigned int c{0}; c != call_backs.size(); ++c)
     if (call_back_radios[c]) call_backs[c](*this, nothing);
 
+  XDrawRectangle(display(), pixmap, border_gc,
+                 bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
+  draw_grid();
+  draw_ticks(window);
+
   if (just_configured) {
     just_configured = false;
     XCopyArea(display(), pixmap, window, gc, 0, 0, width(), height(), 0, 0);
@@ -2619,7 +2627,6 @@ void X11Graph::draw() {
     const SavedConfig current{current_config()};
     if (saved_config.empty() || current != saved_config.back()) {
       save_config(std::move(current));
-      // draw_controls();
     }
   }
 }
@@ -2719,14 +2726,10 @@ void X11Graph::draw_status(const bool force) const {
 }
 
 void X11Graph::draw_controls() {
-  XDrawRectangle(display(), window, border_gc,
-                 bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
+  erase_border(window);
   draw_status();
-  draw_grid();
   for (const Radio * radio : radios) radio->draw();
-
-  // Draw tick labels
-  draw_ticks();
+  draw_ticks(window);
 }
 
 inline void X11Graph::draw_grid() const {
@@ -2735,14 +2738,14 @@ inline void X11Graph::draw_grid() const {
     for (const std::pair<double, bool> tick : axis.ticks()) {
       if (!grid_radios[!tick.second][y]) continue;
       const int loc{coord(y, tick.first)};
-      XDrawLine(display(), window, tick.second ? major_gc : minor_gc,
+      XDrawLine(display(), pixmap, tick.second ? major_gc : minor_gc,
                 y ? bounds[0][0] : loc, y ? loc : bounds[1][0],
                 y ? bounds[0][1] : loc, y ? loc : bounds[1][1]);
     }
   }
 }
 
-void X11Graph::draw_ticks() {
+void X11Graph::draw_ticks(Drawable drawable) {
   if (inside) return;
   if (!tick_radios[0] && !tick_radios[1]) return;
   static std::vector<std::string> tick_labels;
@@ -2766,7 +2769,7 @@ void X11Graph::draw_ticks() {
       tick_labels.push_back(label.str());
       std::string & text{tick_labels.back()};
       const int t_width{tick_font->string_width(text)};
-      XDrawString(display(), window, tick_label_gc,
+      XDrawString(display(), drawable, tick_label_gc,
                   y ? std::max(0, bounds[0][0] - t_width - 3) :
                   loc - t_width / 2,
                   y ? tick_font->centered_y(loc) : bounds[1][1] + t_height,
@@ -2801,11 +2804,12 @@ inline void X11Graph::set_clip_rectangle(
   }
 }
 
-inline void X11Graph::erase_border() {
-  XFillRectangle(display(), window, fill_gc,
-                 0, bounds[1][1], width(), height());
-  XFillRectangle(display(), window, fill_gc,
-                 0, 0, bounds[0][0], height());
+inline void X11Graph::erase_border(Drawable drawable) {
+  // To get rid of tick marks
+  XFillRectangle(display(), drawable, fill_gc,
+                 0, bounds[1][1] + 1 + border_width / 2, width(), bounds[1][0]);
+  XFillRectangle(display(), drawable, fill_gc,
+                 0, 0, bounds[0][0] - border_width / 2, height());
 }
 
 inline void X11Graph::set_line_widths(std::vector<GC> gcs, const int width_) {
@@ -2917,7 +2921,9 @@ void X11Graph::save_image(const std::string & base_name,
   const bool help_state = help_radio;
   help_radio = false;
   draw_controls();
+  draw_ticks(pixmap);
   X11Win::save_image(base_name, call_back);
+  erase_border(pixmap);
   inside = true;
   help_radio = help_state;
   status = "Done saving image";

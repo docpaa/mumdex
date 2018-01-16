@@ -313,6 +313,15 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
 
   if (gene_limits[0] > gene_limits[1]) gene_limits[0] = gene_limits[1];
 
+  static GC gc{graph.create_gc(graph.app.black, graph.app.white, 2)};
+
+  // Set clip rectangle
+  static iBounds last_bounds;
+  if (graph.bounds != last_bounds) {
+    XRectangle clip_rectangle(rect(graph.bounds));
+    XSetClipRectangles(graph.display(), gc, 0, 0, &clip_rectangle, 1, YXBanded);
+  }
+
   // Draw all exons and genes in range
   const int exon_height{10};  // Should scale with window?
   const unsigned int gene_y(graph.bounds[1][0] * 1.3);
@@ -349,7 +358,7 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
       }
       if (!merged) names.insert(bounds.second, to_add);
     }
-    XDrawLine(graph.display(), graph.pixmap, graph.border_gc,
+    XDrawLine(graph.display(), graph.pixmap, gc,
               max(graph.bounds[0][0], static_cast<int>(gene_start)), gene_y,
               min(graph.bounds[0][1], static_cast<int>(gene_stop)), gene_y);
 
@@ -368,7 +377,7 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
       const int box_start{graph.coord(0, mod_start)};
       const int box_stop{frac_pixel < 1.5 ? box_start + 1 :
             graph.coord(0, mod_stop)};
-      XFillRectangle(graph.display(), graph.pixmap, graph.border_gc,
+      XFillRectangle(graph.display(), graph.pixmap, graph.gc,
                      box_start, exon_y, box_stop - box_start, exon_height);
     }
   }
@@ -378,21 +387,9 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
   // Get good font for gene names
   const double avail_height{(graph.bounds[1][0] - graph.border_width) * 0.6};
   static const X11Font * last_font{nullptr};
-  static GC gc{[&graph]() {
-      GC gc_{XCreateGC(graph.display(), graph.window, 0, nullptr)};
-      XSetForeground(graph.display(), gc_, graph.app.black);
-      return gc_;
-    }()};
   const X11Font * fits{graph.app.fonts.fits("A", 1000, avail_height)};
   if (fits != last_font) XSetFont(graph.display(), gc, fits->id());
   last_font = fits;
-
-  // Set clip rectangle
-  static iBounds last_bounds;
-  if (graph.bounds != last_bounds) {
-    XRectangle clip_rectangle(rect(graph.bounds));
-    XSetClipRectangles(graph.display(), gc, 0, 0, &clip_rectangle, 1, YXBanded);
-  }
 
   // Draw gene names nicely
   std::vector<Item> snames(names.begin(), names.end());
