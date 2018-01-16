@@ -67,6 +67,7 @@ int main(int argc, char* argv[])  try {
     sout << '\n';
   }
 
+  cerr << "All done" << endl;
   return 0;
 } catch (Error & e) {
   cerr << "paa::Error:" << endl;
