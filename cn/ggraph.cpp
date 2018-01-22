@@ -247,12 +247,11 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
       case ButtonRelease:
         {
           // Open genome browser
-          const XButtonEvent & xbutton{event.x->xbutton};
           for (const GeneInfo & gene : gene_info) {
-            if (xbutton.x >= gene.bounds[0][0] &&
-                xbutton.x <= gene.bounds[0][1] &&
-                xbutton.y >= gene.bounds[1][0] &&
-                xbutton.y <= gene.bounds[1][1]) {
+            if (graph.click.x >= gene.bounds[0][0] &&
+                graph.click.x <= gene.bounds[0][1] &&
+                graph.click.y >= gene.bounds[1][0] &&
+                graph.click.y <= gene.bounds[1][1]) {
               const pair<unsigned int, unsigned int> chrpos_start{
                 cn_abspos.chrpos(graph.icoord(0, gene.low))};
               const pair<unsigned int, unsigned int> chrpos_stop{

@@ -4,6 +4,8 @@ DEVELOPMENT_PROGRAMS := \
 	anchor_reads \
 	anchor_repeatness \
 	annotate_repeats \
+	assembler \
+	assembly_index \
 	assess_known_cn_events \
 	bam_genotyper \
 	bin_events \

@@ -76,10 +76,44 @@ struct PointT {
   Type x{0};
   Type y{0};
 };
-using Point = PointT<int>;  // Integer point
-using uPoint = PointT<unsigned int>;  // Unsigned integer point
-using bPoint = PointT<bool>;  // Boolean point
-using dPoint = PointT<double>;  // Double point
+using iPoint = PointT<int>;
+using uPoint = PointT<unsigned int>;
+using bPoint = PointT<bool>;
+using dPoint = PointT<double>;
+using Point = iPoint;
+
+// Line class
+template <class Type>
+struct LineT {
+  constexpr LineT() = default;
+  constexpr LineT(const Type start_, const Type stop_) :
+      start{start_}, stop{stop_} { }
+
+  template <class Line>
+  LineT & operator=(const Line & event) {
+    start = event.start;
+    stop = event.stop;
+    return *this;
+  }
+  Type operator[](const bool stop_) const { return stop_ ? stop : start; }
+  Type & operator[](const bool stop_) { return stop_ ? stop : start; }
+  bool operator==(const LineT rhs) const {
+    return start == rhs.start && stop == rhs.stop;
+  }
+  bool operator!=(const LineT rhs) const {
+    return start != rhs.start || stop != rhs.stop;
+  }
+  double length() const {
+    return start.distance(stop);
+  }
+
+  Type start{0};
+  Type stop{0};
+};
+using iLine = LineT<iPoint>;
+using uLine = LineT<uPoint>;
+using dLine = LineT<dPoint>;
+using Line = dLine;
 
 class X11Font {
  public:
@@ -1412,6 +1446,58 @@ class SavedConfig {
   std::vector<unsigned char> radio_states{};
 };
 
+// Returns 1 if the lines intersect, otherwise 0. In addition, if the lines
+// intersect the intersection point may be stored in the floats i_x and i_y.
+bool get_line_intersection(double p0_x, double p0_y, double p1_x, double p1_y,
+                           double p2_x, double p2_y, double p3_x, double p3_y,
+                           double *i_x, double *i_y) {
+    double s1_x, s1_y, s2_x, s2_y;
+    s1_x = p1_x - p0_x;     s1_y = p1_y - p0_y;
+    s2_x = p3_x - p2_x;     s2_y = p3_y - p2_y;
+
+    double s, t;
+    s = (-s1_y * (p0_x - p2_x) + s1_x * (p0_y - p2_y)) /
+        (-s2_x * s1_y + s1_x * s2_y);
+    t = (s2_x * (p0_y - p2_y) - s2_y * (p0_x - p2_x)) /
+        (-s2_x * s1_y + s1_x * s2_y);
+
+    if (s >= 0 && s <= 1 && t >= 0 && t <= 1) {
+      // Collision detected
+      if (i_x != NULL)
+        *i_x = p0_x + (t * s1_x);
+      if (i_y != NULL)
+        *i_y = p0_y + (t * s1_y);
+      return true;
+    }
+
+    // No collision
+    return false;
+}
+
+bool point_within_range(const dPoint & point, const Range & range) {
+  if (point.x >= range[0][0] && point.x <= range[0][1] &&
+      point.y >= range[1][0] && point.y <= range[1][1]) return true;
+  return false;
+}
+
+std::pair<Line, bool> line_within_range(
+    const Line & line, const Range & range) {
+  // Fully inside
+  if (point_within_range(line[0], range) &&
+      point_within_range(line[1], range)) {
+    return {line, true};
+  }
+
+  // Fully out for sure
+  if ((line[0].x < range[0][0] && line[1].x < range[0][0]) ||
+      (line[0].x > range[0][1] && line[1].x < range[0][1]) ||
+      (line[0].y < range[1][0] && line[1].y < range[1][0]) ||
+      (line[0].y > range[1][1] && line[1].y < range[1][1])) {
+    return {line, false};
+  }
+  return {line, false};  // Fix
+}
+
 class X11Graph : public X11Win, public SavedConfig {
  public:
   // Graph constants
@@ -2025,8 +2111,19 @@ inline void X11Graph::show_range(const std::string prefix) const {
   std::cout << std::endl;
 }
 
+inline int clip_to_int(const double val) {
+  return std::min(
+      static_cast<double>(std::numeric_limits<int>::max() - 2),
+      std::max(static_cast<double>(std::numeric_limits<int>::min() + 2),
+               val));
+}
+
 // Data to window coordinate transformation
 inline int X11Graph::coord(const bool y, const double val) const {
+#if 1
+  return clip_to_int(bounds[y][y] +
+                     (y ? -1 : 1) * (val - range[y][0]) * scale[y]);
+#endif
   if (y) return bounds[1][1] - (val - range[1][0]) * scale[1];
   return bounds[0][0] + (val - range[0][0]) * scale[0];
 }
@@ -2524,21 +2621,13 @@ void X11Graph::prepare() {
           arcs[s].emplace_back(arc);
         }
         // Complicated to handle lines exiting the display area properly
-        if (do_lines(s)) {  // Assumes points ordered by X!!!
+        // Assumes points ordered by X!!!
+        if (do_lines(s) && 100 * range[1][2] > max_range[1][2]) {
           if (vals[0] < erange[0][0]) continue;
           if (p) {
             // left - right range transition
             const dPoint last{(*series[0])[p - 1], (*series[1])[p - 1]};
             if (last.x > erange[0][1]) break;
-            if (last.x < erange[0][0] || vals.x > erange[0][1]) {
-              for (const bool left : {true, false}) {
-                const double x_vertical{left ? erange[0][0] : erange[0][1]};
-                if (last.x >= x_vertical || vals.x <= x_vertical) continue;
-                const double y_int{line_vertical_y(last, vals, x_vertical)};
-                if (y_int > erange[1][0] && y_int < erange[1][1])
-                  points[s].push_back(xcoord(dPoint{x_vertical, y_int}));
-              }
-            }
             // top-bottom transition points, properly ordered by x
             if ((last.y < erange[1][0]) != (vals.y < erange[1][0]) ||
                 (last.y < erange[1][1]) != (vals.y < erange[1][1])) {
@@ -2549,14 +2638,26 @@ void X11Graph::prepare() {
                 if ((last.y > y_horizontal) == (vals.y > y_horizontal))
                   continue;
                 const double x_int{line_horizontal_x(last, vals, y_horizontal)};
-                if (x_int >= erange[0][0] && x_int <= erange[0][1])
-                  points[s].push_back(xcoord(dPoint{x_int, y_horizontal}));
+                // if (x_int >= erange[0][0] && x_int <= erange[0][1])
+                points[s].push_back(xcoord(dPoint{x_int, y_horizontal}));
               }
+            } else if (last.x < erange[0][0] || vals.x > erange[0][1]) {
+              for (const bool left : {true, false}) {
+                const double x_vertical{left ? erange[0][0] : erange[0][1]};
+                if (last.x >= x_vertical || vals.x <= x_vertical) continue;
+                const double y_int{line_vertical_y(last, vals, x_vertical)};
+                // if (y_int > erange[1][0] && y_int < erange[1][1])
+                points[s].push_back(xcoord(dPoint{x_vertical, y_int}));
+              }
+            } else if (vals.x >= erange[0][0] && vals.x <= erange[0][1] &&
+                       vals.y >= erange[1][0] && vals.y <= erange[1][1]) {
+              points[s].push_back(xcoord(vals));
             }
+          } else {
+            if (vals.x >= erange[0][0] && vals.x <= erange[0][1] &&
+                vals.y >= erange[1][0] && vals.y <= erange[1][1])
+              points[s].push_back(xcoord(vals));
           }
-          if (vals.x >= erange[0][0] && vals.x <= erange[0][1] &&
-              vals.y >= erange[1][0] && vals.y <= erange[1][1])
-            points[s].push_back(xcoord(vals));
         }
       }
     }
@@ -2820,6 +2921,8 @@ inline void X11Graph::set_line_widths(std::vector<GC> gcs, const int width_) {
 
 inline double X11Graph::line_vertical_y(const dPoint low_x, const dPoint high_x,
                                         const double x) const {
+  if (!dne(high_x.x, low_x.x)) throw Error("slope prob 1");
+  if (!dne(high_x.y, low_x.y)) return low_x.y;
   const double slope((high_x.y - low_x.y) / (high_x.x - low_x.x));
   return low_x.y + (x - low_x.x) * slope;
 }
@@ -2827,6 +2930,8 @@ inline double X11Graph::line_vertical_y(const dPoint low_x, const dPoint high_x,
 inline double X11Graph::line_horizontal_x(
     const dPoint low_x, const dPoint high_x,
     const double y) const {
+  if (!dne(high_x.x, low_x.x)) return low_x.x;
+  if (!dne(high_x.y, low_x.y)) throw Error("slope prob 4");
   const double slope((high_x.y - low_x.y) / (high_x.x - low_x.x));
   return low_x.x + (y - low_x.y) / slope;
 }

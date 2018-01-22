@@ -11,6 +11,8 @@ analyze_transmission
 anchor_reads
 anchor_repeatness
 annotate_repeats
+assembler
+assembly_index
 assess_known_cn_events
 bad_cn_bins
 bam_genotyper

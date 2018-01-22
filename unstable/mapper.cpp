@@ -34,7 +34,7 @@ using paa::Reference;
 using paa::SimpleHit;
 
 int main(int argc, char* argv[])  try {
-  read_ahead = false;
+  read_ahead = true;
   if (--argc != 1) throw Error("usage: mapper ref_fasta");
 
   const string ref_fasta{argv[1]};
