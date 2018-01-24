@@ -305,6 +305,15 @@ class CN_abspos {
   std::vector<unsigned int> chromosomes_{};
 };
 
+class RefCN : public RefPlus {
+ public:
+  explicit RefCN(const std::string & fasta_file_name) :
+      RefPlus{fasta_file_name}, cn_abspos{*this} { }
+  ~RefCN() {}
+
+  const CN_abspos cn_abspos;
+};
+
 class Bin {
  public:
   Bin(const unsigned int chromosome__,

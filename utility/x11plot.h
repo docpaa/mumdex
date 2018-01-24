@@ -266,7 +266,7 @@ inline bool operator!=(const iBounds & lhs, const iBounds & rhs) {
 
 std::string hex(const XColor & color) {
   std::string result;
-  static std::string chars{"0123456789abcdefxxx"};
+  static const std::string chars{"0123456789abcdefxxx"};
   for (const unsigned int component : {color.red, color.green, color.blue}) {
     result += chars[((component / 256) % 256) / 16];
     result += chars[(component % 256) / 16];
@@ -450,11 +450,6 @@ class X11WindowT : public Geometry {
   static constexpr unsigned int default_window_height{default_doc_height};
   static constexpr double window_scale{1.65};
   static constexpr int radio_width{1};
-
-  // Factory function
-  static X11WindowT & create(X11App & app) {
-    return app.add(std::make_unique<X11Win>(app));
-  }
 
   X11WindowT(X11App & app_,
              const Geometry & geometry_ =
@@ -730,6 +725,21 @@ class X11App {
     XCloseDisplay(display);
   }
 
+  // Construct a child window
+#if 0
+  class PrivateX11App {
+   public:
+    explicit PrivateX11App(X11App & app_) : app{app_} { }
+    operator X11App & () { return app; }
+    X11App & app;
+  };
+#endif
+  template <class Win, class ... WinArgs>
+  Win & create(WinArgs && ... win_args) {
+    return reinterpret_cast<Win &>(add(
+        std::make_unique<Win>(*this, std::forward<WinArgs>(win_args)...)));
+  }
+
   // Add a window to app
   X11Win & add(WinPtr && ptr) {
     WinIter win = windows.emplace(windows.end(), std::move(ptr));
@@ -804,6 +814,9 @@ class X11App {
           break;
 
         case MotionNotify:
+          // Get latest motion event only
+          while (XCheckWindowEvent(display, event.xmotion.window,
+                                   PointerMotionMask, &event)) { }
           window(event.xmotion.window).motion(event.xmotion);
           break;
 
@@ -993,8 +1006,7 @@ struct Radio {
     return false;
   }
 
-  void erase() const {
-    const Point point{location()};
+  void erase(const Point point) const {
     fill_centered_oval(win->display(), win->window, win->fill_gc,
                        point.x, point.y, radius() + 1, radius() + 1);
   }
@@ -1008,23 +1020,21 @@ struct Radio {
         return win->create_gc(grey.pixel, win->app.white);
       }()};
     if (win->inside) {
-      fill_centered_oval(win->display(), win->window, win->fill_gc,
-                         point.x, point.y, radius() + 1, radius() + 1);
-      // if (!actions.visible()) return;
+      erase(point);
       draw_centered_oval(win->display(), win->window,
                          actions.visible() ? gc : grey_gc,
                          point.x, point.y, radius(), radius());
       if (toggled) {
-        fill_centered_oval(win->display(), win->window, gc,
-                           point.x, point.y, radius() / 2, radius() / 2);
-      } else {
-        fill_centered_oval(win->display(), win->window, win->fill_gc,
+        fill_centered_oval(win->display(), win->window,
+                           actions.visible() ? gc : grey_gc,
                            point.x, point.y, radius() / 2, radius() / 2);
       }
     } else {
-      erase();
+      erase(point);
     }
   }
+
+  void toggle() { toggled = !toggled; }
 
   // Data
   std::string description;  // Help text for radio
@@ -1182,23 +1192,7 @@ class X11Colors : public X11Win {
   X11Colors(const X11Colors &) = delete;
   X11Colors & operator=(const X11Colors &) = delete;
 
-  static const int side{600};
-  static X11Colors & create(
-      X11App & app,
-      const std::vector<std::string> & starting_colors,
-      const size_t n_colors_ = 0,
-      const bool order = false,
-      const Geometry & geometry_ = Geometry{{side, side}, {0, 0}},
-      const CallBack call_back_ =
-      [] (const unsigned int) { },
-      const bool close_on_click_ = false,
-      const std::string title = "") {
-    return reinterpret_cast<X11Colors &>(
-        app.add(std::make_unique<X11Colors>(
-            app, starting_colors,
-            n_colors_ ? n_colors_ : starting_colors.size(), order, geometry_,
-            call_back_, close_on_click_, title)));
-  }
+  static constexpr int side{600};
 
   explicit X11Colors(
       X11App & app__,
@@ -1426,7 +1420,6 @@ class SavedConfig {
         range != rhs.range ||
         max_range != rhs.max_range ||
         zoomed != rhs.zoomed ||
-        drawn != rhs.drawn ||
         radio_states != rhs.radio_states;
   }
   void restore_config(const SavedConfig & rhs) {
@@ -1442,7 +1435,6 @@ class SavedConfig {
   Range range{{unset(1.0), nunset(1.0), 0}, {unset(1.0), nunset(1.0), 0}};
   Range max_range{range};
   std::vector<unsigned char> zoomed{false, false};
-  mutable bool drawn{false};
   std::vector<unsigned char> radio_states{};
 };
 
@@ -1507,29 +1499,31 @@ class X11Graph : public X11Win, public SavedConfig {
   static constexpr int default_height{720};
 
   // Graph data typedefs
+  using String = std::string;
+  using Strings = std::vector<String>;
   using Values = std::vector<double>;
   using XYSeries = std::vector<const Values *>;
   using Data = std::vector<XYSeries>;
+  using OneColInfo = std::pair<String, String>;
+  using XColInfo = std::vector<OneColInfo>;
+  using Info = std::pair<Strings, XColInfo>;
+  using DataInfo = std::pair<Data, Info>;
   using CallBack = std::function<bool (X11Graph &, Event &)>;
-
-  // Graph factories
-  static X11Graph & create_whole(
-      X11App & app, const Data & data__,
-      const Geometry & geometry_ = default_geometry(),
-      const std::string title = "",
-      const unsigned int n_threads__ = std::thread::hardware_concurrency());
-  template <class ... Input>
-  static X11Graph & create(X11App & app, Input && ... input);
+  using SpecialFeatures = std::function<void (X11Graph &)>;
 
   // Graph constructors and destructors and copying
-  X11Graph(X11App & app__, const Data & data__,
+  X11Graph(X11App & app__, const DataInfo & data__,
            const Geometry & geometry_ =
            Geometry{{default_width, default_height}, {0, 0}},
-           const std::string title = "",
+           const std::string & title = "",
            const unsigned int n_threads__ =
-           std::thread::hardware_concurrency());
+           std::thread::hardware_concurrency(),
+           SpecialFeatures add_special_features =
+           SpecialFeatures{[](X11Graph &) {}});
+
+ public:
   template <class ... Input>
-  X11Graph(X11App & app__, Input && ... input);
+  X11Graph(X11App & app__, Values & x__, Values & y__, Input && ... input);
   virtual ~X11Graph();
   X11Graph(const X11Graph &) = delete;
   X11Graph & operator=(const X11Graph &) = delete;
@@ -1541,11 +1535,23 @@ class X11Graph : public X11Win, public SavedConfig {
   void add_call_back(const std::string & help_text,
                      const CallBack & call_back,
                      const bool full_draw = false,
-                     const bool initially_on = true);
+                     const bool initially_on = true,
+                     bool_fun active_fun = []() { return true; });
   void initialize();
 
   static Geometry default_geometry() {
     return {{default_width, default_height}, {0, 0}};
+  }
+
+  // Data organization
+  uint64_t n_files() const { return data_info.second.first.size(); }
+  uint64_t n_cols() const { return data_info.second.second.size(); }
+  bool info_ok() const { return n_files() * n_cols() == input_data.size(); }
+  uint64_t file_index(const uint64_t series_index) const {
+    return series_index % n_files();
+  }
+  uint64_t col_index(const uint64_t series_index) const {
+    return series_index / n_files();
   }
 
   // Range functions
@@ -1560,8 +1566,10 @@ class X11Graph : public X11Win, public SavedConfig {
 
   // Coordinates and transformations
   int coord(const bool y, const double val) const;
+  int ccoord(const bool y, const double val) const;
   double dcoord(const bool y, const double val) const;
   Point coord(const dPoint point) const;
+  XPoint xcoord(const double x, const double y) const;
   XPoint xcoord(const dPoint point) const;
   XPoint xcoord(const Point point) const;
   double icoord(const bool y, const int val) const;
@@ -1599,11 +1607,8 @@ class X11Graph : public X11Win, public SavedConfig {
                           const unsigned int width_,
                           const unsigned int height_);
   void set_line_widths(std::vector<GC> gcs, const int width_);
-  double line_vertical_y(const dPoint low_x, const dPoint high_x,
-                         const double x) const;
-  double line_horizontal_x(const dPoint low_x, const dPoint high_x,
-                           const double y) const;
-  XPoint line_bounds_intersection(const dPoint in, const dPoint out) const;
+
+  void set_tiling();
 
   // Assorted functions
   virtual bool slow() const;
@@ -1612,7 +1617,9 @@ class X11Graph : public X11Win, public SavedConfig {
                           void_fun call_back = void_fun());
 
   // Data is series * (x, y) -> point
-  Data input_data{}, log_data{}, log_x_data{}, log_y_data{};
+  DataInfo data_info{};
+  Data & input_data{data_info.first};
+  Data log_data{}, log_x_data{}, log_y_data{};
   Data * data{&input_data};
   std::vector<std::unique_ptr<Values> > log_series{};
 
@@ -1633,6 +1640,7 @@ class X11Graph : public X11Win, public SavedConfig {
   std::vector<GC> series_line_gcs{};
   std::vector<GC> series_radio_gcs{};
   std::vector<Radio> series_radios{};
+  std::vector<XRectangle> series_clip_rectangles{};
   std::vector<uint8_t> series_only_arcs{}, series_only_lines{};
   std::vector<std::vector<XArc> > arcs{};
   std::vector<std::vector<XPoint> > points{};
@@ -1644,6 +1652,9 @@ class X11Graph : public X11Win, public SavedConfig {
   Point last_motion{};
   bool moved{false};
   bool small_move{false};
+  mutable bool drawn{false};
+  uint64_t shrink{1};
+  std::vector<uint64_t> steps{};
 
   //
   // Radio controls
@@ -1662,11 +1673,9 @@ class X11Graph : public X11Win, public SavedConfig {
           [this]() { return can_do_lines(); }},  true};
   Radio tick_radios[2]{
     {"Toggle axis labels on X axis (shown when cursor leaves window)",
-          this, {5.5, -1},
-      {[this]() { }}, true},
+          this, {5.5, -1}, {[this]() { }}, true},
     {"Toggle axis labels on Y axis (shown when cursor leaves window)",
-          this, {1, -5.5},
-      {[this]() { }}, true}};
+          this, {1, -5.5}, {[this]() { }, radio_off(tiled_radio)}, true}};
   Radio log_radios[2]{
     {"Toggle logarithmic scale on X axis", this, {6.5, -1},
       {[this]() { prepare_log(); prepare_draw(); }}, true},
@@ -1674,17 +1683,13 @@ class X11Graph : public X11Win, public SavedConfig {
       {[this]() { prepare_log(); prepare_draw(); }}, true}};
   Radio grid_radios[2][2]{
     {{"Toggle major grid lines on X axis", this, {4.25, -1},
-        {[this]() { if (grid_radios[0][0]) { return draw_grid(); }
-            grid_radios[1][0] = false; redraw(); }}, true, true},
+        {[this]() { draw(); }}, true, true},
       {"Toggle major grid lines on Y axis", this, {1, -4.25},
-        {[this]() { if (grid_radios[0][1]) { return draw_grid(); }
-            grid_radios[1][1] = false; redraw(); }}, true, true}},
+        {[this]() { draw(); }, radio_off(tiled_radio)}, true, true}},
     {{"Toggle minor grid lines on X axis", this, {3.25, -1},
-        {[this]() { if (grid_radios[1][0]) { grid_radios[0][0] = true;
-              draw_grid(); } redraw(); }}, true, true},
+        {[this]() { draw(); }}, true, true},
       {"Toggle minor grid lines on Y axis", this, {1, -3.25},
-        {[this]() { if (grid_radios[1][1]) { grid_radios[0][1] = true;
-              draw_grid(); } redraw(); }}, true, true}}};
+        {[this]() { draw(); }, radio_off(tiled_radio)}, true, true}}};
   Radio movie_radios[2]{
     {"Play a movie traveling left", this, {97.5, -1},
       {[this]() { movie(false); }, [this]() { return zoomed[0]; }}, true},
@@ -1704,8 +1709,10 @@ class X11Graph : public X11Win, public SavedConfig {
                 restore_config(saved_config.back());
                 prepare_draw();
               }}}}};
+  Radio tiled_radio{"Toggle between stacked and tiled views", this, {-1, 2},
+    {[this]() { prepare_draw(); }, [this]() { return n_files() - 1; }}, true};
+
   std::vector<Radio> unnamed_radios{};
-  std::vector<Radio> extra_radios{};
   std::deque<Radio *> radios{&help_radio, &coord_radio,
         &arcs_radio, &outlines_radio, &lines_radio,
         &tick_radios[0], &tick_radios[1],
@@ -1713,9 +1720,10 @@ class X11Graph : public X11Win, public SavedConfig {
         &grid_radios[0][0], &grid_radios[0][1],
         &grid_radios[1][0], &grid_radios[1][1],
         &movie_radios[0], &movie_radios[1],
-        &previous_views_radio};
+        &previous_views_radio, &tiled_radio};
   std::vector<Radio> create_unnamed_radios();
-  bool_fun radio_tester(const Radio & radio, const bool state = true);
+  bool_fun radio_on(const Radio & radio);
+  bool_fun radio_off(const Radio & radio);
   bool_fun zoom_tester(const bool y);
 
   // Callback functions
@@ -1725,7 +1733,11 @@ class X11Graph : public X11Win, public SavedConfig {
   // Saved configuration history
   std::deque<SavedConfig> saved_config{};
   std::vector<Radio *> saved_radios{
-    &arcs_radio, &outlines_radio, &lines_radio};
+    &log_radios[0], &log_radios[1],  // Must be listed first for restore_config
+        &arcs_radio, &outlines_radio, &lines_radio, &tiled_radio,
+        &tick_radios[0], &tick_radios[1],
+        &grid_radios[0][0], &grid_radios[0][1],
+        &grid_radios[1][0], &grid_radios[1][1]};
   SavedConfig current_config() const;
   void restore_config(const SavedConfig & config);
   void save_config(const SavedConfig & config);
@@ -1746,38 +1758,27 @@ class X11Graph : public X11Win, public SavedConfig {
   // Movement directions
   bool x_movement{true};
   bool y_movement{false};
+
+  SpecialFeatures add_special_features{};
 };
-
-// Creation factory from data in exact format needed
-X11Graph & X11Graph::create_whole(
-    X11App & app, const Data & data__, const Geometry & geometry_,
-    const std::string title, const unsigned int n_threads__) {
-  return reinterpret_cast<X11Graph &>(app.add(
-      std::make_unique<X11Graph>(
-          app, data__, geometry_, title, n_threads__)));
-}
-
-// Creation factory from a bunch of vectors x1, y1, x2, y2, ...
-template <class ... Input>
-X11Graph & X11Graph::create(X11App & app, Input && ... input) {
-  return reinterpret_cast<X11Graph &>(app.add(
-      std::make_unique<X11Graph>(app, std::forward<Input>(input)...)));
-}
 
 // Construct from data in exact format needed
 X11Graph::X11Graph(
-    X11App & app__, const Data & data__, const Geometry & geometry_,
-    const std::string title, const unsigned int n_threads__) :
-    X11Win{app__, geometry_, true, title},
-      input_data{data__}, data{&input_data}, n_threads_{n_threads__} {
-                            initialize();
-                          }
+    X11App & app__, const DataInfo & data__, const Geometry & geometry_,
+    const std::string & title, const unsigned int n_threads__,
+    SpecialFeatures add_special_features__) :
+    X11Win{app__, geometry_, true, title}, data_info{data__},
+  data{&data_info.first}, n_threads_{n_threads__},
+  add_special_features{add_special_features__} {
+    initialize();
+  }
 
 // Construct from a bunch of vectors x1, y1, x2, y2, ...
 template <class ... Input>
-X11Graph::X11Graph(X11App & app__, Input && ... input) :
+X11Graph::X11Graph(X11App & app__, Values & x__, Values & y__,
+                   Input && ... input) :
     X11Win{app__, {{default_width, default_height}, {0, 0}}, true} {
-  add_input(std::forward<Input>(input)...);
+  add_input(x__, y__, std::forward<Input>(input)...);
   data = &input_data;
   initialize();
 }
@@ -1823,24 +1824,25 @@ void X11Graph::add_input(Values & x__, Values & y__, Input && ... input) {
   input_data.emplace_back(0);
   input_data.back().push_back(&x__);
   input_data.back().push_back(&y__);
-  add_input(std::forward<Input>(input)...);
+  add_input(x__, y__, std::forward<Input>(input)...);
 }
 
 void X11Graph::add_call_back(const std::string & help_text,
                              const CallBack & call_back,
                              const bool full_draw,
-                             const bool initially_on) {
+                             const bool initially_on,
+                             bool_fun active_fun) {
   call_back_radios.reserve(100);
   call_backs.reserve(100);
   call_backs.push_back(call_back);
   call_back_radios.push_back(Radio{help_text, this,
       {1, call_backs.size() + 3.0}, {[this, full_draw]() {
-          return (true || full_draw) ? draw() : redraw(); }},
-                                        true, initially_on});
+          return draw(); }, active_fun}, true, initially_on});
   radios.push_back(&call_back_radios.back());
 }
 
 void X11Graph::initialize() {
+  if (!info_ok()) throw Error("Series organization looks bad");
   scale.resize(3);
 
   // Events to watch out for
@@ -1866,8 +1868,13 @@ void X11Graph::initialize() {
   series_arc_gcs.resize(color_names.size());
   series_line_gcs.resize(color_names.size());
   series_radio_gcs.resize(color_names.size());
+  series_clip_rectangles.resize(color_names.size());
   for (unsigned int c{0}; c != color_names.size(); ++c) {
-    series_names[c] = std::to_string(c + 1);
+    if (c < input_data.size()) {
+      series_names[c] = std::to_string(c + 1) + " " +
+          data_info.second.first[file_index(c)] + " " +
+          data_info.second.second[col_index(c)].first;
+    }
     std::string & color_name{color_names[c]};
     XColor & color{series_colors[c]};
     // std::cerr << c << " " << color_name << std::endl;
@@ -1890,26 +1897,89 @@ void X11Graph::initialize() {
 
   // Create series radios, and add to master radio list, adjust properties
   series_radios.reserve(data->size());
+  const double radio_scale{data->size() <= 8 ? 1.0 : 8.0 / data->size()};
+  const double radius_scale{sqrt(radio_scale)};
+  const double radio_start{2.25};
   for (unsigned int c{0}; c != data->size(); ++c) {
+    const dPoint spec{-1, radio_start + (
+        n_files() > 1 ? 1 + radio_scale *
+        (1.125 * (n_cols()) * (n_files() - file_index(c) - 1) +
+         (n_cols() - col_index(c) - 1)) : 0.0 + data->size() - c)};
     series_radios.push_back(Radio{"Pointer clicks toggle display "
             "or change colors (buttons 2,3) for series " + series_names[c],
-            this, {-1, data->size() + 1.0 - c},
+            this, spec,
         {[this]() { prepare_draw(); }, [this]() { return inside; }},
             true, true, &series_radio_gcs[c]});
+    series_radios.back().radius_scale = radius_scale;
     saved_radios.push_back(&series_radios.back());
-    series_only_arcs.emplace_back(0);
-    series_only_lines.emplace_back(0);
+    const std::string col_type{data_info.second.second[col_index(c)].second};
+    series_only_arcs.push_back(col_type == "p");
+    series_only_lines.push_back(
+        (col_type != "p" && n_cols() == 2 && col_index(c) == 1) ||
+        col_type == "l");
     series_order.push_back(c);
   }
-  series_order.reserve(series_order.size() + 1);
+  series_order.reserve(series_order.size() + 1);  // why???
+
+  unnamed_radios = create_unnamed_radios();
+  if (n_files() > 1) {
+    for (uint64_t r{0}; r != n_files(); ++r) {
+      // Series order radio
+      unnamed_radios.push_back(Radio{
+          std::string("Place series") + (n_cols() > 1 ? " group" : "") +
+          " on top", this,
+          {-0.7, series_radios[r].specification[1] - 0.5 * radio_scale},
+          {[this, r]() {
+              // Find location of series in ordering list
+              std::vector<unsigned int>::iterator riter{
+                find(series_order.begin(), series_order.end(), r)};
+              const unsigned int rindex{
+                static_cast<unsigned int>(riter - series_order.begin())};
+              for (uint64_t y{0}; y != n_cols(); ++y) {
+                std::vector<unsigned int>::iterator togo{
+                  series_order.begin() + (y + 1) * n_files()};
+                series_order.insert(togo, r + y * n_files());
+                std::vector<unsigned int>::iterator toremove{
+                  series_order.begin() + y * n_files() + rindex};
+                series_order.erase(toremove);
+              }
+              draw();
+            },
+                [this, r]() {
+                  return !tiled_radio && (series_order[n_files() - 1]) !=
+                      static_cast<unsigned int>(r);
+                }}});
+      unnamed_radios.back().radius_scale = 0.5 * radius_scale;
+
+      // Group on / off radio
+      if (n_cols() > 1) {
+        unnamed_radios.push_back(Radio{
+            std::string("Toggle series group display"), this,
+          {-1.3, series_radios[r].specification[1] - 0.5 * radio_scale},
+          {[this, r]() {
+              for (unsigned int c{0}; c != n_cols(); ++c) {
+                series_radios[c * n_files() + r].toggle();
+              }
+              if (tiled_radio) {
+                prepare_draw();
+              } else {
+                draw();
+              }
+            }}});
+      }
+      unnamed_radios.back().radius_scale = 0.5 * radius_scale;
+
+      unnamed_radios.back().id = r;
+    }
+  }
 
   // Add radios to master radio list
-  unnamed_radios = create_unnamed_radios();
-
-  for (std::vector<Radio> * radio_vec : {&series_radios, &unnamed_radios})
+  for (std::vector<Radio> * radio_vec :
+    {&series_radios, &unnamed_radios})
     for (Radio & radio : (*radio_vec)) radios.push_back(&radio);
-  extra_radios.reserve(1000);
 
+  // set_tiling();
+  add_special_features(*this);
   // Map the window
   // XMapWindow(display(), window);
 }
@@ -2111,21 +2181,19 @@ inline void X11Graph::show_range(const std::string prefix) const {
   std::cout << std::endl;
 }
 
-inline int clip_to_int(const double val) {
+inline int clip_to_short(const double val) {
   return std::min(
-      static_cast<double>(std::numeric_limits<int>::max() - 2),
-      std::max(static_cast<double>(std::numeric_limits<int>::min() + 2),
-               val));
+      static_cast<double>(std::numeric_limits<int16_t>::max()),
+      std::max(static_cast<double>(std::numeric_limits<int16_t>::min()), val));
 }
 
 // Data to window coordinate transformation
 inline int X11Graph::coord(const bool y, const double val) const {
-#if 1
-  return clip_to_int(bounds[y][y] +
+  return bounds[y][y] + (y ? -1 : 1) * (val - range[y][0]) * scale[y];
+}
+inline int X11Graph::ccoord(const bool y, const double val) const {
+  return clip_to_short(bounds[y][y] +
                      (y ? -1 : 1) * (val - range[y][0]) * scale[y]);
-#endif
-  if (y) return bounds[1][1] - (val - range[1][0]) * scale[1];
-  return bounds[0][0] + (val - range[0][0]) * scale[0];
 }
 inline double X11Graph::dcoord(const bool y, const double val) const {
   if (y) return bounds[1][1] - (val - range[1][0]) * scale[1];
@@ -2136,10 +2204,17 @@ inline Point X11Graph::coord(const dPoint point) const {
   return Point{coord(0, point.x), coord(1, point.y)};
 }
 
+inline XPoint X11Graph::xcoord(const double x, const double y) const {
+  XPoint result;
+  result.x = ccoord(0, x);
+  result.y = ccoord(1, y);
+  return result;
+}
+
 inline XPoint X11Graph::xcoord(const dPoint point) const {
   XPoint result;
-  result.x = coord(0, point.x);
-  result.y = coord(1, point.y);
+  result.x = ccoord(0, point.x);
+  result.y = ccoord(1, point.y);
   return result;
 }
 
@@ -2276,17 +2351,15 @@ inline void X11Graph::key(const XKeyEvent & event) {
         app.close_window(window);
         return;
       case 'd':
-        // Duplicate graph!
-        // Very difficult to do with gene stuff!
-        {
-          X11Graph & graph{X11Graph::create_whole(
-              app, *data,
-              {{width(), height()}, {x_offset() + 100, y_offset() + 100}},
-              "G-Graph", n_threads())};
-          XSync(display(), false);
-          graph.restore_config(current_config());
-          graph.prepare_draw();
-        }
+        // Duplicate graph! (most features)
+        app.create<X11Graph>(
+            data_info,
+            Geometry{{width(), height()}, {x_offset() + 100, y_offset() + 100}},
+            std::string{"G-Graph"}, n_threads(), [this](X11Graph & graph) {
+              add_special_features(graph);
+              graph.restore_config(current_config());
+              graph.prepare();
+            });
         break;
       default:
         return;
@@ -2404,6 +2477,10 @@ inline void X11Graph::motion(const XMotionEvent & event) {
       coordinates << std::setprecision(12) << "(";
       const Point point{event};
       for (const bool y : {false, true}) {
+        if (y && tiled_radio) {
+          coordinates << " , Y coordinate not available in tiled mode";
+          continue;
+        }
         const double val{icoord(y, point[y])};
         const double res{range[y][2] / bounds[y][2]};
         const double pres{pow(10, floor(log10(res)))};
@@ -2439,37 +2516,49 @@ inline void X11Graph::motion(const XMotionEvent & event) {
     }
   } else if (do_select) {
     if (in_bounds(click)) {
-      const Point min_point{min(last_motion.x, click.x, point.x),
-            min(last_motion.y, click.y, point.y)};
-      const Point max_point{max(last_motion.x, click.x, point.x),
-            max(last_motion.y, click.y, point.y)};
-      // Cover vertical lines
-      const int y_start{min(last_motion.y, click.y)};
-      const int y_height{abs(last_motion.y - click.y) + 1};
-      XCopyArea(display(), pixmap, window, gc, last_motion.x, y_start,
-                1, y_height, last_motion.x, y_start);
-      XCopyArea(display(), pixmap, window, gc, click.x, y_start,
-                1, y_height, click.x, y_start);
+      if (tiled_radio) {
+        status = "Graph region select zoom "
+            "is disabled while in tiled view mode";
+        draw_status();
+      } else {
+        const Point min_point{min(last_motion.x, click.x, point.x),
+              min(last_motion.y, click.y, point.y)};
+        const Point max_point{max(last_motion.x, click.x, point.x),
+              max(last_motion.y, click.y, point.y)};
+        // Cover vertical lines
+        const int y_start{min(last_motion.y, click.y)};
+        const int y_height{abs(last_motion.y - click.y) + 1};
+        XCopyArea(display(), pixmap, window, gc, last_motion.x, y_start,
+                  1, y_height, last_motion.x, y_start);
+        XCopyArea(display(), pixmap, window, gc, click.x, y_start,
+                  1, y_height, click.x, y_start);
 
-      // Cover horizontal lines
-      const int x_start{min(last_motion.x, click.x)};
-      const int x_width{abs(last_motion.x - click.x) + 1};
-      XCopyArea(display(), pixmap, window, gc, x_start, last_motion.y,
-                x_width, 1, x_start, last_motion.y);
-      XCopyArea(display(), pixmap, window, gc, x_start, click.y,
-                x_width, 1, x_start, click.y);
-      XDrawRectangle(display(), window, gc,
-                     min(click.x, point.x), min(click.y, point.y),
-                     abs(click.x - point.x), abs(click.y - point.y));
+        // Cover horizontal lines
+        const int x_start{min(last_motion.x, click.x)};
+        const int x_width{abs(last_motion.x - click.x) + 1};
+        XCopyArea(display(), pixmap, window, gc, x_start, last_motion.y,
+                  x_width, 1, x_start, last_motion.y);
+        XCopyArea(display(), pixmap, window, gc, x_start, click.y,
+                  x_width, 1, x_start, click.y);
+        XDrawRectangle(display(), window, gc,
+                       min(click.x, point.x), min(click.y, point.y),
+                       abs(click.x - point.x), abs(click.y - point.y));
+      }
     } else {
       const bool above(quadrant == 0 || quadrant == 3);
-      const int loc{bounds[!y_press][above] + (above ? 2 : -2) * border_width};
-      XDrawLine(display(), window, border_fill_gc,
-                y_press ? loc : click.x, y_press ? click.y : loc,
-                y_press ? loc : last_motion.x, y_press ? last_motion.y : loc);
-      XDrawLine(display(), window, border_gc,
-                y_press ? loc : click.x, y_press ? click.y : loc,
-                y_press ? loc : point.x, y_press ? point.y : loc);
+      if (tiled_radio && y_press) {
+        status = "Y border zoom is disabled while in tiled view mode";
+        draw_status();
+      } else {
+        const int loc{bounds[!y_press][above] +
+              (above ? 2 : -2) * border_width};
+        XDrawLine(display(), window, border_fill_gc,
+                  y_press ? loc : click.x, y_press ? click.y : loc,
+                  y_press ? loc : last_motion.x, y_press ? last_motion.y : loc);
+        XDrawLine(display(), window, border_gc,
+                  y_press ? loc : click.x, y_press ? click.y : loc,
+                  y_press ? loc : point.x, y_press ? point.y : loc);
+      }
     }
   } else if (do_zoom) {
     for (const bool y : {false, true}) {
@@ -2498,11 +2587,11 @@ inline void X11Graph::button_release(const XButtonEvent & event) {
       if (radio.contains(click)) {
         set_window_offset();
         const int ccscale{2};
-        X11Colors::create(
-            app, color_names, 0, false,
-            {{width() / ccscale, height() / ccscale},
-              {x_offset() + width() - (click == 3 ? -4 : width() / ccscale),
-                    y_offset() + click.y - height() / ccscale / 2}},
+        app.create<X11Colors>(
+            color_names, 0, false,
+          Geometry{{width() / ccscale, height() / ccscale},
+            {x_offset() + width() - (click == 3 ? -4 : width() / ccscale),
+                  y_offset() + click.y - height() / ccscale / 2}},
             X11Colors::CallBack(std::bind(
                 &color_change_callback, std::placeholders::_1, r,
                 std::ref(*this), std::cref(app), window)),
@@ -2534,6 +2623,7 @@ inline void X11Graph::button_release(const XButtonEvent & event) {
       // Drag event defines an x, y zoom
       for (const bool y : {false, true}) {
         if (!in_bounds(click) && y_press != y) continue;
+        if ((in_bounds(click) || y) && tiled_radio) continue;
         const double min_c{icoord(y, std::min(release[y], click[y]))};
         const double max_c{icoord(y, std::max(release[y], click[y]))};
         set_range(y, (y ? max_c : min_c), (y ? min_c : max_c));
@@ -2548,6 +2638,11 @@ inline void X11Graph::button_release(const XButtonEvent & event) {
       for (const bool y : {false, true}) {
         // if ((center || out) && range[y] == max_range[y]) continue;
         if (!in_bounds(click) && y_press != y) continue;
+        if (y && tiled_radio) {
+          status = "Y axis click zoom is disabled while in tiled view mode";
+          draw_status();
+          continue;
+        }
         const double zoom_factor{center ? 1.0 : (in ? 0.1 : 10.0)};
         const double half{0.5 * range[y][2] * zoom_factor};
         const double mid{icoord(y, click[y])};
@@ -2565,7 +2660,6 @@ inline void X11Graph::button_release(const XButtonEvent & event) {
 inline void X11Graph::leave(const XCrossingEvent &) {
   inside = false;
   if (destroyed) return;
-  //  for (Radio * radio : radios) radio->erase();
   status = "";
   draw_controls();
   if (0)
@@ -2579,7 +2673,9 @@ void X11Graph::prepare() {
   // Set graph area and clip rectangle
   const int border{min_border()};
   set_bounds(border, width() - border, border, height() - border);
-  set_clip_rectangle(bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
+  if (false && !tiled_radio) {
+    set_clip_rectangle(bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
+  }
 
   // Make sure range is reasonable
   if (range[0][0] >= max_range[0][1] || range[0][1] <= max_range[0][0] ||
@@ -2594,8 +2690,12 @@ void X11Graph::prepare() {
   // Determine arcs and points to connect with lines to display
   arcs.resize(data->size());
   points.resize(data->size());
-  const Range erange{{range[0][0] - line_width, range[0][1] + line_width},
-    {range[1][0] - line_width, range[1][1] + line_width}};
+  const Range erange{{range[0][0] - range[0][2] / 10,
+          range[0][1] + range[0][2] / 10},
+    {max_range[1][0] - line_width / scale[1],
+          max_range[1][1] + line_width / scale[1]}};
+
+  if (tiled_radio) set_tiling();
 
   auto series_fun = [this, &erange](const unsigned int s) {
     arcs[s].clear();
@@ -2611,52 +2711,48 @@ void X11Graph::prepare() {
     arc.angle1 = 0;
     arc.angle2 = 64 * 360;
 
+    // Prepare for tiling / stacking
+    // Does this introduce real function calls?
+    using YMap = std::function<int (int)>;
+    YMap yident{[](const int pos) { return pos; }};
+    YMap ytile{[this, s](const int pos) {
+        return (pos - bounds[1][0]) / shrink + steps[s] + bounds[1][0];
+      }};
+    YMap ymap{tiled_radio ? ytile : yident};
+    using XYMap = std::function<XPoint (double, double)>;
+    XYMap xycoord{[this](const double x, const double y) {
+        return xcoord(x, y);
+      }};
+    XYMap xytile{[this, ytile](const double x, const double y) {
+        XPoint point = xcoord(x, y);
+        point.y = ytile(point.y);
+        return point;
+      }};
+    XYMap xymap{tiled_radio ? xytile : xycoord};
+
     const XYSeries & series{(*data)[s]};
+    bool first_line_point{true};
     for (unsigned int p{0}; p != series[0]->size(); ++p) {
       const dPoint vals{(*series[0])[p], (*series[1])[p]};
       if (std::isfinite(vals[0]) && std::isfinite(vals[1])) {
         if (in_range(vals) && do_arcs(s)) {
-          for (const bool y : {false, true})
-            (y ? arc.y : arc.x) = (coord(y, vals[y])) - radius;
+          arc.x = coord(0, vals[0]) - radius;;
+          arc.y = ymap(coord(1, vals[1])) - radius;;
           arcs[s].emplace_back(arc);
         }
-        // Complicated to handle lines exiting the display area properly
         // Assumes points ordered by X!!!
-        if (do_lines(s) && 100 * range[1][2] > max_range[1][2]) {
-          if (vals[0] < erange[0][0]) continue;
-          if (p) {
-            // left - right range transition
-            const dPoint last{(*series[0])[p - 1], (*series[1])[p - 1]};
-            if (last.x > erange[0][1]) break;
-            // top-bottom transition points, properly ordered by x
-            if ((last.y < erange[1][0]) != (vals.y < erange[1][0]) ||
-                (last.y < erange[1][1]) != (vals.y < erange[1][1])) {
-              const bool last_low{last.y < erange[1][0]};
-              for (const bool high_ :
-                {last_low ? false : true, last_low ? true : false}) {
-                const double y_horizontal{high_ ? erange[1][1] : erange[1][0]};
-                if ((last.y > y_horizontal) == (vals.y > y_horizontal))
-                  continue;
-                const double x_int{line_horizontal_x(last, vals, y_horizontal)};
-                // if (x_int >= erange[0][0] && x_int <= erange[0][1])
-                points[s].push_back(xcoord(dPoint{x_int, y_horizontal}));
-              }
-            } else if (last.x < erange[0][0] || vals.x > erange[0][1]) {
-              for (const bool left : {true, false}) {
-                const double x_vertical{left ? erange[0][0] : erange[0][1]};
-                if (last.x >= x_vertical || vals.x <= x_vertical) continue;
-                const double y_int{line_vertical_y(last, vals, x_vertical)};
-                // if (y_int > erange[1][0] && y_int < erange[1][1])
-                points[s].push_back(xcoord(dPoint{x_vertical, y_int}));
-              }
-            } else if (vals.x >= erange[0][0] && vals.x <= erange[0][1] &&
-                       vals.y >= erange[1][0] && vals.y <= erange[1][1]) {
-              points[s].push_back(xcoord(vals));
+        if (do_lines(s)) {
+          if (vals.x < erange[0][0]) continue;
+          if (first_line_point) {
+            if (p) {
+              const dPoint last{(*series[0])[p - 1], (*series[1])[p - 1]};
+              points[s].push_back(xymap(last.x, last.y));
             }
-          } else {
-            if (vals.x >= erange[0][0] && vals.x <= erange[0][1] &&
-                vals.y >= erange[1][0] && vals.y <= erange[1][1])
-              points[s].push_back(xcoord(vals));
+            first_line_point = false;
+          }
+          points[s].push_back(xymap(vals.x, vals.y));
+          if (vals.x > erange[0][1]) {
+            break;
           }
         }
       }
@@ -2664,8 +2760,23 @@ void X11Graph::prepare() {
   };
 
   std::vector<std::future<void>> futures;
-  for (unsigned int s{0}; s != data->size(); ++s)
+  for (unsigned int s{0}; s != data->size(); ++s) {
+    if (true || tiled_radio) {
+      XRectangle clip_rectangle(tiled_radio ?
+                                rect(bounds[0][0], bounds[1][0] + steps[s],
+                                     bounds[0][2], bounds[1][2] / shrink) :
+                                rect(bounds[0][0], bounds[1][0],
+                                     bounds[0][2], bounds[1][2]));
+      if (clip_rectangle != series_clip_rectangles[s]) {
+        series_clip_rectangles[s] = clip_rectangle;
+        XSetClipRectangles(display(), series_arc_gcs[s], 0, 0,
+                           &clip_rectangle, 1, YXBanded);
+        XSetClipRectangles(display(), series_line_gcs[s], 0, 0,
+                           &clip_rectangle, 1, YXBanded);
+      }
+    }
     futures.emplace_back(pool.run(series_fun, s));
+  }
 
   for (std::future<void> & result : futures) result.get();
 }
@@ -2711,10 +2822,27 @@ void X11Graph::draw() {
   for (unsigned int c{0}; c != call_backs.size(); ++c)
     if (call_back_radios[c]) call_backs[c](*this, nothing);
 
+  if (tiled_radio) {
+    for (unsigned int i{0}; i != n_files(); ++i) {
+      if (steps[i] > 0) {
+        const uint64_t y{steps[i] + bounds[1][0]};
+        XDrawLine(display(), pixmap, border_gc,
+                  bounds[0][0], y, bounds[0][1], y);
+      }
+    }
+  }
   XDrawRectangle(display(), pixmap, border_gc,
                  bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
   draw_grid();
   draw_ticks(window);
+
+  if (!small_move) {
+    const SavedConfig current{current_config()};
+    if (saved_config.empty() || current != saved_config.back()) {
+      save_config(std::move(current));
+    }
+    draw_controls();
+  }
 
   if (just_configured) {
     just_configured = false;
@@ -2724,12 +2852,6 @@ void X11Graph::draw() {
     redraw();
   }
   drawn = true;
-  if (!small_move) {
-    const SavedConfig current{current_config()};
-    if (saved_config.empty() || current != saved_config.back()) {
-      save_config(std::move(current));
-    }
-  }
 }
 
 //
@@ -2799,7 +2921,6 @@ void X11Graph::prepare_log() {
   } else {
     data = &input_data;
   }
-  get_range();
 }
 
 inline std::string X11Graph::long_status(const bool in, const bool y) {
@@ -2835,6 +2956,7 @@ void X11Graph::draw_controls() {
 
 inline void X11Graph::draw_grid() const {
   for (const bool y : {false, true}) {
+    if (y && tiled_radio) break;
     const Axis axis{range[y][0], range[y][1], 3, log_radios[y]};
     for (const std::pair<double, bool> tick : axis.ticks()) {
       if (!grid_radios[!tick.second][y]) continue;
@@ -2860,6 +2982,7 @@ void X11Graph::draw_ticks(Drawable drawable) {
   const int t_height{tick_font->height()};
   for (const bool y : {false, true}) {
     if (!tick_radios[y]) continue;
+    if (y && tiled_radio) break;
     const Axis axis{range[y][0], range[y][1], 3, log_radios[y]};
     for (const std::pair<double, bool> tick : axis.ticks()) {
       if (!tick.second) continue;
@@ -2890,18 +3013,14 @@ inline void X11Graph::set_clip_rectangle(
     const unsigned int x, const unsigned int y,
     const unsigned int width_, const unsigned int height_) {
   XRectangle clip_rectangle(rect(x, y, width_, height_));
-  static XRectangle last_arc_clip_rectangle(rect(0, 0, 0, 0));
-  if (clip_rectangle != last_arc_clip_rectangle) {
-    for (const GC gc_ : series_arc_gcs) {
-      XSetClipRectangles(display(), gc_, 0, 0, &clip_rectangle, 1, YXBanded);
-      last_arc_clip_rectangle = clip_rectangle;
+  for (unsigned int s{0}; s != data->size(); ++s) {
+    if (clip_rectangle != series_clip_rectangles[s]) {
+      series_clip_rectangles[s] = clip_rectangle;
+      XSetClipRectangles(display(), series_arc_gcs[s], 0, 0,
+                         &clip_rectangle, 1, YXBanded);
+      XSetClipRectangles(display(), series_line_gcs[s], 0, 0,
+                         &clip_rectangle, 1, YXBanded);
     }
-  }
-  static XRectangle last_line_clip_rectangle(rect(0, 0, 0, 0));
-  if (clip_rectangle != last_line_clip_rectangle) {
-    for (const GC gc_ : series_line_gcs)
-      XSetClipRectangles(display(), gc_, 0, 0, &clip_rectangle, 1, YXBanded);
-    last_line_clip_rectangle = clip_rectangle;
   }
 }
 
@@ -2919,45 +3038,32 @@ inline void X11Graph::set_line_widths(std::vector<GC> gcs, const int width_) {
                        CapButt, JoinRound);
 }
 
-inline double X11Graph::line_vertical_y(const dPoint low_x, const dPoint high_x,
-                                        const double x) const {
-  if (!dne(high_x.x, low_x.x)) throw Error("slope prob 1");
-  if (!dne(high_x.y, low_x.y)) return low_x.y;
-  const double slope((high_x.y - low_x.y) / (high_x.x - low_x.x));
-  return low_x.y + (x - low_x.x) * slope;
+inline void X11Graph::set_tiling() {
+  std::vector<unsigned char> group_off(n_files(), true);
+  for (unsigned int s{0}; s != data->size(); ++s) {
+    if (series_radios[s]) group_off[file_index(s)] = false;
+  }
+  shrink = 0;
+  for (unsigned int g{0}; g != n_files(); ++g) {
+    if (!group_off[g]) ++shrink;
+  }
+  std::vector<uint64_t> file_steps;
+  unsigned int g_on{0};
+  for (unsigned int g{0}; g != n_files(); ++g) {
+    if (group_off[g]) {
+      file_steps.push_back(0);
+    } else {
+      const double val{1.0 * (shrink - ++g_on) * bounds[1][2] / shrink};
+      file_steps.push_back(val);
+    }
+  }
+  steps.clear();
+  for (unsigned int s{0}; s != data->size(); ++s) {
+    steps.push_back(file_steps[file_index(s)]);
+  }
+  if (shrink == 0) shrink = 1;  // prob unnecessary
 }
 
-inline double X11Graph::line_horizontal_x(
-    const dPoint low_x, const dPoint high_x,
-    const double y) const {
-  if (!dne(high_x.x, low_x.x)) return low_x.x;
-  if (!dne(high_x.y, low_x.y)) throw Error("slope prob 4");
-  const double slope((high_x.y - low_x.y) / (high_x.x - low_x.x));
-  return low_x.x + (y - low_x.y) / slope;
-}
-
-XPoint X11Graph::line_bounds_intersection(
-    const dPoint in, const dPoint out) const {
-  // need to do better to include lines between points outside range
-  // but intersecting the range.  also need to reduce unnecessary
-  // computation here and need to place points outside of range...
-
-  const bPoint out_high{out[0] > range[0][1], out[1] > range[1][1]};
-  const bPoint out_low{out[0] < range[0][0], out[1] < range[1][0]};
-  const bPoint is_out{out_high[0] || out_low[0], out_high[1] || out_low[1]};
-  const dPoint limit{range[0][out_high[0]], range[1][out_high[1]]};
-  if (!dne(in.x, out.x)) return xcoord(dPoint{in.x, limit.y});
-  if (!dne(in.y, out.y)) return xcoord(dPoint{limit.x, in.y});
-  const double slope((out.y - in.y) / (out.x - in.x));
-  const dPoint solutions{
-    in.x + (limit.y - in.y) / slope, in.y + (limit.x - in.x) * slope};
-  const dPoint trials[2]{{solutions.x, limit.y}, {limit.x, solutions.y}};
-  const dPoint distance{in.distance(trials[0]), in.distance(trials[1])};
-  const bool best_is_x{(is_out[0] && is_out[1]) ? distance.x < distance.y :
-        is_out[1]};
-  const dPoint intersection{best_is_x ? trials[0] : trials[1]};
-  return xcoord(intersection);
-}
 
 //
 // Assorted functions
@@ -3102,8 +3208,11 @@ std::vector<Radio> X11Graph::create_unnamed_radios() {
                                  dne(arc_width, default_arc_width)))); }}}};
 }
 
-inline bool_fun X11Graph::radio_tester(const Radio & radio, const bool state) {
-  return [&radio, state]() { return radio.toggled == state; };
+inline bool_fun X11Graph::radio_on(const Radio & radio) {
+  return [&radio]() { return radio.toggled; };
+}
+inline bool_fun X11Graph::radio_off(const Radio & radio) {
+  return [&radio]() { return !radio.toggled; };
 }
 
 inline bool_fun X11Graph::zoom_tester(const bool y) {
@@ -3123,6 +3232,8 @@ inline SavedConfig X11Graph::current_config() const {
 }
 
 inline void X11Graph::restore_config(const SavedConfig & config) {
+  const bool log_change{log_radios[0] != config.radio_states[0] ||
+        log_radios[1] != config.radio_states[1]};
   if (dne(config.line_width, line_width)) {
     set_line_widths(series_line_gcs,
                     (config.line_width == 1 ? 0 : config.line_width));
@@ -3134,6 +3245,8 @@ inline void X11Graph::restore_config(const SavedConfig & config) {
     saved_radios[r]->toggled = config.radio_states[r];
   }
   SavedConfig::restore_config(config);
+  if (log_change) prepare_log();
+  drawn = false;
 }
 
 inline void X11Graph::save_config(const SavedConfig & config) {
@@ -3177,21 +3290,6 @@ class X11TextGrid : public X11Win {
   using Data = std::vector<Column>;
   using CellStatus = std::vector<std::vector<unsigned char>>;
   using CallBack = std::function<bool (const CellStatus &)>;
-
-  static void create(X11App & app, const Data & data_,
-                     const std::vector<unsigned int> & inactive_cols_ = {},
-                     const std::vector<unsigned int> & inactive_rows_ = {},
-                     const std::vector<unsigned int> & exclusive_cols_ = {},
-                     const std::vector<unsigned int> & exclusive_rows_ = {},
-                     CallBack call_back_ = CallBack(),
-                     CallBack cell_test_ = CallBack(),
-                     const Geometry & geometry_ =
-                     Geometry{{1000, 800}, {0, 0}}) {
-    app.add(std::make_unique<X11TextGrid>(
-        app, data_, inactive_cols_, inactive_rows_,
-        exclusive_cols_, exclusive_rows_,
-        call_back_, cell_test_, geometry_));
-  }
 
   explicit X11TextGrid(
       X11App & app__, const Data & data_,
@@ -3470,7 +3568,7 @@ class X11Plotter {
 
  public:
   template <class TSV>
-  explicit X11Plotter(const TSV & tsv) {
+  explicit X11Plotter(const TSV & tsv) : file_name_{tsv.file_name()} {
     std::vector<std::vector<std::string>> text{
       {"Data Field"}, {"Plot X"}, {"Plot Y"}};
     for (unsigned int c{0}; c != tsv.n_cols(); ++c) {
@@ -3493,18 +3591,27 @@ class X11Plotter {
                                               std::placeholders::_1)};
     X11TextGrid::CallBack cell_test{std::bind(&X11Plotter::launch_ready, this,
                                               std::placeholders::_1)};
-    X11TextGrid::create(app, text, {0}, {0}, {1}, {}, call_back, cell_test);
+    using Vec = std::vector<unsigned int>;
+    app.create<X11TextGrid>(text, Vec{0}, Vec{0}, Vec{1}, Vec{},
+                            call_back, cell_test,
+                            Geometry{{1000, 800}, {0, 0}});
+    // app.create<X11TextGrid>(text, {0}, {0}, {1}, {}, call_back, cell_test);
     app.run();
   }
 
   bool launch_graph(const X11TextGrid::CellStatus & status) {
-    X11Graph::Data gd;
+    X11Graph::DataInfo info{{}, X11Graph::Info{{file_name_}, {}}};
     X11Graph::Values * xs{&data[std::find(
         status[1].begin(), status[1].end(), 1) - status[1].begin() - 1]};
-    for (unsigned int n{0}; n != names.size(); ++n)
-      if (status[2][n + 1]) gd.emplace_back(X11Graph::XYSeries{xs, &data[n]});
-    X11Graph & graph{X11Graph::create_whole(app, gd)};
-    graph.arc_radius = 1;
+    for (unsigned int n{0}; n != names.size(); ++n) {
+      if (status[2][n + 1]) {
+        info.first.emplace_back(X11Graph::XYSeries{xs, &data[n]});
+        info.second.second.emplace_back(names[n], "p");
+      }
+    }
+    app.create<X11Graph>(info).arc_radius = 1;
+    // X11Graph & graph{app.create<X11Graph>(info)};
+    // graph.arc_radius = 1;
     return true;
   }
   bool launch_ready(const X11TextGrid::CellStatus & status) const {
@@ -3512,6 +3619,7 @@ class X11Plotter {
         && std::find(status[2].begin(), status[2].end(), 1) != status[2].end();
   }
 
+  std::string file_name_{};
   X11App app{};
   Data data{};
   Names names{};

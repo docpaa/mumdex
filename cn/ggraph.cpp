@@ -3,11 +3,12 @@
 //
 // CN view gui
 //
-// Copyright 2016 Peter Andrews @ CSHL
+// Copyright 2016-2018 Peter Andrews @ CSHL
 //
-
-// example command
-// ggraph cn chrAll.fa abspos,ratio,seg 0,1 {m,f,d,s}.txt
+//
+// example command line:
+// ggraph cn hg19.fa chr,pos,ratio,seg {m,f,d,s}.txt
+//
 
 #include <algorithm>
 #include <exception>
@@ -26,14 +27,12 @@
 
 #include "cn.h"
 #include "error.h"
-#include "files.h"
 #include "genes.h"
 #include "mumdex.h"
 #include "strings.h"
 #include "threads.h"
 #include "x11plot.h"
 
-using std::cin;
 using std::cout;
 using std::cerr;
 using std::endl;
@@ -60,11 +59,7 @@ using paa::dne;
 using paa::rect;
 using paa::remove_substring;
 using paa::remove_including_final;
-using paa::Columns;
-using paa::Bin;
 using paa::iBounds;
-using paa::ChromosomeIndexLookup;
-using paa::CN_abspos;
 using paa::Error;
 using paa::Event;
 using paa::GeneXrefs;
@@ -74,11 +69,12 @@ using paa::KnownGenes;
 using paa::Point;
 using paa::Radio;
 using paa::Reference;
+using paa::RefCN;
 using paa::ThreadPool;
+using paa::UsageError;
 using paa::X11App;
 using paa::X11Font;
 using paa::X11Graph;
-using paa::X11Win;
 
 #ifdef __CYGWIN__
 unsigned int n_threads{1};
@@ -86,12 +82,12 @@ unsigned int n_threads{1};
 unsigned int n_threads{std::max(std::thread::hardware_concurrency(), 1U)};
 #endif
 
-const unsigned int max_gene_mb{100};
-const unsigned int max_name_mb{5};
+constexpr unsigned int max_gene_mb{100};
+constexpr unsigned int max_name_mb{5};
 
-using Rect = vector<vector<int>>;
 class GeneInfo {
  public:
+  using Rect = vector<vector<int>>;
   GeneInfo(const string & name_, const string & description_,
            const Rect & bounds_, const int low_, const int high_) :
       name{name_}, description{description_}, bounds{bounds_},
@@ -105,7 +101,7 @@ class GeneInfo {
 };
 
 struct BestVariant {
-  BestVariant(const string description_,
+  BestVariant(const string & description_,
               const double start_, const double stop_) :
       description{description_}, start{start_}, stop{stop_},
     low{start}, high{stop} { }
@@ -138,7 +134,7 @@ struct BestVariant {
   double width() const { return high - low; }
 };
 
-bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
+bool add_genes(const RefCN & ref,
                X11Graph & graph, const Event & event = Event()) {
   static bool first_call{true};
   if (first_call && graph.range[0][2] > max_gene_mb * 1000000.0) return false;
@@ -147,10 +143,9 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
   static const KnownGenes genes{[&ref]() {
       try {
         const string & reference_file{ref.fasta_file()};
-        const ChromosomeIndexLookup chr_lookup{ref};
         const string genes_name{reference_file + ".bin/knownGene.txt"};
         const string isoforms_name{reference_file + ".bin/knownIsoforms.txt"};
-        return KnownGenes{genes_name, isoforms_name, chr_lookup, ref};
+        return KnownGenes{genes_name, isoforms_name, ref.chr_lookup, ref};
       } catch (Error & err) {
         cerr << err.what() << endl;
         return KnownGenes{ref};
@@ -175,8 +170,7 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
     }
     return false;
   }
-  static const string & reference_file{ref.fasta_file()};
-  static const string kgXrefs_name{reference_file + ".bin/kgXref.txt"};
+  static const string kgXrefs_name{ref.fasta_file() + ".bin/kgXref.txt"};
   static const GeneXrefs xref{kgXrefs_name};
   if (first_call) {
     first_call = false;
@@ -184,7 +178,8 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
   }
   lock.unlock();
 
-  static vector<GeneInfo> gene_info;
+  static map<X11Graph *, vector<GeneInfo>> all_gene_info;
+  vector<GeneInfo> & gene_info{all_gene_info[&graph]};
 
   if (graph.log_radios[0]) return false;
 
@@ -216,13 +211,13 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
                 xmotion.y >= graph.bounds[1][0] &&
                 xmotion.y <= graph.bounds[1][1]) {
               const double abspos{graph.icoord(0, xmotion.x)};
-              if (abspos <= 0 || abspos >= cn_abspos.n_positions()) {
+              if (abspos <= 0 || abspos >= ref.cn_abspos.n_positions()) {
                 graph.status = "";
                 graph.draw_status();
                 return true;
               }
               const pair<unsigned int, unsigned int> chrpos{
-                cn_abspos.chrpos(abspos)};
+                ref.cn_abspos.chrpos(abspos)};
               std::ostringstream coordinates;
               coordinates << std::setprecision(12) << "("
                           << ref.name(chrpos.first);
@@ -234,7 +229,11 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
                 const double pres{pow(10, floor(log10(res)))};
                 const double rval{round(val / pres) * pres};
                 const double nval{graph.log_radios[y] ? pow(10, rval) : rval};
-                coordinates << (y ? " , " : " ") << nval;
+                if (y && graph.tiled_radio) {
+                  coordinates << " , Y coordinate not available in tiled mode";
+                } else {
+                  coordinates << (y ? " , " : " ") << nval;
+                }
               }
               coordinates << " )";
               graph.status = coordinates.str();
@@ -253,9 +252,9 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
                 graph.click.y >= gene.bounds[1][0] &&
                 graph.click.y <= gene.bounds[1][1]) {
               const pair<unsigned int, unsigned int> chrpos_start{
-                cn_abspos.chrpos(graph.icoord(0, gene.low))};
+                ref.cn_abspos.chrpos(graph.icoord(0, gene.low))};
               const pair<unsigned int, unsigned int> chrpos_stop{
-                cn_abspos.chrpos(graph.icoord(0, gene.high))};
+                ref.cn_abspos.chrpos(graph.icoord(0, gene.high))};
               const unsigned int chr{chrpos_start.first};
               const unsigned int range{
                 chrpos_stop.second - chrpos_start.second};
@@ -292,9 +291,9 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
   std::vector<KnownGene>::const_iterator gene_limits[2];
   for (const bool high : {false, true}) {
     const unsigned int abspos{
-      min(cn_abspos.n_positions(),
+      min(ref.cn_abspos.n_positions(),
           static_cast<unsigned int>(max(0.0, graph.range[0][high])))};
-    const ChromPos chrpos_bound{cn_abspos.chrpos(abspos)};
+    const ChromPos chrpos_bound{ref.cn_abspos.chrpos(abspos)};
     gene_limits[high] = upper_bound(
         genes.begin(), genes.end(), chrpos_bound,
         [high](const ChromPos cp, const KnownGene & gene) {
@@ -331,8 +330,8 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
        g != gene_limits[1]; ++g) {
     // Gene line
     const KnownGene & gene{*g};
-    const unsigned int min_gene{cn_abspos(gene.chr, gene.t_start)};
-    const unsigned int max_gene{cn_abspos(gene.chr, gene.t_stop)};
+    const unsigned int min_gene{ref.cn_abspos(gene.chr, gene.t_start)};
+    const unsigned int max_gene{ref.cn_abspos(gene.chr, gene.t_stop)};
     if (max_gene <= graph.range[0][0] - 0.2 * graph.range[0][2] ||
         min_gene >= graph.range[0][1] + 0.2 * graph.range[0][2])
       continue;
@@ -363,8 +362,9 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
 
     // Exon boxes
     for (unsigned int e{0}; e != gene.exon_starts.size(); ++e) {
-      const unsigned int exon_start{cn_abspos(gene.chr, gene.exon_starts[e])};
-      const unsigned int exon_stop{cn_abspos(gene.chr, gene.exon_stops[e])};
+      const unsigned int exon_start{
+        ref.cn_abspos(gene.chr, gene.exon_starts[e])};
+      const unsigned int exon_stop{ref.cn_abspos(gene.chr, gene.exon_stops[e])};
       if (exon_start >= graph.range[0][1] || exon_stop <= graph.range[0][0])
         continue;
       const unsigned int mod_start{
@@ -417,7 +417,8 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
                     static_cast<unsigned int>(name.size()));
         const double right{tpos + width / 2};
         last_right[i] = right;
-        const Rect gene_rect{{static_cast<int>(left), static_cast<int>(right)},
+        const GeneInfo::Rect gene_rect{
+          {static_cast<int>(left), static_cast<int>(right)},
           {ypos, ypos + fits->height()}};
         gene_info.emplace_back(name, entry.second.description, gene_rect,
                                entry.second.start, entry.second.stop);
@@ -436,10 +437,10 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
     if (bfont != last_font) XSetFont(graph.display(), gc, bfont->id());
     last_font = bfont;
     unsigned int n_bases{0};
-    const int y_pos{graph.bounds[1][1] - 10 * graph.border_width};
+    const int y_pos{graph.bounds[1][1] - 20 * graph.border_width};
     for (unsigned int b = max(0.0, graph.range[0][0]);
          b < graph.range[0][1]; ++b) {
-      const pair<unsigned int, unsigned int> chrpos{cn_abspos.chrpos(b)};
+      const pair<unsigned int, unsigned int> chrpos{ref.cn_abspos.chrpos(b)};
       const string base{ref[chrpos.first][chrpos.second]};
       const int x_coord{graph.coord(0, b)};
       const int x_pos{bfont->centered_x(base, x_coord)};
@@ -463,7 +464,7 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
         const int x_coord{graph.coord(0, tick.first)};
         const int x_pos{bfont->centered_x(turtle, x_coord)};
         XDrawString(graph.display(), graph.pixmap, gc,
-                    x_pos, y_pos - 1.5 * bfont->height(),
+                    x_pos, y_pos - 1.2 * bfont->height(),
                     turtle.c_str(), static_cast<unsigned int>(turtle.size()));
       }
     }
@@ -471,18 +472,18 @@ bool add_genes(const Reference & ref, const CN_abspos & cn_abspos,
   return false;
 }
 
-bool add_chromosomes(const Reference & ref, const CN_abspos & cn_abspos,
+bool add_chromosomes(const RefCN & ref,
                      X11Graph & graph, const Event & event = Event()) {
   if (event.type != Event::Draw) return false;
 
-  const vector<unsigned int> & chromosomes{cn_abspos.chromosomes()};
+  const vector<unsigned int> & chromosomes{ref.cn_abspos.chromosomes()};
   int min_w{100000000};
   vector<unsigned int> chr;
   vector<int> pos;
   vector<int> widths;
   for (unsigned int c{0}; c != chromosomes.size(); ++c) {
-    double cl(cn_abspos.cn_offset(c));
-    double ch(cn_abspos.cn_offset(c + 1));
+    double cl(ref.cn_abspos.cn_offset(c));
+    double ch(ref.cn_abspos.cn_offset(c + 1));
     if (graph.log_radios[0]) cl = log10(cl);
     if (graph.log_radios[0]) ch = log10(ch);
     const double gl{graph.range[0][0]};
@@ -531,7 +532,7 @@ bool add_chromosomes(const Reference & ref, const CN_abspos & cn_abspos,
 
   // Chromosome boundary lines
   for (unsigned int c{0}; c <= chromosomes.size(); ++c) {
-    double chr_start(cn_abspos.cn_offset(c));
+    double chr_start(ref.cn_abspos.cn_offset(c));
     if (graph.log_radios[0]) chr_start = log10(chr_start);
     if (chr_start > graph.range[0][0] && chr_start < graph.range[0][1]) {
       const unsigned int x_pos(graph.coord(0, chr_start));
@@ -542,9 +543,10 @@ bool add_chromosomes(const Reference & ref, const CN_abspos & cn_abspos,
   return false;
 }
 
-bool add_ratio_lines(const vector<double> cn_lines,
+bool add_ratio_lines(const vector<double> cn_lines,  // Not a reference
                      X11Graph & graph, const Event & event = Event()) {
   if (event.type != Event::Draw) return false;
+  if (graph.tiled_radio) return false;
 
   // Ratio lines
   for (double y : cn_lines) {
@@ -582,21 +584,23 @@ struct CytobandInfo {
   }
 };
 
-bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
+bool add_cytobands(const RefCN & ref,
                    X11Graph & graph, const Event & event = Event()) {
-  static vector<CytobandInfo> cytobands{[&ref, &cn_abspos, &graph]() {
+  static vector<CytobandInfo> cytobands{
+    [&ref, &graph]() {
       // GCs for different stain colors
       const map<string, string> stain_colors{
         {"gneg", "grey100"},
         {"gpos25", "grey90"},
         {"gpos50", "grey70"},
+
         {"gpos75", "grey40"},
         {"gpos100", "grey0"},
         {"gvar", "grey100"},
         {"stalk", "brown3"},
         {"acen", "brown4"}};
       map<string, GC> stain_gcs;
-      for (const auto sc : stain_colors) {
+      for (const auto & sc : stain_colors) {
         const string stain_name{sc.first};
         const string color_name{sc.second};
         auto inserted = stain_gcs.emplace(stain_name, nullptr);
@@ -626,7 +630,6 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
       string name;
       string stain;
       vector<CytobandInfo> result;
-      const ChromosomeIndexLookup chr_lookup{ref};
       while (bands >> chr_name >> start >> stop) {
         bands.get();
         getline(bands, name, '\t');
@@ -636,9 +639,9 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
             chr_name.find("M") != string::npos) {
           continue;
         }
-        const unsigned int chr{chr_lookup[chr_name]};
+        const unsigned int chr{ref.chr_lookup[chr_name]};
         result.emplace_back(chr_name,
-                            cn_abspos(chr, start), cn_abspos(chr, stop),
+                            ref.cn_abspos(chr, start), ref.cn_abspos(chr, stop),
                             name, stain_gcs[stain]);
       }
       sort(result.begin(), result.end());
@@ -666,7 +669,8 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
 
   static int band_low{0};
   static int band_high{0};
-  static vector<CytobandInfo> band_info;
+  static map<X11Graph *, vector<CytobandInfo>> all_band_info;
+  vector<CytobandInfo> & band_info{all_band_info[&graph]};
 
   if (event.type == Event::X && event.x->type == MotionNotify) {
     // Show gene description on hover
@@ -709,87 +713,301 @@ bool add_cytobands(const Reference & ref, const CN_abspos & cn_abspos,
   return false;
 }
 
+using String = std::string;
+using Strings = std::vector<String>;
+
+// Read Specific columns from disk
+// and convert chr chrpos to abspos in process if requested
+class AbsposColumns {
+ public:
+  using String = std::string;
+  using Strings = std::vector<String>;
+  using Column = std::vector<double>;
+  using Data = std::vector<Column>;
+  using iStream = std::istringstream;
+  AbsposColumns(const String & file_name,
+                const String & columns,
+                const RefCN * ref,
+                const uint64_t size_hint = 500000) {
+    // Get list of desired column names or numbers
+    iStream column_input{columns.c_str()};
+    String column_spec;
+    String chr_col_name;
+    bool header{false};
+    bool implicit_index{false};
+    bool has_chr{false};
+    while (getline(column_input, column_spec, ',')) {
+      // column spec is either name or name:type
+      iStream spec_stream{column_spec.c_str()};
+      String column_name{};
+      String column_type{};
+      getline(spec_stream, column_name, ':');
+      if (spec_stream) spec_stream >> column_type;
+      if (column_name.find_first_not_of("0123456789") != string::npos)
+        header = true;
+      if (column_names.empty() && column_name == "implicit") {
+        implicit_index = true;
+        continue;
+      }
+      // chr column must be first and marked or named appropriately
+      // and then if chr column exists the next column must be a chrpos column
+      if (ref && column_names.empty() &&
+          (column_type == "c" ||
+           (column_name[0] == 'c' &&
+            (column_name == "chr" || column_name == "chrom" ||
+             column_name == "chromosome")) ||
+           (column_name[0] == 'C' &&
+            (column_name == "Chr" || column_name == "Chrom" ||
+             column_name == "Chromosome")))) {
+        has_chr = true;
+      }
+      column_names.push_back(column_name);
+      column_types.push_back(column_type);
+    }
+
+    if (column_names.size() < 2) {
+      throw UsageError("Column loader expects to load at least two columns "
+                       "from column string") << columns;
+    }
+    if (ref && implicit_index) {
+      throw UsageError("Plot types genome and cn cannot be used "
+                       "with an implicit index");
+    }
+
+    // Input file name
+    std::ifstream input{file_name.c_str()};
+    if (!input) throw UsageError("Could not open input file") << file_name;
+
+    // Process header, or just use column numbers passed
+    using ColumnInfo = std::pair<unsigned int, unsigned int>;
+    using ColumnLookup = std::vector<ColumnInfo>;
+    const ColumnLookup column_numbers{
+      [this, header, columns, &input] () {
+        ColumnLookup result;
+        if (header) {
+          // Column names are strings
+          String header_line;
+          getline(input, header_line);
+          String column_name;
+          iStream header_stream{header_line.c_str()};
+          unsigned int column{0};
+          while (header_stream >> column_name) {
+            const Strings::const_iterator found{
+              find(column_names.begin(), column_names.end(), column_name)};
+            if (found != column_names.end())
+              result.emplace_back(column, found - column_names.begin());
+            ++column;
+          }
+        } else {
+          // Column names are numbers, starting with 1
+          for (unsigned int c{0}; c != column_names.size(); ++c) {
+            result.emplace_back(static_cast<unsigned int>(
+                stoul(column_names[c]) - 1), c);
+            column_names[c] = String(header ? "" : "column ") +
+                column_names[c];
+          }
+          sort(result.begin(), result.end(),
+               [](const ColumnInfo & lhs, const ColumnInfo & rhs) {
+                 return lhs.first < rhs.first;
+               });
+        }
+        if (column_names.size() != result.size()) {
+          throw UsageError("Could not find all columns specified in")
+              << columns;
+        }
+        return result;
+      }()};
+
+    // Reserve space for data
+    data.resize(column_names.size());
+    for (unsigned int c{0}; c != data.size(); ++c) {
+      if (!has_chr || c) {  // Do not reserve for possible chr column
+        data.reserve(size_hint);
+      }
+    }
+
+    // Read in data line by line
+    String line;
+    String text;
+    String chr_name;
+    double value{0};
+    while (getline(input, line)) {
+      iStream stream{line.c_str()};
+      ColumnLookup::const_iterator nc{column_numbers.begin()};
+     unsigned int c{0};
+      while (stream) {
+        if (nc != column_numbers.end() && nc->first == c) {
+          if (has_chr && nc->second == 0) {
+            stream >> chr_name;
+          } else {
+            if (stream >> value) {
+              data[nc->second].push_back(value);
+            } else {
+              throw Error("Could not parse data line:\n")
+                  << line << "\nfrom data file" << file_name;
+            }
+          }
+          ++nc;
+        } else {
+          stream >> text;  // should ignore?  space vs tab is why not
+        }
+        ++c;
+        if (nc == column_numbers.end()) break;
+      }
+
+      // Process chrpos column into abspos column
+      if (has_chr && data[1].size()) {
+        const unsigned int chr{ref->chr_lookup[chr_name]};
+        data[1].back() = ref->cn_abspos(chr, data[1].back());
+      }
+    }
+    if (has_chr) {
+      column_names.erase(column_names.begin());
+      column_types.erase(column_types.begin());
+      data.erase(data.begin());
+    }
+
+    // Check load state
+    const uint64_t constant_size{data.front().size()};
+    for (unsigned int col{0}; col != data.size(); ++col) {
+      if (data[col].size() != constant_size &&
+          col )
+        throw Error("Inconsistent column data sizes");
+    }
+    if (constant_size == 0)
+      throw Error("Data load size was zero");
+
+    if (implicit_index) {
+      column_names.insert(column_names.begin(), "index");
+      column_types.insert(column_types.begin(), "");
+      data.emplace(data.begin(), data[1].size());
+      for (uint64_t i{0}; i != data[0].size(); ++i) {
+        data[0][i] = i;
+      }
+    }
+  }
+
+  using OneColInfo = std::pair<String, String>;
+  using XColInfo = std::vector<OneColInfo>;
+  const XColInfo info() const {
+    if (column_names.empty())
+      throw Error("Unexpected empty columns in AbsposColumns::info");
+    XColInfo result;
+    for (unsigned int c{1}; c != column_names.size(); ++c) {
+      result.emplace_back(column_names[c], column_types[c]);
+    }
+    return result;
+  }
+
+  const String & name(unsigned int c) const { return column_names[c]; }
+  const String & type(unsigned int c) const { return column_types[c]; }
+  uint64_t n_rows() const { return n_cols() ? data[0].size() : 0; }
+  uint64_t n_cols() const { return data.size(); }
+  const Column & operator[](const unsigned int c) const {
+    return data[c];
+  }
+
+ private:
+  Strings column_names{};
+  Strings column_types{};
+  Data data{};
+};
+
+const std::string show_help{"Showing extra help"};
+
 int main(int argc, char * argv[]) try {
   // Process optional command line arguments
-  --argc;
-
   bool set_geometry{false};
   Geometry geometry{X11Graph::default_geometry()};
   char ** initial{nullptr};
   bool fullscreen{false};
-  bool setup_ref_only{false};
+  uint64_t n_rows{471000};  // size of trial data, to minimize extra memory
+  --argc;
   while (argc) {
     if (argv[1][0] == '-') {
       const string option{argv[1]};
-      if (option == "--geometry") {
+      auto matches = [&option] (const std::string & full_option) {
+        if (option.size() == 2 &&
+            option[1] == full_option[2]) return true;
+        if (option == full_option) return true;
+        return false;
+      };
+
+      if (matches("--help")) {
+        throw UsageError(show_help);
+      } else if (matches("--geometry")) {
         const string geometry_string{argv[2]};
         istringstream geometry_stream{geometry_string.c_str()};
         char dummy;
         int width, height, x_off, y_off;
         geometry_stream >> width >> dummy >> height >> x_off >> y_off;
         if (!geometry_stream) {
-          throw Error("Problem parsing geometry") << geometry_string;
+          throw UsageError("Problem parsing geometry") << geometry_string;
         }
         geometry = {{width, height}, {x_off, y_off}};
         set_geometry = true;
         argv += 2;
         argc -= 2;
-      } else if (option == "--initial-view") {
+      } else if (matches("--initial")) {
         initial = argv + 2;
         argc -= 5;
         argv += 5;
-      } else if (option == "--n-threads") {
+      } else if (matches("--threads")) {
 #ifndef __CYGWIN__
         n_threads = atoi(argv[2]);
 #else
-        cerr << "Ignoring --n-threads under Cygwin OS" << endl;
+        cerr << "Ignoring --threads under Cygwin OS" << endl;
 #endif
         argc -= 2;
         argv += 2;
-      } else if (option == "--fullscreen") {
+      } else if (matches("--fullscreen")) {
         fullscreen = true;
         argc -= 1;
         argv += 1;
-      } else if (option == "--setup-ref") {
-        setup_ref_only = true;
-        argc -= 1;
-        argv += 1;
+      } else if (matches("--rows")) {
+        n_rows = atoi(argv[2]);
+        argc -= 2;
+        argv += 2;
+      } else if (matches("--setup")) {
+        if (argc != 2) {
+          throw UsageError("Only two arguments allowed "
+                           "if first is --setup");
+        }
+        const Reference ref{argv[2]};
+        return 0;
       } else {
-        throw Error("Unrecognized command line option") << option;
+        throw UsageError("Unrecognized command line option") << option;
       }
     } else {
       break;
     }
   }
+  if (!argc) throw UsageError("No default arguments were used");
+  if (argc < 2) throw UsageError("At least two arguments must be used");
 
-  if ((!setup_ref_only && argc < 4) || (setup_ref_only && argc != 2))
-    throw Error("usage: ggraph plain|genome|cn ref xn,yn1[:l],yn2[:l]... "
-                "data_file ...");
-
+  const std::string first_argument{argv[1]};
+  const bool do_cn{first_argument == "cn"};
+  const bool do_genome{do_cn || first_argument == "genome"};
+  unique_ptr<const RefCN> ref_ptr{nullptr};
+  if (do_genome) {
+    if (argc < 4) throw UsageError("Not enough arguments");
+    ref_ptr = make_unique<const RefCN>(argv[2]);
+    argc -= 2; argv += 2;
+  }
   if (fullscreen && set_geometry) {
     cerr << "Note that --fullscreen option overrides --geometry" << endl;
     sleep(1);
   }
 
-  // Process arguments
-  const string type{argv[1]};
-  const string ref_name{argv[2]};
-
-  // Open reference, if needed
-  unique_ptr<const Reference> ref_ptr{(type == "genome" || type == "cn") ?
-        make_unique<const Reference>(ref_name) : nullptr};
-  unique_ptr<const CN_abspos> abspos_ptr{(type == "genome" || type == "cn") ?
-        make_unique<const CN_abspos>(*ref_ptr) : nullptr};
-  if (setup_ref_only) {
-    return 0;
+  // Columns to show
+  const std::string columns{argv[1]};
+  if (columns.find_first_of(',') == string::npos) {
+    throw UsageError("Did not find mandatory comma in column specification ")
+        << columns;
   }
 
-  // Columns to show
-  const std::string columns{argv[3]};
-  argc -= 3;
-  argv += 3;
-
   // Names of input files
+  argc -= 1; argv += 1;
   const vector<string> names{[argc, argv] () {
       vector<string> result;
       result.reserve(argc);
@@ -798,122 +1016,88 @@ int main(int argc, char * argv[]) try {
       }
       return result;
     }()};
-
-  // Read in columns from data file
-  const vector<Columns> input_data{[&names, &columns] () {
-      ThreadPool pool(n_threads);
-      vector<future<Columns>> futures;
-      for (const string & name : names) {
-        futures.push_back(
-            pool.run([&columns] (const string & file_name) {
-                return Columns{file_name, 500000,
-                      columns, columns.find_first_not_of(
-                          "0123456789,") != string::npos};
-              }, name));
+  const Strings short_names{[&names] () {
+      Strings result;
+      for (const String & name : names) {
+        result.push_back(remove_including_final(name, '/'));
       }
-      vector<Columns> result;
+      return result;
+    }()};
+
+  // Read in columns from multiple data files in parallel
+  using InputData = vector<AbsposColumns>;
+  const InputData input_data{
+    [&names, &columns, &ref_ptr, n_rows] () {
+      ThreadPool pool(n_threads);
+      using Future = future<AbsposColumns>;
+      vector<Future> futures;
+      for (const string & name : names) {
+        futures.push_back(pool.run(
+            [&columns, &ref_ptr, n_rows]
+            (const string & file_name) {
+              return AbsposColumns{file_name, columns, ref_ptr.get(), n_rows};
+            }, name));
+      }
+      InputData result;
       result.reserve(names.size());
-      for (auto & fut : futures) {
+      for (Future & fut : futures) {
         result.push_back(fut.get());
       }
       return result;
     }()};
 
-  const vector<unsigned char> do_lines{[&input_data] () {
-      vector<unsigned char> result;
-      // Assumes all loaded files share the same column names
-      const Columns & cols{input_data[0]};
-      for (unsigned int c{1}; c != cols.n_cols(); ++c) {
-        if (cols.type(c).empty() || cols.type(c)[0] == 'p') {
-          result.push_back(0);
-        } else if (cols.type(c)[0] == 'l') {
-          result.push_back(1);
-        } else {
-          throw Error("Unknown column type") << cols.type(c);
-        }
-      }
-      // Special case for two dependent variables and no type specifications
-      // make the second dependent variable display as lines
-      if (cols.n_cols() == 3 && cols.type(1).empty() && cols.type(2).empty()) {
-        result[1] = 1;
-      }
-      return result;
-    }()};
-
-
   // App to display multiple windows
   X11App app;
-
-  if (fullscreen) {
+  if (fullscreen)
     geometry = {{app.display_size[0], app.display_size[1]}, {0, 0}};
-  }
 
   // Rearrange data in specific X11Graph format for all individuals
   const int n_sets(static_cast<unsigned int>(input_data.size()));
   const int n_y(input_data.front().n_cols() - 1);
-  using Data = std::vector<const std::vector<double> *>;
-  using AllData = std::vector<Data>;
-  AllData data(n_sets * n_y, Data(2));
+  using XYSeries = X11Graph::XYSeries;
+  using Data = X11Graph::Data;
+  Data data(n_sets * n_y, XYSeries(2));
   for (int r{0}; r != n_sets; ++r) {
     for (int y{0}; y != n_y; ++y) {
       data[n_sets * y + r][0] = &input_data[r][0];
       data[n_sets * y + r][1] = &input_data[r][y + 1];
     }
   }
+  using Info = std::pair<Strings, AbsposColumns::XColInfo>;
+  using DataInfo = std::pair<Data, Info>;
+  const DataInfo info{std::move(data),
+        Info{short_names, input_data.front().info()}};
 
-  auto add_special_features = [&type, &names, &input_data, &do_lines,
-                               n_sets, n_y, &ref_ptr, &abspos_ptr]
+  auto add_special_features =
+      [do_genome, do_cn, &input_data, n_sets, n_y, &ref_ptr]
       (X11Graph & graph) {
-    // Adjust series positions, assign names, and make some series lines only
-    for (int r{0}; r != n_sets; ++r) {
-      const Columns & result{input_data[r]};
-      const double scale{n_sets <= 4 ? 1.0 : 4.5 / n_sets};
-      for (int y{0}; y != n_y; ++y) {
-        graph.series_radios[n_sets * y + r].specification.y =
-            2 + scale * (1.25 * n_y * (n_sets - r - 1) + (n_y - y - 1));
-        const string name{remove_substring(remove_substring(
-            remove_including_final(names[r], '/'),
-            "_results.txt"), ".varbin.data.txt") + "  " + result.name(y + 1)};
-        graph.series_names[n_sets * y + r] += ", " + name;
-        graph.series_radios[n_sets * y + r].description +=
-            ", " + name;
-        if (do_lines[y]) graph.series_only_lines[n_sets * y + r] = true;
-      }
-      if (n_sets > 1) {
-        Radio testradio{"Place this series on top", &graph, {-1, 2}};
-        graph.extra_radios.push_back(Radio{
-            string("Place series") + (n_y > 1 ? " group" : "") +
-                " on top", &graph,
-            {-0.7, 2 + scale *
-                  (1.25 * n_y * (n_sets - r - 1) + (n_y - 0.5 - 1))},
-            {[&graph, r, n_y, n_sets]() {
-                // Find location of series in ordering list
-                vector<unsigned int> & order{graph.series_order};
-                vector<unsigned int>::iterator riter{
-                  find(order.begin(), order.end(), r)};
-                const unsigned int rindex{
-                  static_cast<unsigned int>(riter - order.begin())};
-                for (int y{0}; y != n_y; ++y) {
-                  vector<unsigned int>::iterator togo{
-                    order.begin() + (y + 1) * n_sets};
-                  order.insert(togo, r + y * n_sets);
-                  vector<unsigned int>::iterator toremove{
-                    order.begin() + y * n_sets + rindex};
-                  order.erase(toremove);
-                }
-                graph.draw();
-              },
-                  [r, &graph, n_sets]() {
-                    return (graph.series_order[n_sets - 1]) !=
-                        static_cast<unsigned int>(r);
-                  }}});
-        graph.extra_radios.back().radius_scale = 0.5;
-        graph.extra_radios.back().id = r;
-        graph.radios.push_front(&graph.extra_radios.back());
-      }
+    if (do_genome) {
+      // Chromosomes and ratio lines
+      graph.add_call_back("Toggle chromosome boundaries and names",
+                          X11Graph::CallBack{std::bind(
+                              &add_chromosomes, std::cref(*ref_ptr), _1, _2)});
+
+      // Gene display
+      graph.add_call_back(
+          "Toggle chrpos and gene display (only shown for X axis range below " +
+          std::to_string(max_gene_mb) + "MB for genes and " +
+          std::to_string(max_name_mb) + " MB for names)",
+          X11Graph::CallBack{std::bind(
+              &add_genes, std::cref(*ref_ptr), _1, _2)});
+
+      // Cytobands
+      graph.add_call_back("Toggle cytobands and names",
+                          X11Graph::CallBack{std::bind(
+                              &add_cytobands, std::cref(*ref_ptr), _1, _2)},
+                          true, false);
+
+      // Other genome-specific tweaks
+      graph.grid_radios[0][0].toggled = false;
+      graph.grid_radios[1][0].toggled = false;
+      graph.log_radios[0].actions.visible = [] () { return false; };
     }
 
-    if (type == "cn") {
+    if (do_cn) {
       // Are some Ys ratios?  Then change scale for ratio lines
       const vector<double> cn_lines{[&input_data]() {
           bool some_ratios{false};
@@ -927,53 +1111,27 @@ int main(int argc, char * argv[]) try {
         }()};
 
       graph.add_call_back("Toggle ratio lines", X11Graph::CallBack{std::bind(
-          &add_ratio_lines, cn_lines, _1, _2)});
+          &add_ratio_lines, cn_lines, _1, _2)}, false, true,
+        [&graph]() { return !graph.tiled_radio; });
 
       graph.grid_radios[1][1].toggled = false;
       graph.grid_radios[0][1].toggled = false;
     }
-
-    if (type == "genome" || type == "cn") {
-      // Add drawing callback to add chromosomes and ratio lines
-      graph.add_call_back("Toggle chromosome boundaries and names",
-                          X11Graph::CallBack{std::bind(
-                              &add_chromosomes, std::cref(*ref_ptr),
-                              std::cref(*abspos_ptr), _1, _2)});
-
-      graph.add_call_back(
-          "Toggle chrpos and gene display (only shown for X axis range below " +
-          std::to_string(max_gene_mb) + "MB for genes and " +
-          std::to_string(max_name_mb) + " MB for names)",
-          X11Graph::CallBack{std::bind(&add_genes, std::cref(*ref_ptr),
-                                       std::cref(*abspos_ptr), _1, _2)});
-
-      // Cytobands
-      graph.add_call_back("Toggle cytobands and names",
-                          X11Graph::CallBack{std::bind(
-                              &add_cytobands, std::cref(*ref_ptr),
-                              std::cref(*abspos_ptr), _1, _2)}, true, false);
-
-      // Other genome-specific tweaks
-      graph.grid_radios[0][0].toggled = false;
-      graph.grid_radios[1][0].toggled = false;
-      graph.log_radios[0].actions.visible = [] () { return false; };
-    }
   };
 
   // All individuals graph
-  X11Graph & graph{X11Graph::create_whole(
-      app, data, geometry, "G-Graph", n_threads)};
+  X11Graph & graph{app.create<X11Graph>(info, geometry, "G-Graph", n_threads,
+                                        add_special_features)};
 
   // Preload gene info to avoid wait time after zoom
   future<bool> gene_future;
-  if (type == "genome" || type == "cn") {
+  if (do_genome) {
     gene_future = graph.pool.run(
-        add_genes, std::cref(*ref_ptr),
-        std::cref(*abspos_ptr), std::ref(graph), Event());
+        add_genes, std::cref(*ref_ptr), std::ref(graph), Event());
   }
 
   // Add special G-Graph features to X11plot graph
-  add_special_features(graph);
+  // add_special_features(graph);
 
   // Process initial view command line arguments
   if (initial) {
@@ -989,11 +1147,78 @@ int main(int argc, char * argv[]) try {
   if (gene_future.valid()) gene_future.get();
 
   return 0;
+} catch (UsageError & e) {
+  const std::string err{e.what()};
+  if (err != show_help) {
+    std::cerr << "Usage Error: ";
+    cerr << e.what() << "\n\n";
+  }
+
+  std::string usage{std::string() + R"xxx(Usage options:
+
+    ggraph genome|cn ref_fasta xn,yn1,yn2... data_file ...
+or
+    ggraph xn,yn1,yn2... data_file ...
+
+Optional leading arguments (CAPS for numeric):
+  -g | --geometry WIDTHxHEIGHT+XOFF+YOFF
+  -i | --initial XLOW XHIGH YLOW YHIGH
+  -t | --threads NTHREADS
+  -r | --rows NROWS
+  -f | --fullscreen
+  -s | --setup ref_fasta
+  -h | --help
+
+Use optional leading argument --help to display additional usage information
+or visit http://mumdex.com/ggraph/ to view the G-Graph tutorial)xxx"};
+
+  std::cerr << usage << std::endl;
+
+  if (err != show_help) return 1;
+
+  std::cerr << R"xxx(Finer usage details:
+  1. 'genome' as the first argument includes genome features in plots
+  2. 'cn' as the first argument also includes copy number ratio lines in plots
+  3. ref_fasta is the name of (or full path to) the genome reference fasta file
+  4. Without 'genome' or 'cn' as the first argument, the graph is a plain plot
+     and the command requires the shorter usage form shown above
+  5. For the column specification 'xn,yn1,yn2...':
+    a. It is a list of columns to display from the data files
+    b. Starts with the single x variable, followed by y variables
+    c. Can be comma separated column numbers if the data file has no header line
+    d. In cn mode, by default the second of two y columns is displayed as lines
+    e. After any 'yn', ':l' forces line display while ':p' forces point display
+    f. If 'xn' is 'implicit' then the x variable is the line number
+    g. If 'xn' is one of 'chr', 'chrom' or 'chromosome', or is followed by ':c',
+       then that column is assumed to be a chromosome name column and the 'y1'
+       column is interpreted as chromosomal position to calculate abspos
+    h. An abspos column as 'xn' will work, provided it is calculated correctly.
+       G-Graph calculates abspos in the order specified by ref_fasta,
+       ignoring chromosomes less than 40 megabases in size.
+  6. The data_file arguments are names of (or full paths to) the data files,
+     which must be space or tab separated text tables with an optional header.
+     Each text file may be a different length but all must share the column
+     names (possibly in different order) specified in the column specification.
+     Referenced columns (except for the optional chr column) must be numeric.
+     Columns after the referenced columns may be ragged.
+  7. For the optional argument '--geometry', a '+' before 'XOFF' or 'YOFF'
+     attempts window placement relative to the upper left of screen,
+     while a '-' attempts placement relative to the bottom right screen corner
+  8. The '--threads' option uses up to that number for file load and display
+  9. The --rows column reserves space for input files of this size
+  10. The --fullscreen option only tries to make a maximum window size 
+  11. The --setup option allows binary reference cache pre-generation, but
+      that would happen anyway on first loading. This option was added only to
+      reduce first load wait time when using the G-Graph install script)xxx"
+            << std::endl;
+
+  return 0;
 } catch (Error & e) {
-  cerr << "paa::Error:" << endl;  cerr << e.what() << endl;
+  cerr << "paa::Error:" << endl;
+  cerr << e.what() << endl;
   return 1;
 } catch (exception & e) {
-  cerr << "std::exception" << endl;
+  cerr << "std::exception:" << endl;
   cerr << e.what() << endl;
   return 1;
 } catch (...) {

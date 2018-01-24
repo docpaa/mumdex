@@ -29,8 +29,8 @@ include $(wildcard $(DEPDIR)/*.dep)
 # Compile command and flags
 CXX :=  g++
 STD := -std=c++11
-FAST := -Ofast
-DEBUG := # -g -ggdb
+FAST := # -Ofast
+DEBUG := -g -ggdb
 LDFLAGS	:= $(FAST)
 LIBS :=
 INCFLAGS := $(addprefix -I ,$(MODULES))

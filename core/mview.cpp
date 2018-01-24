@@ -92,8 +92,8 @@ int main(int argc, char* argv[]) try {
     paa::X11App app;
 
     // Read viewer class
-    paa::X11MUMdexViewer & viewer{paa::X11MUMdexViewer::create(
-        app, mumdex_names, mumdexes,
+    paa::X11MUMdexViewer & viewer{app.create<paa::X11MUMdexViewer>(
+        mumdex_names, mumdexes,
         Geometry{{width, height}, {x_off, y_off}})};
 
     viewer.set_position(chr, pos);

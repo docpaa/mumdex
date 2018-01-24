@@ -135,6 +135,7 @@ std::ostream & operator<<(std::ostream & out,
 
 template<class String>
 void RCView<String>::test() {
+  std::cout << "RCView test" << std::endl;
   const std::string long_bases{"ACGTA"};
   const std::string bases{long_bases.substr(1, 4)};
   RCView<std::string> rc_bases{long_bases, 1, 4};
@@ -202,6 +203,7 @@ class CharacterEncoding {
   }
 
   static void test() {
+    std::cout << "CharacterEncoding test" << std::endl;
     constexpr CharacterEncoding<alphabet> empty_encoding{true};
     const CharacterEncoding<alphabet> base_encoding{};
     std::cout << alphabet
@@ -310,6 +312,7 @@ class CompressedString {
   }
 
   static void test() {
+    std::cout << "CompressedString test" << std::endl;
     using CompressedTest = CompressedString<c_bases>;
     CompressedTest test_{};
     std::cout << "Chars per word is "
@@ -335,7 +338,6 @@ class CompressedString {
       std::cout << view[i];
     }
     std::cout << std::endl;
-    std::cout << "CompressedString test passed" << std::endl;
   }
 
  private:
@@ -420,6 +422,7 @@ class LinksCounts {
     data_ &= ~(one << (out * 4 + i + n_bits_count));
   }
   static void test() {
+    std::cout << "LinksCounts test" << std::endl;
     std::cout << n_bits
               << " " << n_bits_links
               << " " << n_bits_count
@@ -834,7 +837,7 @@ using std::exception;
 using paa::Error;
 
 int main(int argc, char* argv[]) try {
-  if (false) {
+  if (true) {
     paa::CharacterEncoding<paa::c_bases>::test();
     paa::CharacterEncoding<paa::c_lc_bases>::test();
     paa::CharacterEncoding<paa::c_letters>::test();

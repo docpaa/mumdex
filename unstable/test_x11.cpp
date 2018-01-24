@@ -29,10 +29,6 @@ class X11Circles : public X11Win {
  public:
   using X11Win::X11Win;
 
-  static void create(X11App & app) {
-    app.add(std::make_unique<X11Circles>(app));
-  }
-
   explicit X11Circles(X11App & app__) : X11Win(app__) {
     XSelectInput(display(), window, StructureNotifyMask | ExposureMask |
                  KeyPressMask | ButtonMotionMask | ButtonPressMask);
@@ -109,12 +105,13 @@ int main(int argc, char*[]) try {
   }
 
   X11App app;
-  X11Circles::create(app);
-  X11Graph::create(app, xs[0], ys[0], xs[1], ys[1], xs[2], ys[2]);
+  app.create<X11Circles>();
+  app.create<X11Graph>(xs[0], ys[0], xs[1], ys[1], xs[2], ys[2]);
   vector<vector<string>> text{
     {"hello", "there", "my", "friend"},
     {"World", "there", "mistake", "me"}, {"1", "2", "", "4"}};
-  X11TextGrid::create(app, text, {0}, {0}, {1});
+  using Vec = std::vector<unsigned int>;
+  app.create<X11TextGrid>(text, Vec{0}, Vec{0}, Vec{1});
   app.run();
 
   return 0;

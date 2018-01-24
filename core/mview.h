@@ -42,13 +42,6 @@ class X11MUMdexViewer : public X11Win {
  public:
   static constexpr int border_width{3};
 
-  // Creation factory
-  template <class ... Input>
-  static X11MUMdexViewer & create(X11App & app, Input && ... input) {
-    return reinterpret_cast<X11MUMdexViewer &>(app.add(
-        std::make_unique<X11MUMdexViewer>(app, std::forward<Input>(input)...)));
-  }
-
   X11MUMdexViewer(X11App & app__,
                   const std::vector<std::string> & mumdex_names__,
                   const std::vector<MUMDEX> & mumdexes__,
@@ -920,7 +913,8 @@ class X11CandidateViewer : public Geometry {
     X11TextGrid::CallBack cell_test{
       std::bind(&X11CandidateViewer::launch_ready, this,
                 std::placeholders::_1)};
-    X11TextGrid::create(app, text, {0, 1, 3}, {0}, {0, 2},
+    using Vec = std::vector<unsigned int>;
+    app.create<X11TextGrid>(text, Vec{0, 1, 3}, Vec{0}, Vec{0, 2},
                         exclusive_rows, call_back, cell_test, *this);
     launch_graph2(0);
     app.run();
@@ -962,8 +956,8 @@ class X11CandidateViewer : public Geometry {
                 << " of " << names.size()
                 << " " << xi << " " << yi << " " << n_x << " " << n_y
                 << std::endl;
-      paa::X11MUMdexViewer & viewer{paa::X11MUMdexViewer::create(
-          app, mumdex_names, mumdexes,
+      X11MUMdexViewer & viewer{app.create<X11MUMdexViewer>(
+          mumdex_names, mumdexes,
           Geometry{{sx - x_offset(), sy - y_offset()},
             {static_cast<int>(xi * sx), static_cast<int>(yi * sy)}})};
         viewer.set_mumdex(mumdex_id);
@@ -979,7 +973,7 @@ class X11CandidateViewer : public Geometry {
   std::vector<std::string> names{};
   std::vector<std::string> chrs{};
   std::vector<unsigned int> pos{};
-  std::vector<paa::MUMDEX> mumdexes{};
+  std::vector<MUMDEX> mumdexes{};
   std::vector<std::string> mumdex_names{};
   std::map<std::string, unsigned int> mumdex_lookup{};
   Population pop;

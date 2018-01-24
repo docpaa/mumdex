@@ -46,6 +46,12 @@ class Error: public std::exception {
   std::string message;
 };
 
+class UsageError : public Error {
+ public:
+  using Error::Error;
+  virtual ~UsageError() throw() { }
+};
+
 #if 0
 class warn {
  public:

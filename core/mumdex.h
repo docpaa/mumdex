@@ -438,6 +438,15 @@ class ChromosomeIndexLookup {
   std::map<std::string, unsigned int> lookup_table{};
 };
 
+class RefPlus : public Reference {
+ public:
+  explicit RefPlus(const std::string & fasta_file_name) :
+      Reference{fasta_file_name}, chr_lookup{*this} { }
+  ~RefPlus() {}
+
+  const ChromosomeIndexLookup chr_lookup;
+};
+
 inline std::string ref_name(const std::string & name) {
   return name + "/ref.txt";
 }

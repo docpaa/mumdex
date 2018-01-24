@@ -42,8 +42,8 @@ int main(int argc, char * argv[]) try {
 
   // The App
   X11App app;
-  X11Colors & colors{X11Colors::create(app, starting_colors, n_colors)};
-  X11Colors::create(app, colors.color_names, 0, true);
+  X11Colors & colors{app.create<X11Colors>(starting_colors, n_colors)};
+  app.create<X11Colors>(colors.color_names, 0, true);
   if (true) colors.print_names();
   app.run();
 

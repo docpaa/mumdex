@@ -108,14 +108,15 @@ class TSV_col {
 class TSV {
  public:
   // Construct from a text data file
-  explicit TSV(const std::string & file_name) :
-      ps{remove_substring(file_name, ".txt")},
+  explicit TSV(const std::string & file_name__) :
+      file_name_{file_name__},
+      ps{remove_substring(file_name_, ".txt")},
     mersenne{rd()},
     unitGen{std::bind(std::uniform_real_distribution<double>(-0.5, 0.5),
                       mersenne)} {
     // Open file
-    std::ifstream file{(file_name).c_str()};
-    if (!file) throw Error("Problem opening file") << file_name;
+    std::ifstream file{(file_name_).c_str()};
+    if (!file) throw Error("Problem opening file") << file_name_;
 
     // Read header line
     std::string text;
@@ -237,6 +238,8 @@ class TSV {
     }
     return *this;
   }
+
+  std::string file_name() const { return file_name_; }
 
   // Select column, to modify column properties
   TSV_col & operator()(const std::string & col) {
@@ -481,6 +484,8 @@ class TSV {
     cols.emplace_back(name, std::is_integral<result_type>::value,
                       std::is_arithmetic<result_type>::value);
   }
+
+  std::string file_name_{};
 
   // data
   std::map<std::string, unsigned int> indexes{};
