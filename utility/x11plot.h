@@ -1046,7 +1046,7 @@ struct Radio {
   GC gc;  // Color for radio, line width, etc
   bool skip_release{false};
   double radius_scale{1.0};
-  unsigned int id{0};
+  uint64_t id{0};
 };
 
 class Click : public Point {
@@ -1431,7 +1431,7 @@ class SavedConfig {
   double arc_width{default_arc_width};
   int line_width{default_line_width};
   int line_type{default_line_type};
-  std::vector<unsigned int> series_order{};
+  std::vector<uint64_t> series_order{};
   Range range{{unset(1.0), nunset(1.0), 0}, {unset(1.0), nunset(1.0), 0}};
   Range max_range{range};
   std::vector<unsigned char> zoomed{false, false};
@@ -1589,10 +1589,10 @@ class X11Graph : public X11Win, public SavedConfig {
   virtual void draw();
 
   // Prepare and draw helpers
-  bool do_arcs(const unsigned int s) const;
+  bool do_arcs(const uint64_t s) const;
   bool do_arcs() const;
   bool can_do_arcs() const;
-  bool do_lines(const unsigned int s) const;
+  bool do_lines(const uint64_t s) const;
   bool do_lines() const;
   bool can_do_lines() const;
   void prepare_log();
@@ -1654,7 +1654,7 @@ class X11Graph : public X11Win, public SavedConfig {
   bool small_move{false};
   mutable bool drawn{false};
   uint64_t shrink{1};
-  std::vector<uint64_t> steps{};
+  std::vector<int> steps{};
 
   //
   // Radio controls
@@ -1919,7 +1919,6 @@ void X11Graph::initialize() {
         col_type == "l");
     series_order.push_back(c);
   }
-  series_order.reserve(series_order.size() + 1);  // why???
 
   unnamed_radios = create_unnamed_radios();
   if (n_files() > 1) {
@@ -1931,23 +1930,22 @@ void X11Graph::initialize() {
           {-0.7, series_radios[r].specification[1] - 0.5 * radio_scale},
           {[this, r]() {
               // Find location of series in ordering list
-              std::vector<unsigned int>::iterator riter{
+              std::vector<uint64_t>::iterator riter{
                 find(series_order.begin(), series_order.end(), r)};
-              const unsigned int rindex{
-                static_cast<unsigned int>(riter - series_order.begin())};
+              const uint64_t rindex{
+                static_cast<uint64_t>(riter - series_order.begin())};
               for (uint64_t y{0}; y != n_cols(); ++y) {
-                std::vector<unsigned int>::iterator togo{
+                std::vector<uint64_t>::iterator togo{
                   series_order.begin() + (y + 1) * n_files()};
                 series_order.insert(togo, r + y * n_files());
-                std::vector<unsigned int>::iterator toremove{
+                std::vector<uint64_t>::iterator toremove{
                   series_order.begin() + y * n_files() + rindex};
                 series_order.erase(toremove);
               }
               draw();
             },
                 [this, r]() {
-                  return !tiled_radio && (series_order[n_files() - 1]) !=
-                      static_cast<unsigned int>(r);
+                  return !tiled_radio && (series_order[n_files() - 1]) != r;
                 }}});
       unnamed_radios.back().radius_scale = 0.5 * radius_scale;
 
@@ -1957,10 +1955,16 @@ void X11Graph::initialize() {
             std::string("Toggle series group display"), this,
           {-1.3, series_radios[r].specification[1] - 0.5 * radio_scale},
           {[this, r]() {
+              bool turned_on{false};
               for (unsigned int c{0}; c != n_cols(); ++c) {
-                series_radios[c * n_files() + r].toggle();
+              const uint64_t series{c * n_files() + r};
+              Radio & radio{series_radios[series]};
+                if (!radio && points[series].empty()) {
+                  turned_on = true;
+                }
+                radio.toggle();
               }
-              if (tiled_radio) {
+              if (tiled_radio || turned_on) {
                 prepare_draw();
               } else {
                 draw();
@@ -1968,7 +1972,6 @@ void X11Graph::initialize() {
             }}});
       }
       unnamed_radios.back().radius_scale = 0.5 * radius_scale;
-
       unnamed_radios.back().id = r;
     }
   }
@@ -2762,11 +2765,12 @@ void X11Graph::prepare() {
   std::vector<std::future<void>> futures;
   for (unsigned int s{0}; s != data->size(); ++s) {
     if (true || tiled_radio) {
-      XRectangle clip_rectangle(tiled_radio ?
-                                rect(bounds[0][0], bounds[1][0] + steps[s],
-                                     bounds[0][2], bounds[1][2] / shrink) :
-                                rect(bounds[0][0], bounds[1][0],
-                                     bounds[0][2], bounds[1][2]));
+      XRectangle clip_rectangle(
+          tiled_radio ?
+          rect(bounds[0][0], bounds[1][0] + steps[s],
+               bounds[0][2], bounds[1][2] / shrink) :
+          rect(bounds[0][0], bounds[1][0],
+               bounds[0][2], bounds[1][2]));
       if (clip_rectangle != series_clip_rectangles[s]) {
         series_clip_rectangles[s] = clip_rectangle;
         XSetClipRectangles(display(), series_arc_gcs[s], 0, 0,
@@ -2797,7 +2801,7 @@ void X11Graph::draw() {
   // The graph arcs and points to connect with lines
   const uint64_t arc_block{max_request / 3};
   const uint64_t line_block{max_request / 2};
-  for (const unsigned int s : series_order) {
+  for (const uint64_t s : series_order) {
     if (do_arcs(s)) {
       for (unsigned int bs{0}; bs < arcs[s].size(); bs += arc_block) {
         const uint64_t n{bs + arc_block < arcs[s].size() ?
@@ -2825,7 +2829,7 @@ void X11Graph::draw() {
   if (tiled_radio) {
     for (unsigned int i{0}; i != n_files(); ++i) {
       if (steps[i] > 0) {
-        const uint64_t y{steps[i] + bounds[1][0]};
+        const int y{static_cast<int>(steps[i] + bounds[1][0])};
         XDrawLine(display(), pixmap, border_gc,
                   bounds[0][0], y, bounds[0][1], y);
       }
@@ -2858,7 +2862,7 @@ void X11Graph::draw() {
 // Prepare and draw helpers
 //
 
-inline bool X11Graph::do_arcs(const unsigned int s) const {
+inline bool X11Graph::do_arcs(const uint64_t s) const {
   if (!series_radios[s]) return false;
   return (arcs_radio && !series_only_lines[s]) || series_only_arcs[s];
 }
@@ -2875,7 +2879,7 @@ inline bool X11Graph::can_do_arcs() const {
   return false;
 }
 
-inline bool X11Graph::do_lines(const unsigned int s) const {
+inline bool X11Graph::do_lines(const uint64_t s) const {
   if (!series_radios[s]) return false;
   return (lines_radio && !series_only_arcs[s]) || series_only_lines[s];
 }
@@ -3047,7 +3051,7 @@ inline void X11Graph::set_tiling() {
   for (unsigned int g{0}; g != n_files(); ++g) {
     if (!group_off[g]) ++shrink;
   }
-  std::vector<uint64_t> file_steps;
+  std::vector<int> file_steps;
   unsigned int g_on{0};
   for (unsigned int g{0}; g != n_files(); ++g) {
     if (group_off[g]) {

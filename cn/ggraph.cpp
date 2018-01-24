@@ -1052,8 +1052,8 @@ int main(int argc, char * argv[]) try {
     geometry = {{app.display_size[0], app.display_size[1]}, {0, 0}};
 
   // Rearrange data in specific X11Graph format for all individuals
-  const int n_sets(static_cast<unsigned int>(input_data.size()));
-  const int n_y(input_data.front().n_cols() - 1);
+  const int n_sets{static_cast<int>(input_data.size())};
+  const int n_y{static_cast<int>(input_data.front().n_cols() - 1)};
   using XYSeries = X11Graph::XYSeries;
   using Data = X11Graph::Data;
   Data data(n_sets * n_y, XYSeries(2));

@@ -105,6 +105,7 @@ endif
 
 # For gcc under cygwin
 ifneq (,$(findstring /cygdrive/,$(PATH)))
+	FAST += -Wa,-mbig-obj
 	LIBS += -pthread
 endif
 
