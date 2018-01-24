@@ -2925,6 +2925,7 @@ void X11Graph::prepare_log() {
   } else {
     data = &input_data;
   }
+  get_range();
 }
 
 inline std::string X11Graph::long_status(const bool in, const bool y) {
