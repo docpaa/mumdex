@@ -35,8 +35,7 @@ echo 'you need to manually increase point display size by two levels (near botto
 echo 'have the mouse focus remain in the window, in the central graphing region'
 echo 'take a window-screenshot: command-shift-4 space, then click on window'
 ) &&
-./mumdex/ggraph --n-threads $n_threads --geometry $geometry --initial-view $abspos_left $((abspos_left+1000000)) 0 2.5 \
-    cn ./hg19.fa abspos,ratio,seg {m,f,d,s}.txt
+./mumdex/ggraph --threads $n_threads --geometry $geometry --initial $abspos_left $((abspos_left+1000000)) 0 2.5 cn ./hg19.fa abspos,ratio,seg {m,f,d,s}.txt
 
 
 

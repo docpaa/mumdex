@@ -138,7 +138,7 @@ for genome in $genomes ; do
     fi
 
     if [ ! -e $bin/ref.seq.bin ] ; then
-        ./mumdex/ggraph --setup-ref cn $genome.fa
+        ./mumdex/ggraph --setup cn $genome.fa
     fi
 done
 
