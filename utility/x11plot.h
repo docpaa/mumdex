@@ -2829,7 +2829,7 @@ void X11Graph::draw() {
   if (tiled_radio) {
     for (unsigned int i{0}; i != n_files(); ++i) {
       if (steps[i] > 0) {
-        const int y{static_cast<int>(steps[i] + bounds[1][0])};
+        const int y{steps[i] + bounds[1][0]};
         XDrawLine(display(), pixmap, border_gc,
                   bounds[0][0], y, bounds[0][1], y);
       }
