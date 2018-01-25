@@ -765,6 +765,7 @@ class X11App {
 
     // Event loop
     XEvent event{};
+    const bool debug{false};
     while (windows.size()) {
       // Configure only when no events are pending
       if (!XPending(display)) {
@@ -780,6 +781,7 @@ class X11App {
       // Process event based on type
       switch (event.type) {
         case ConfigureNotify:
+          if (debug) std::cerr << "ConfigureNotify" << std::endl;
           {
             X11Win & win{window(event.xconfigure.window)};
             if (win.slow()) {
@@ -791,56 +793,69 @@ class X11App {
           break;
 
         case MapNotify:
+          if (debug) std::cerr << "MapNotify" << std::endl;
           window(event.xmap.window).mapped(event.xmap);
           break;
 
         case VisibilityNotify:
+          if (debug) std::cerr << "VisibilityNotify" << std::endl;
           break;
 
         case Expose:
+          if (debug) std::cerr << "Expose" << std::endl;
           window(event.xcrossing.window).expose(event.xexpose);
           break;
 
         case EnterNotify:
+          if (debug) std::cerr << "EnterNotify" << std::endl;
           window(event.xcrossing.window).enter(event.xcrossing);
           break;
 
         case KeyPress:
+          if (debug) std::cerr << "KeyPress" << std::endl;
           window(event.xkey.window).key(event.xkey);
           break;
 
         case ButtonPress:
+          if (debug) std::cerr << "ButtonPress" << std::endl;
           window(event.xbutton.window).button_press(event.xbutton);
           break;
 
         case MotionNotify:
           // Get latest motion event only
+          if (debug) std::cerr << "MotionNotify" << std::endl;
           while (XCheckWindowEvent(display, event.xmotion.window,
                                    PointerMotionMask, &event)) { }
           window(event.xmotion.window).motion(event.xmotion);
           break;
 
         case ButtonRelease:
+          if (debug) std::cerr << "ButtonRelease" << std::endl;
           window(event.xbutton.window).button_release(event.xbutton);
           break;
 
         case LeaveNotify:
+          if (debug) std::cerr << "LeaveNotify" << std::endl;
           window(event.xcrossing.window).leave(event.xcrossing);
           break;
 
         case ClientMessage:
+          if (debug) std::cerr << "ClientMessage" << std::endl;
           window(event.xclient.window).client_message(event.xclient);
           break;
 
         case ConfigureRequest:
+          if (debug) std::cerr << "ConfigureRequest" << std::endl;
           window(event.xconfigurerequest.window).configure_request(
               event.xconfigurerequest);
           break;
 
         case DestroyNotify:
+          if (debug) std::cerr << "DestroyNotify" << std::endl;
           break;
 
         default:
+          if (debug) std::cerr << "IgnoredEvent" << std::endl;
           break;
       }
     }
@@ -1641,7 +1656,7 @@ class X11Graph : public X11Win, public SavedConfig {
   std::vector<GC> series_radio_gcs{};
   std::vector<Radio> series_radios{};
   std::vector<XRectangle> series_clip_rectangles{};
-  std::vector<uint8_t> series_only_arcs{}, series_only_lines{};
+  std::vector<uint8_t> series_arcs{}, series_lines{};
   std::vector<std::vector<XArc> > arcs{};
   std::vector<std::vector<XPoint> > points{};
 
@@ -1663,14 +1678,14 @@ class X11Graph : public X11Win, public SavedConfig {
     {[this]() { coord_radio = false; draw_controls(); }}, true, true};
   Radio coord_radio{"Toggle showing coordinates of cursor", this, {1, 3},
     {[this]() { help_radio = false; status = ""; draw_controls(); }}, true};
-  Radio arcs_radio{"Draw a marker at each graph point", this, {-1, -2},
+  Radio arcs_radio{"Toggle display of point markers", this, {-2, -1},
     {[this]() { return arcs_radio ? prepare_draw() : draw(); },
           [this]() { return can_do_arcs(); }}, true, true};
   Radio outlines_radio{"Toggle between solid and outlined markers", this,
-    {-1, -5.5}, {[this]() { draw(); }, [this]() { return do_arcs(); }}, true};
-  Radio lines_radio{"Connect graph points by lines", this, {-2, -1},
+    {-5.25, -1}, {[this]() { draw(); }, [this]() { return do_arcs(); }}, true};
+  Radio lines_radio{"Toggle display of lines", this, {-1, -2},
     {[this]() { return lines_radio ? prepare_draw() : draw(); },
-          [this]() { return can_do_lines(); }},  true};
+          [this]() { return can_do_lines(); }},  true, true};
   Radio tick_radios[2]{
     {"Toggle axis labels on X axis (shown when cursor leaves window)",
           this, {5.5, -1}, {[this]() { }}, true},
@@ -1709,7 +1724,7 @@ class X11Graph : public X11Win, public SavedConfig {
                 restore_config(saved_config.back());
                 prepare_draw();
               }}}}};
-  Radio tiled_radio{"Toggle between stacked and tiled views", this, {-1, 2},
+  Radio tiled_radio{"Toggle between stacked and tiled views", this, {-1, 3},
     {[this]() { prepare_draw(); }, [this]() { return n_files() - 1; }}, true};
 
   std::vector<Radio> unnamed_radios{};
@@ -1897,26 +1912,33 @@ void X11Graph::initialize() {
 
   // Create series radios, and add to master radio list, adjust properties
   series_radios.reserve(data->size());
-  const double radio_scale{data->size() <= 8 ? 1.0 : 8.0 / data->size()};
-  const double radius_scale{sqrt(radio_scale)};
-  const double radio_start{2.25};
+  const double mr{11};
+  const double radio_scale{data->size() <= mr ? 1.0 : mr / data->size()};
+  // const double radius_scale{sqrt(radio_scale)};
+  const double radius_scale{pow(radio_scale, 0.6)};
+  const double initial_spacing{0.25};
+  const double radio_start{4 + initial_spacing};
+  const bool special_case_lines{n_cols() == 2 &&
+        data_info.second.second[col_index(0)].second == "" &&
+        data_info.second.second[col_index(1)].second == ""};
   for (unsigned int c{0}; c != data->size(); ++c) {
     const dPoint spec{-1, radio_start + (
-        n_files() > 1 ? 1 + radio_scale *
-        (1.125 * (n_cols()) * (n_files() - file_index(c) - 1) +
+        n_files() > 1 ? initial_spacing * (radio_scale - 1) + radio_scale *
+        (1.125 * n_cols() * (n_files() - file_index(c) - 1) +
          (n_cols() - col_index(c) - 1)) : 0.0 + data->size() - c)};
-    series_radios.push_back(Radio{"Pointer clicks toggle display "
-            "or change colors (buttons 2,3) for series " + series_names[c],
+    series_radios.push_back(Radio{"Pointer clicks toggle display or change "
+            "colors (pointer button 2 or 3) for series " + series_names[c],
             this, spec,
         {[this]() { prepare_draw(); }, [this]() { return inside; }},
             true, true, &series_radio_gcs[c]});
     series_radios.back().radius_scale = radius_scale;
     saved_radios.push_back(&series_radios.back());
     const std::string col_type{data_info.second.second[col_index(c)].second};
-    series_only_arcs.push_back(col_type == "p");
-    series_only_lines.push_back(
-        (col_type != "p" && n_cols() == 2 && col_index(c) == 1) ||
-        col_type == "l");
+    const bool do_special_case_lines{col_index(c) == 1 && special_case_lines};
+    series_arcs.push_back((col_type == "" && !do_special_case_lines) ||
+                          col_type.find('p') != std::string::npos);
+    series_lines.push_back(
+        col_type.find('l') != std::string::npos || do_special_case_lines);
     series_order.push_back(c);
   }
 
@@ -2676,9 +2698,6 @@ void X11Graph::prepare() {
   // Set graph area and clip rectangle
   const int border{min_border()};
   set_bounds(border, width() - border, border, height() - border);
-  if (false && !tiled_radio) {
-    set_clip_rectangle(bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
-  }
 
   // Make sure range is reasonable
   if (range[0][0] >= max_range[0][1] || range[0][1] <= max_range[0][0] ||
@@ -2864,35 +2883,35 @@ void X11Graph::draw() {
 
 inline bool X11Graph::do_arcs(const uint64_t s) const {
   if (!series_radios[s]) return false;
-  return (arcs_radio && !series_only_lines[s]) || series_only_arcs[s];
+  return arcs_radio && series_arcs[s];
 }
 
 inline bool X11Graph::do_arcs() const {
-  for (unsigned int s{0}; s != series_only_arcs.size(); ++s)
+  for (unsigned int s{0}; s != series_arcs.size(); ++s)
     if (do_arcs(s)) return true;
   return false;
 }
 
 inline bool X11Graph::can_do_arcs() const {
-  for (unsigned int s{0}; s != series_only_arcs.size(); ++s)
-    if (series_radios[s] && !series_only_lines[s]) return true;
+  for (unsigned int s{0}; s != series_arcs.size(); ++s)
+    if (series_radios[s] && series_arcs[s]) return true;
   return false;
 }
 
 inline bool X11Graph::do_lines(const uint64_t s) const {
   if (!series_radios[s]) return false;
-  return (lines_radio && !series_only_arcs[s]) || series_only_lines[s];
+  return lines_radio && series_lines[s];
 }
 
 inline bool X11Graph::do_lines() const {
-  for (unsigned int s{0}; s != series_only_lines.size(); ++s)
+  for (unsigned int s{0}; s != series_lines.size(); ++s)
     if (do_lines(s)) return true;
   return false;
 }
 
 inline bool X11Graph::can_do_lines() const {
-  for (unsigned int s{0}; s != series_only_lines.size(); ++s)
-    if (series_radios[s] && !series_only_arcs[s]) return true;
+  for (unsigned int s{0}; s != series_lines.size(); ++s)
+    if (series_radios[s] && series_lines[s]) return true;
   return false;
 }
 
@@ -3154,7 +3173,7 @@ void X11Graph::save_image(const std::string & base_name,
 std::vector<Radio> X11Graph::create_unnamed_radios() {
   return std::vector<Radio>{
     {"Save an image of graph, and add all images so far to a pdf",
-          this, {1, 1}, {[this]() { save_image("cn"); }}},
+          this, {-1, 2}, {[this]() { save_image("cn"); }}},
     {"Zoom out both axes", this, {1, -1}, {[this]() { get_range(2);
           prepare_draw(); }, [this]() { return zoomed[0] || zoomed[1]; }}},
     {"Zoom out X axis", this, {2, -1}, {[this]() {
@@ -3177,25 +3196,25 @@ std::vector<Radio> X11Graph::create_unnamed_radios() {
           range_jump(1, -range[1][2] / 2); prepare_draw(); }, zoom_tester(1)}},
     {"Jump down Y axis by one screen", this, {1, 101.5}, {[this]() {
           range_jump(1, -range[1][2]); prepare_draw(); }, zoom_tester(1)}},
-    {"Make markers bigger", this, {-1, -4.25}, {[this]() {
+    {"Make markers bigger", this, {-3, -1}, {[this]() {
           arc_radius += 1; prepare_draw(); }, [this]() { return do_arcs(); }}},
-    {"Make markers smaller", this, {-1, -3.25}, {[this]() {
+    {"Make markers smaller", this, {-4, -1}, {[this]() {
           arc_radius -= 1; prepare_draw(); }, [this]() {
           return do_arcs() && arc_radius >= 2; }}},
-    {"Make marker outlines thicker", this, {-1, -7.75}, {[this]() {
+    {"Make marker outlines thicker", this, {-6.25, -1}, {[this]() {
           set_line_widths(series_arc_gcs, arc_width += 1); draw(); }, [this]() {
           return do_arcs() && outlines_radio; }}},
-    {"Make marker outlines thinner", this, {-1, -6.75}, {[this]() {
+    {"Make marker outlines thinner", this, {-7.25, -1}, {[this]() {
           set_line_widths(series_arc_gcs, arc_width -= 1); draw(); }, [this]() {
           return do_arcs() && outlines_radio && arc_width > 0; }}},
-    {"Make series lines thicker", this, {-3.25, -1}, {[this]() {
+    {"Make series lines thicker", this, {-1, -4}, {[this]() {
           set_line_widths(series_line_gcs, line_width += 1); draw(); },
             [this]() { return do_lines(); }}},
-    {"Make series lines thinner", this, {-4.25, -1}, {[this]() {
+    {"Make series lines thinner", this, {-1, -3}, {[this]() {
           line_width -= 1;
           set_line_widths(series_line_gcs, (line_width == 1 ? 0 : line_width));
           draw(); }, [this]() {return do_lines() && line_width >= 2; }}},
-    {"Open G-Graph tutorial webpage to the GUI help section", this, {-6.25, -1},
+    {"Open G-Graph tutorial webpage to the GUI help section", this, {1, 1},
       {[this]() { open_url("http://mumdex.com/ggraph/#gui"); }}},
     {"Set default values for color, line and marker properties", this, {-1, -1},
       {[this]() {
