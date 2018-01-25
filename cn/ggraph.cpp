@@ -765,7 +765,7 @@ class AbsposColumns {
       column_types.push_back(column_type);
     }
 
-    if (column_names.size() < 2) {
+    if (column_names.size() + implicit_index < 2) {
       throw UsageError("Column loader expects to load at least two columns "
                        "from column string") << columns;
     }
@@ -834,7 +834,7 @@ class AbsposColumns {
     while (getline(input, line)) {
       iStream stream{line.c_str()};
       ColumnLookup::const_iterator nc{column_numbers.begin()};
-     unsigned int c{0};
+      unsigned int c{0};
       while (stream) {
         if (nc != column_numbers.end() && nc->first == c) {
           if (has_chr && nc->second == 0) {
@@ -870,19 +870,17 @@ class AbsposColumns {
     // Check load state
     const uint64_t constant_size{data.front().size()};
     for (unsigned int col{0}; col != data.size(); ++col) {
-      if (data[col].size() != constant_size &&
-          col )
+      if (data[col].size() != constant_size)
         throw Error("Inconsistent column data sizes");
     }
-    if (constant_size == 0)
-      throw Error("Data load size was zero");
+    if (constant_size == 0) throw Error("Data load size was zero");
 
     if (implicit_index) {
       column_names.insert(column_names.begin(), "index");
       column_types.insert(column_types.begin(), "");
-      data.emplace(data.begin(), data[1].size());
+      data.emplace(data.begin(), data[0].size());
       for (uint64_t i{0}; i != data[0].size(); ++i) {
-        data[0][i] = i;
+        data[0][i] = i + 1;
       }
     }
   }

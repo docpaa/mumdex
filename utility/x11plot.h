@@ -2906,6 +2906,7 @@ void X11Graph::prepare_log() {
         log_series.emplace_back(
             std::make_unique<Values>(input_data[s][y]->size()));
         Values & log_values{*log_series.back()};
+        // Do log(0) better!
         for (unsigned int p{0}; p != input_data[s][y]->size(); ++p)
           log_values[p] = log10((*input_data[s][y])[p]);
         log_data[s].push_back(&log_values);
