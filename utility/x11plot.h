@@ -610,7 +610,7 @@ class X11WindowT : public Geometry {
   }
 
   void save_image(const std::string & base_name,
-                  const unsigned int max_colors = 256,
+                  const uint64_t max_colors = 256,
                   void_fun call_back = [] () {}) {
     const std::string image_name{get_next_file(base_name, "xpm")};
     const std::string png_name{replace_substring(image_name, "xpm", "png")};
@@ -631,7 +631,7 @@ class X11WindowT : public Geometry {
                   const int xp, const int yp,
                   const unsigned int w, const unsigned int h,
                   void_fun call_back = [] () {},
-                  const unsigned int max_colors = 256) {
+                  const uint64_t max_colors = 256) {
     XImage * image{
       XGetImage(display(), d, xp, yp, w, h, XAllPlanes(), XYPixmap)};
     if (!image) throw Error("Could not get image");
@@ -3306,7 +3306,7 @@ bool X11Graph::show_help(const Point point) {
           if (g == 1 || g == 2) ++result;
         }
         if (static_cast<int>(most_radios.size() - result) > result)
-          result = most_radios.size() - result;
+          result = static_cast<int>(most_radios.size() - result);
         return result;
       }()};
     const int line_spacing{bounds[1][2] / n_lines};
