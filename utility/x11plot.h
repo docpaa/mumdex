@@ -152,6 +152,9 @@ class X11Font {
   int width() const {
     return font->max_bounds.rbearing - font->max_bounds.lbearing;
   }
+  int ascent() const {
+    return font->max_bounds.ascent;
+  }
   int height() const {
     return font->max_bounds.ascent + font->max_bounds.descent;
   }
@@ -539,6 +542,14 @@ class X11WindowT : public Geometry {
     return result;
   }
 
+  void clear_drawable(Drawable d) const {
+    XFillRectangle(display(), d, fill_gc, 0, 0, width(), height());
+  }
+
+  void clear_window() const {
+    clear_drawable(window);
+  }
+
   // Event actions
   virtual void mapped(const XMapEvent &) {
     // std::cerr << "mapped" << std::endl;
@@ -598,12 +609,14 @@ class X11WindowT : public Geometry {
         y > bounds[1][0] && y < bounds[1][1];
   }
 
-  virtual void save_image(const std::string & base_name,
-                          void_fun call_back = [] () {}) {
+  void save_image(const std::string & base_name,
+                  const unsigned int max_colors = 256,
+                  void_fun call_back = [] () {}) {
     const std::string image_name{get_next_file(base_name, "xpm")};
     const std::string png_name{replace_substring(image_name, "xpm", "png")};
-    draw();
-    save_image(image_name, pixmap, 0, 0, width(), height(), call_back);
+    // draw();
+    save_image(image_name, pixmap, 0, 0, width(), height(),
+               call_back, max_colors);
     image_names.push_back(image_name);
     std::ostringstream png_command;
     png_command << "convert " << image_names.back() << " "
@@ -617,20 +630,26 @@ class X11WindowT : public Geometry {
   void save_image(const std::string & file_name, Drawable d,
                   const int xp, const int yp,
                   const unsigned int w, const unsigned int h,
-                  void_fun call_back = [] () {}) {
+                  void_fun call_back = [] () {},
+                  const unsigned int max_colors = 256) {
     XImage * image{
       XGetImage(display(), d, xp, yp, w, h, XAllPlanes(), XYPixmap)};
     if (!image) throw Error("Could not get image");
     call_back();
-    std::map<uint64_t, char> colors;
+    std::map<uint64_t, std::string> colors;
     XColor color;
     std::ostringstream color_string;
     std::ostringstream image_string;
+    const bool two_chars{max_colors > app.good_chars.size()};
     for (unsigned int y{0}; y != h; ++y) {
       image_string << '"';
       for (unsigned int x{0}; x != w; ++x) {
         color.pixel = XGetPixel(image, x, y);
-        auto inserted = colors.emplace(color.pixel, 'a' + colors.size());
+        std::string color_code{""};
+        if (two_chars)
+          color_code += app.good_chars[colors.size() / app.good_chars.size()];
+        color_code += app.good_chars[colors.size() % app.good_chars.size()];
+        auto inserted = colors.emplace(color.pixel, color_code);
         if (inserted.second == true) {
           XQueryColor(display(), app.colormap, &color);
           color_string << '"' << inserted.first->second << " "
@@ -647,7 +666,7 @@ class X11WindowT : public Geometry {
          << "/* <Values> */\n"
          << "/* <width/cols> <height/rows> <colors> <char on pixel>*/\n"
          << '"' << w << " " << h << " " << colors.size()
-         << " 1" << '"' << ",\n"
+         << " " << (two_chars ? 2 : 1) << '"' << ",\n"
          << "/* <Colors> */\n"
          << color_string.str()
          << "/* <Pixels> */\n"
@@ -660,7 +679,7 @@ class X11WindowT : public Geometry {
   // Data preparation and drawing functions (just an empty window here)
   virtual void prepare() { }
   virtual void draw() {
-    XFillRectangle(display(), window, fill_gc, 0, 0, width(), height());
+    clear_window();
   }
   void prepare_draw() { prepare(); draw(); }
 
@@ -711,6 +730,8 @@ class X11App {
     fonts{*this},
     black{BlackPixel(display, screen)},
     white{WhitePixel(display, screen)},
+    grey{get_color("rgb:cc/cc/cc")},
+    red{get_color("rgb:cc/00/00")},
     wmDeleteMessage_{XInternAtom(display, "WM_DELETE_WINDOW", False)} { }
 
 #pragma GCC diagnostic pop
@@ -756,6 +777,15 @@ class X11App {
   }
   unsigned int pixels_per_inch() const {
     return std::max(pixels_per_inch(0), pixels_per_inch(1));
+  }
+
+  uint64_t get_color(const std::string & color_string) const {
+    XColor color;
+    if (!XAllocNamedColor(display, colormap, color_string.c_str(),
+                          &color, &color)) {
+      throw Error("Could not get color") << color_string;
+    }
+    return color.pixel;
   }
 
   // Run the application
@@ -888,6 +918,10 @@ class X11App {
   X11Fonts fonts;
   uint64_t black{};
   uint64_t white{};
+  uint64_t grey{};
+  uint64_t red{};
+  std::string good_chars{"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz{|}~ !#$%&'()*+,-./[]^_`:;<=>?@"};
 
  private:
   Atom wmDeleteMessage_{};
@@ -930,11 +964,12 @@ struct Radio {
   Radio(const std::string & description_, X11Win * win_,
         const dPoint specification_, const Actions & actions_ = Actions(),
         const bool togglable_ = false, const bool start_toggle = false,
-        const GC * gc_ = nullptr) :
+        const GC * gc_ = nullptr, const double radius_scale_ = 1.0) :
       description{description_}, win{win_},
     specification{specification_},
     actions{actions_}, togglable{togglable_}, toggled{start_toggle},
-    gc{gc_ == nullptr ? win->radio_gc : *gc_} { }
+    gc{gc_ == nullptr ? win->radio_gc : *gc_},
+    radius_scale{radius_scale_} { }
 
   // These are not strictly needed - just to avoid warning due to GC pointer
   Radio(const Radio &) = default;
@@ -965,17 +1000,16 @@ struct Radio {
     const bPoint high{specification.x < 0, specification.y < 0};
     const Point anchor{corner(high[0], high[1])};
     Point point;
-    // const int border{min_border()};
     const double border{1.0 * min_border()};
     for (const bool y : {false, true}) {
-      // Specification near but not equal to zero is at edges
-      if (fabs(specification[y]) > 0 && fabs(specification[y]) < 50) {
+      // Specification near zero is at edges
+      if (fabs(specification[y]) >= 0 && fabs(specification[y]) < 50) {
         point[y] = anchor[y] + border *
+            (fabs(specification[y]) >= 2 ? 0.9 : 1.0) *
             (specification[y] + 0.5 + (high[y] ? 1 : -2));
       } else {
-        // Specification of zero or around 100 is centered
-        const double centered{specification[y] -
-              (fabs(specification[y]) > 0 ? 100 : 0)};
+        // Specification of around 100 is centered
+        const double centered{specification[y] - 100};
         point[y] = (win->bounds[y][0] + win->bounds[y][1]) / 2 +
             centered * border;
       }
@@ -1029,10 +1063,7 @@ struct Radio {
   void draw() const {
     const Point point{location()};
     static GC grey_gc{[this]() {
-        XColor grey;
-        if (!XAllocNamedColor(win->display(), win->app.colormap, "rgb:dd/dd/dd",
-                              &grey, &grey)) throw Error("Could not get grey");
-        return win->create_gc(grey.pixel, win->app.white);
+        return win->create_gc(win->app.grey, win->app.white);
       }()};
     if (win->inside) {
       erase(point);
@@ -1061,7 +1092,6 @@ struct Radio {
   GC gc;  // Color for radio, line width, etc
   bool skip_release{false};
   double radius_scale{1.0};
-  uint64_t id{0};
 };
 
 class Click : public Point {
@@ -1358,8 +1388,7 @@ class X11Colors : public X11Win {
   unsigned int y_border_height() const { return 1 + height() / n_y / 10; }
 
   virtual void draw() {
-    XFillRectangle(display(), window, fill_gc, 0, 0, width(), height());
-
+    clear_window();
     unsigned int c{0};
     const double box_width{1.0 * width() / n_x};
     const double box_height{1.0 * height() / n_y};
@@ -1612,6 +1641,7 @@ class X11Graph : public X11Win, public SavedConfig {
   bool can_do_lines() const;
   void prepare_log();
   static std::string long_status(const bool in, const bool y);
+  void draw_border(Drawable d) const;
   void draw_status(const bool force = false) const;
   void draw_controls();
   void draw_grid() const;
@@ -1628,8 +1658,8 @@ class X11Graph : public X11Win, public SavedConfig {
   // Assorted functions
   virtual bool slow() const;
   void movie(const bool right);
-  virtual void save_image(const std::string & base_name,
-                          void_fun call_back = void_fun());
+  void save_image(const std::string & base_name);
+  bool show_help(const Point point);
 
   // Data is series * (x, y) -> point
   DataInfo data_info{};
@@ -1639,7 +1669,9 @@ class X11Graph : public X11Win, public SavedConfig {
   std::vector<std::unique_ptr<Values> > log_series{};
 
   // Graphics contexts and fonts
-  GC border_gc{}, border_fill_gc{}, minor_gc{}, major_gc{}, tick_label_gc{};
+  GC border_gc{}, tiling_border_gc{}, border_fill_gc{},
+    minor_gc{}, major_gc{}, tick_label_gc{}, help_gc{}, arrow_gc{};
+  int last_tiling_border_width{border_width};
   mutable X11Font * tick_font{nullptr};
   mutable X11Font * status_font{nullptr};
 
@@ -1670,12 +1702,13 @@ class X11Graph : public X11Win, public SavedConfig {
   mutable bool drawn{false};
   uint64_t shrink{1};
   std::vector<int> steps{};
+  bool help_shown{false};
 
   //
   // Radio controls
   //
   Radio help_radio{"Toggle showing help text for controls", this, {1, 2},
-    {[this]() { coord_radio = false; draw_controls(); }}, true, true};
+    {[this]() { coord_radio = false; show_help(click); }}, true, true};
   Radio coord_radio{"Toggle showing coordinates of cursor", this, {1, 3},
     {[this]() { help_radio = false; status = ""; draw_controls(); }}, true};
   Radio arcs_radio{"Toggle display of point markers", this, {-2, -1},
@@ -1724,7 +1757,7 @@ class X11Graph : public X11Win, public SavedConfig {
                 restore_config(saved_config.back());
                 prepare_draw();
               }}}}};
-  Radio tiled_radio{"Toggle between stacked and tiled views", this, {-1, 3},
+  Radio tiled_radio{"Toggle between stacked and tiled views", this, {-1, 2},
     {[this]() { prepare_draw(); }, [this]() { return n_files() - 1; }}, true};
 
   std::vector<Radio> unnamed_radios{};
@@ -1821,8 +1854,8 @@ X11Graph::~X11Graph() {
   }
 
   // Free all graphics contexts
-  for (GC gc_ : {border_gc, border_fill_gc, minor_gc, major_gc,
-          tick_label_gc}) {
+  for (GC gc_ : {border_gc, tiling_border_gc, border_fill_gc,
+          minor_gc, major_gc, tick_label_gc, help_gc, arrow_gc}) {
     XFreeGC(display(), gc_);
   }
   for (std::vector<GC> * gcs :
@@ -1868,6 +1901,8 @@ void X11Graph::initialize() {
   // Graphics contexts
   border_gc = create_gc(app.black, app.white, border_width,
                         LineSolid, CapButt, JoinMiter);
+  tiling_border_gc = create_gc(app.black, app.white, last_tiling_border_width,
+                               LineSolid, CapButt, JoinMiter);
   border_fill_gc = create_gc(app.white, app.black, border_width,
                              LineSolid, CapButt, JoinMiter);
   minor_gc = create_gc(app.black, app.white, 1, LineOnOffDash,
@@ -1875,6 +1910,8 @@ void X11Graph::initialize() {
   major_gc = create_gc(app.black, app.white, 2, LineOnOffDash,
                        CapButt, JoinMiter);
   tick_label_gc = create_gc(app.black, app.white);
+  help_gc = create_gc(app.black, app.white);
+  arrow_gc = create_gc(app.red, app.white, 2, LineSolid, CapRound);
 
   // Series colors and names
   color_names = make_colors();
@@ -1912,10 +1949,10 @@ void X11Graph::initialize() {
 
   // Create series radios, and add to master radio list, adjust properties
   series_radios.reserve(data->size());
-  const double mr{11};
+  const double mr{12};
   const double radio_scale{data->size() <= mr ? 1.0 : mr / data->size()};
-  // const double radius_scale{sqrt(radio_scale)};
   const double radius_scale{pow(radio_scale, 0.6)};
+  const double small_scale{0.45 * radius_scale};
   const double initial_spacing{0.25};
   const double radio_start{4 + initial_spacing};
   const bool special_case_lines{n_cols() == 2 &&
@@ -1930,8 +1967,7 @@ void X11Graph::initialize() {
             "colors (pointer button 2 or 3) for series " + series_names[c],
             this, spec,
         {[this]() { prepare_draw(); }, [this]() { return inside; }},
-            true, true, &series_radio_gcs[c]});
-    series_radios.back().radius_scale = radius_scale;
+            true, true, &series_radio_gcs[c], radius_scale});
     saved_radios.push_back(&series_radios.back());
     const std::string col_type{data_info.second.second[col_index(c)].second};
     const bool do_special_case_lines{col_index(c) == 1 && special_case_lines};
@@ -1943,13 +1979,14 @@ void X11Graph::initialize() {
   }
 
   unnamed_radios = create_unnamed_radios();
-  if (n_files() > 1) {
-    for (uint64_t r{0}; r != n_files(); ++r) {
+  for (uint64_t r{0}; r != n_files(); ++r) {
+    if (n_files() > 1) {
       // Series order radio
       unnamed_radios.push_back(Radio{
-          std::string("Place series") + (n_cols() > 1 ? " group" : "") +
-          " on top", this,
-          {-0.7, series_radios[r].specification[1] - 0.5 * radio_scale},
+          std::string("Place series") + (n_cols() > 1 ? " group" : "") + " " +
+              std::to_string((n_cols() > 1 ? file_index(r) : r) + 1) +
+              " on top", this,
+              {-0.7, series_radios[r].specification[1] - 0.5 * radio_scale},
           {[this, r]() {
               // Find location of series in ordering list
               std::vector<uint64_t>::iterator riter{
@@ -1968,19 +2005,19 @@ void X11Graph::initialize() {
             },
                 [this, r]() {
                   return !tiled_radio && (series_order[n_files() - 1]) != r;
-                }}});
-      unnamed_radios.back().radius_scale = 0.5 * radius_scale;
+                }}, false, false, nullptr, small_scale});
+    }
 
-      // Group on / off radio
-      if (n_cols() > 1) {
-        unnamed_radios.push_back(Radio{
-            std::string("Toggle series group display"), this,
+    // Group on / off radio
+    if (n_cols() > 1) {
+      unnamed_radios.push_back(Radio{std::string("Toggle series group ") +
+              std::to_string(file_index(r) + 1) + " display", this,
           {-1.3, series_radios[r].specification[1] - 0.5 * radio_scale},
           {[this, r]() {
               bool turned_on{false};
               for (unsigned int c{0}; c != n_cols(); ++c) {
-              const uint64_t series{c * n_files() + r};
-              Radio & radio{series_radios[series]};
+                const uint64_t series{c * n_files() + r};
+                Radio & radio{series_radios[series]};
                 if (!radio && points[series].empty()) {
                   turned_on = true;
                 }
@@ -1991,10 +2028,7 @@ void X11Graph::initialize() {
               } else {
                 draw();
               }
-            }}});
-      }
-      unnamed_radios.back().radius_scale = 0.5 * radius_scale;
-      unnamed_radios.back().id = r;
+            }}, false, false, nullptr, small_scale});
     }
   }
 
@@ -2455,6 +2489,9 @@ inline void X11Graph::button_press(const XButtonEvent & event) {
 }
 
 inline void X11Graph::motion(const XMotionEvent & event) {
+  // Special help screen
+  if (show_help(event)) return;
+
   // Check for series color change
   if (click == 2 || click == 3) {
     for (unsigned int r{0}; r != series_radios.size(); ++r) {
@@ -2687,9 +2724,6 @@ inline void X11Graph::leave(const XCrossingEvent &) {
   if (destroyed) return;
   status = "";
   draw_controls();
-  if (0)
-  XDrawRectangle(display(), window, border_gc,
-                 bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
   draw_ticks(window);
 }
 
@@ -2806,7 +2840,7 @@ void X11Graph::prepare() {
 
 void X11Graph::draw() {
   if (just_configured) {
-    XFillRectangle(display(), pixmap, fill_gc, 0, 0, width(), height());
+    clear_drawable(pixmap);
   } else {
     XFillRectangle(display(), pixmap, fill_gc,
                    bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
@@ -2845,17 +2879,29 @@ void X11Graph::draw() {
   for (unsigned int c{0}; c != call_backs.size(); ++c)
     if (call_back_radios[c]) call_backs[c](*this, nothing);
 
+  // Draw border lines between tiles
   if (tiled_radio) {
-    for (unsigned int i{0}; i != n_files(); ++i) {
-      if (steps[i] > 0) {
-        const int y{steps[i] + bounds[1][0]};
-        XDrawLine(display(), pixmap, border_gc,
-                  bounds[0][0], y, bounds[0][1], y);
+    // Determine tiling border width
+    int tiling_border_width{border_width};
+    while (tiling_border_width * n_files() > 0.1 * bounds[1][2]) {
+      --tiling_border_width;
+    }
+    if (tiling_border_width) {
+      if (tiling_border_width != last_tiling_border_width) {
+        XSetLineAttributes(display(), tiling_border_gc, tiling_border_width,
+                           LineSolid, CapButt, JoinRound);
+        last_tiling_border_width = tiling_border_width;
+      }
+      for (unsigned int i{0}; i != n_files(); ++i) {
+        if (steps[i] > 0) {
+          const int y{steps[i] + bounds[1][0]};
+          XDrawLine(display(), pixmap, tiling_border_gc,
+                    bounds[0][0], y, bounds[0][1], y);
+        }
       }
     }
   }
-  XDrawRectangle(display(), pixmap, border_gc,
-                 bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
+  draw_border(pixmap);
   draw_grid();
   draw_ticks(window);
 
@@ -2953,6 +2999,11 @@ inline std::string X11Graph::long_status(const bool in, const bool y) {
       "(center - zoom in - zoom out) at point " +
       "and drags (select - scroll - zoom) for " +
       (in ? "X and Y axes" : (y ? "Y axis" : "X axis"));
+}
+
+void X11Graph::draw_border(Drawable d) const {
+  XDrawRectangle(display(), d, border_gc,
+                 bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
 }
 
 void X11Graph::draw_status(const bool force) const {
@@ -3143,22 +3194,19 @@ void X11Graph::movie(const bool right) {
   }
 }
 
-void X11Graph::save_image(const std::string & base_name,
-                          void_fun call_back) {
-  if (!call_back) {
-    call_back = [this]() {
-      status = "Saving Image";
-      draw_controls();
-      draw_status(true);
-      XFlush(display());
-    };
-  }
+void X11Graph::save_image(const std::string & base_name) {
+  void_fun call_back = [this]() {
+    status = "Saving Image";
+    draw_controls();
+    draw_status(true);
+    XFlush(display());
+  };
   inside = false;
   const bool help_state = help_radio;
   help_radio = false;
   draw_controls();
   draw_ticks(pixmap);
-  X11Win::save_image(base_name, call_back);
+  X11Win::save_image(base_name, n_files() * n_cols() + 10, call_back);
   erase_border(pixmap);
   inside = true;
   help_radio = help_state;
@@ -3167,13 +3215,163 @@ void X11Graph::save_image(const std::string & base_name,
   draw_status(true);
 }
 
+bool X11Graph::show_help(const Point point) {
+  if (help_radio.contains(point)) {
+    clear_window();
+    draw_border(window);
+    for (const Radio * radio : radios) radio->draw();
+    auto group = [](const Radio * r) {
+      const double xs{r->specification.x};
+      if (xs > 0 && xs < 1.5) {
+        return 1;
+      } else if (xs > -1.5 && xs < 0) {
+        const double ys{r->specification.y};
+        if (ys < 0) {
+          return 4;
+        } else {
+          return 3;
+        }
+      } else {
+        if (xs < 0) {
+          return 5;
+
+        } else if (xs > 50) {
+          return 6;
+        } else {
+          return 2;
+        }
+      }
+    };
+    const Radio * first_series{nullptr};
+    const Radio * last_series{nullptr};
+    std::string longest{""};
+    auto shorten = [] (const Radio * r) {
+      std::string result{remove_including_initial(r->description, '(')};
+      if (result.size() && result.back() == ' ') {
+        result += "...";
+      }
+      return result;
+    };
+    const std::vector<const Radio *> most_radios{
+      [this, &first_series, &last_series, &longest, shorten, group] () {
+        std::vector<const Radio *> result{};
+        for (const Radio * radiop : radios) {
+          if (radiop->description.find("series group") == std::string::npos &&
+              radiop->description.find("on top") == std::string::npos &&
+              radiop->description.find("for series") == std::string::npos) {
+            result.push_back(radiop);
+            const std::string shortened{shorten(radiop)};
+            if (shortened.size() > longest.size()) {
+              longest = shortened;
+            }
+          } else {
+            if (!first_series) first_series = radiop;
+            last_series = radiop;
+          }
+        }
+        result.push_back(&series_radios.back());
+        const int n_extra{(n_files() > 1) + (n_cols() > 1)};
+        if (n_extra >= 1) result.push_back(&unnamed_radios.back());
+        if (n_extra == 2) result.push_back(&unnamed_radios.back() - 1);
+        sort(result.begin(), result.end(),
+             [group] (const Radio * lhs, const Radio * rhs) {
+               const int lg{group(lhs)};
+               const int rg{group(rhs)};
+               if (lg == rg) {
+                 if (!dne(lhs->specification.y, rhs->specification.y)) {
+                   const double lx{lhs->specification.x};
+                   const double rx{rhs->specification.x};
+                   if (lg == 5) {
+                     return lx > rx;
+                   } else {
+                     return lx < rx;
+                   }
+                 } else {
+                   const double ly{lhs->specification.y < 0 ?
+                         lhs->specification.y + 1000 : lhs->specification.y};
+                   const double ry{rhs->specification.y < 0 ?
+                         rhs->specification.y + 1000 : rhs->specification.y};
+                   return ly < ry;
+                 }
+               } else {
+                 return lg < rg;
+               }
+             });
+        return result;
+      }()};
+    const int n_lines{[&most_radios, group] () {
+        int result{0};
+        for (const Radio * radiop : most_radios) {
+          const int g{group(radiop)};
+          if (g == 1 || g == 2) ++result;
+        }
+        if (static_cast<int>(most_radios.size() - result) > result)
+          result = most_radios.size() - result;
+        return result;
+      }()};
+    const int line_spacing{bounds[1][2] / n_lines};
+    const int border{bounds[0][2] / 22};
+    static X11Font * last_font{nullptr};
+    const X11Font * fits{app.fonts.fits(
+        longest, bounds[0][2] / 2 - border, line_spacing)};
+    if (fits != last_font) XSetFont(display(), help_gc, fits->id());
+    for (const bool draw_text : {false, true}) {
+      int l_y_pos{bounds[1][0]};
+      int r_y_pos{l_y_pos};
+      int shift45{0};
+      for (const Radio * radiop : most_radios) {
+        const int g{group(radiop)};
+        const bool right_side{radiop->specification.x < 0 ||
+              radiop->specification.x > 50};
+        const int y_pos{right_side ? (r_y_pos += line_spacing) :
+              (l_y_pos += line_spacing)};
+        const std::string description{shorten(radiop)};
+        const bool right_arrow{g == 3 || g == 4 || g == 5};
+        const int left_edge{bounds[0][0] + border};
+        const int right_edge{bounds[0][1] - border};
+        const int sw{fits->string_width(description)};
+        const int small_space{fits->width() / 5};
+        const int l_pos{right_side && g != 6 ? right_edge - sw -
+              ((g == 4 || g == 5) ? (shift45 += border / 2.5) : 0) :
+              std::max(radiop->location().x, left_edge) - small_space};
+        const int r_pos{l_pos + sw};
+        if (draw_text) {
+          XFillRectangle(display(), window, fill_gc,
+                         l_pos - 1, y_pos - fits->ascent() - 1,
+                         r_pos - l_pos + 2, fits->ascent() + 2);
+          XDrawString(display(), window, help_gc, l_pos, y_pos,
+                      const_cast<char *>(description.c_str()),
+                      static_cast<unsigned int>(description.size()));
+        } else {
+          XDrawLine(display(), window, arrow_gc,
+                    right_arrow ? r_pos - small_space : l_pos + small_space,
+                    y_pos - fits->height() / 3,
+                    radiop->location().x, radiop->location().y);
+        }
+      }
+    }
+    help_shown = true;
+    return true;
+  } else {
+    if (help_shown) {
+      help_shown = false;
+      clear_window();
+      XCopyArea(display(), pixmap, window, gc, bounds[0][0], bounds[1][0],
+                bounds[0][2], bounds[1][2], bounds[0][0], bounds[1][0]);
+      draw_controls();
+      draw_border(window);
+    }
+    return false;
+  }
+}
+
 //
 // Radio functions
 //
 std::vector<Radio> X11Graph::create_unnamed_radios() {
   return std::vector<Radio>{
     {"Save an image of graph, and add all images so far to a pdf",
-          this, {-1, 2}, {[this]() { save_image("cn"); }}},
+          this, {-1, 3}, {[this]() { save_image("cn"); }}},
     {"Zoom out both axes", this, {1, -1}, {[this]() { get_range(2);
           prepare_draw(); }, [this]() { return zoomed[0] || zoomed[1]; }}},
     {"Zoom out X axis", this, {2, -1}, {[this]() {
@@ -3216,21 +3414,18 @@ std::vector<Radio> X11Graph::create_unnamed_radios() {
           draw(); }, [this]() {return do_lines() && line_width >= 2; }}},
     {"Open G-Graph tutorial webpage to the GUI help section", this, {1, 1},
       {[this]() { open_url("http://mumdex.com/ggraph/#gui"); }}},
-    {"Set default values for color, line and marker properties", this, {-1, -1},
+    {"Set series display properties to defaults", this, {-1, -1},
       {[this]() {
-          arcs_radio = true; outlines_radio = false; lines_radio = false;
-          arc_radius = default_arc_radius; arc_width = default_arc_width;
           line_width = default_line_width;
+          lines_radio = true; arcs_radio = true; outlines_radio = false;
+          arc_radius = default_arc_radius; arc_width = default_arc_width;
           set_line_widths(series_arc_gcs, arc_width);
           set_line_widths(series_line_gcs, line_width);
-          reset_colors();
-          prepare_draw(); }, [this]() {
-          return ((do_lines() &&
-                   (colors_changed || lines_radio ||
-                    dne(line_width, default_line_width))) ||
-                  (do_arcs() && (!arcs_radio || outlines_radio ||
-                                 dne(arc_radius, default_arc_radius) ||
-                                 dne(arc_width, default_arc_width)))); }}}};
+          reset_colors(); prepare_draw(); }, [this]() {
+          return colors_changed || line_width != default_line_width ||
+              !lines_radio || !arcs_radio || outlines_radio ||
+              dne(arc_radius, default_arc_radius) ||
+              dne(arc_width, default_arc_width); }}}};
 }
 
 inline bool_fun X11Graph::radio_on(const Radio & radio) {
@@ -3352,10 +3547,7 @@ class X11TextGrid : public X11Win {
       font = &fonts[fonts.size() / 2];
 
       XSync(display(), False);
-      XColor grey;
-      if (!XAllocNamedColor(display(), app.colormap, "rgb:cc/cc/cc",
-                            &grey, &grey)) throw Error("Could not get grey");
-      grey_gc = create_gc(grey.pixel, app.white);
+      grey_gc = create_gc(app.grey, app.white);
 
       prepare();
       shrink_window_to_fit();
@@ -3510,7 +3702,7 @@ class X11TextGrid : public X11Win {
 
   virtual void draw() {
     // White page
-    XFillRectangle(display(), window, fill_gc, 0, 0, width(), height());
+    clear_window();
     just_configured = false;
 
     std::vector<XRectangle> rectangles{

@@ -506,11 +506,7 @@ bool add_chromosomes(const RefCN & ref,
   const double avail_height{0.8 * (graph.bounds[1][0] - graph.border_width)};
   const std::string longest{"22"};  // In practice, does "22" fit into chr 21?
   static X11Font * last_font{nullptr};
-  static GC gc{[&graph]() {
-      GC gc_{XCreateGC(graph.display(), graph.window, 0, nullptr)};
-      XSetForeground(graph.display(), gc_, graph.app.black);
-      return gc_;
-    }()};
+  static GC gc{graph.create_gc(graph.app.black, graph.app.white)};
   const X11Font * fits{graph.app.fonts.fits(longest, min_w, avail_height)};
   if (fits != last_font) XSetFont(graph.display(), gc, fits->id());
 
@@ -1203,7 +1199,7 @@ or visit http://mumdex.com/ggraph/ to view the G-Graph tutorial)xxx"};
      attempts window placement relative to the upper left of screen,
      while a '-' attempts placement relative to the bottom right screen corner
   8. The '--threads' option uses up to that number for file load and display
-  9. The --rows column reserves space for input files of this size
+  9. The --rows option reserves space for input files of that dimension
   10. The --fullscreen option only tries to make a maximum window size 
   11. The --setup option allows binary reference cache pre-generation, but
       that would happen anyway on first loading. This option was added only to

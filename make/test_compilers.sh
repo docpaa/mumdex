@@ -11,7 +11,7 @@ for compiler in 5.5.0 6.4.0 7.2.0 ; do
     export GCC_DIR=/data/software/gcc/$compiler
     make -j 24 > /dev/null
 done
-echo retoring default compilation
+echo restoring default compilation
 unset GCC_DIR
 make clean > /dev/null
 make -j 24 > /dev/null
