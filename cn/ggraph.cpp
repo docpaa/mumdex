@@ -172,10 +172,7 @@ bool add_genes(const RefCN & ref,
   }
   static const string kgXrefs_name{ref.fasta_file() + ".bin/kgXref.txt"};
   static const GeneXrefs xref{kgXrefs_name};
-  if (first_call) {
-    first_call = false;
-    return false;  // Enable pre-loading in separate thread
-  }
+  if (first_call) first_call = false;  // to enable pre-loading
   lock.unlock();
 
   static map<X11Graph *, vector<GeneInfo>> all_gene_info;
@@ -184,11 +181,31 @@ bool add_genes(const RefCN & ref,
   if (graph.log_radios[0]) return false;
 
   if (event.type == Event::X) {
+    static map<X11Graph *, bool> all_inside_coord;
+    bool & inside_coord{all_inside_coord[&graph]};
     switch (event.x->type) {
+#if 0
+      case KeyPress:
+        {
+          static map<X11Graph *, std::string> all_entered_search;
+          std::string & entered_search{all_entered_search[&graph]};
+          const char c{graph.get_char(event.x->xkey)};
+          if (inside_coord) std::cerr << "keypress " << c << std::endl;
+          return true;
+        }
+#endif
       case MotionNotify:
         {
-          // Show gene description on hover
           const XMotionEvent & xmotion{event.x->xmotion};
+
+          // Coordinate text entry
+          if (graph.coord_radio.contains(xmotion)) {
+            inside_coord = true;
+          } else {
+            inside_coord = false;
+          }
+
+          // Show gene description on hover
           for (const GeneInfo & gene : gene_info) {
             if (xmotion.x >= max(graph.bounds[0][0], gene.bounds[0][0]) &&
                 xmotion.x <= min(graph.bounds[0][1], gene.bounds[0][1]) &&
@@ -385,10 +402,7 @@ bool add_genes(const RefCN & ref,
 
   // Get good font for gene names
   const double avail_height{(graph.bounds[1][0] - graph.border_width) * 0.6};
-  static const X11Font * last_font{nullptr};
-  const X11Font * fits{graph.app.fonts.fits("A", 1000, avail_height)};
-  if (fits != last_font) XSetFont(graph.display(), gc, fits->id());
-  last_font = fits;
+  const X11Font * fits{graph.app.good_font("A", 1000, avail_height, gc)};
 
   // Draw gene names nicely
   std::vector<Item> snames(names.begin(), names.end());
@@ -430,12 +444,10 @@ bool add_genes(const RefCN & ref,
   // Show sequence!
   const string test_bases{"GGGGGGGGGG"};
   const double base_width{graph.bounds[0][2] / graph.range[0][2]};
-  const X11Font * bfont{graph.app.fonts.fits(
+  const X11Font * bfont{graph.app.good_font(
       test_bases, test_bases.size() * base_width, 1000)};
   const int actual_width(bfont->string_width(test_bases) / test_bases.size());
   if (actual_width <= base_width) {
-    if (bfont != last_font) XSetFont(graph.display(), gc, bfont->id());
-    last_font = bfont;
     unsigned int n_bases{0};
     const int y_pos{graph.bounds[1][1] - 20 * graph.border_width};
     for (unsigned int b = max(0.0, graph.range[0][0]);
@@ -454,10 +466,7 @@ bool add_genes(const RefCN & ref,
     // Stupid easter egg "it's turtles all the way down"
     if (n_bases <= 1) {
       const string turtle{"turtle"};
-      const X11Font * tfont{graph.app.fonts.fits(
-          turtle, graph.bounds[0][2] / 10, 1000)};
-      if (tfont != last_font) XSetFont(graph.display(), gc, tfont->id());
-      last_font = tfont;
+      fits = graph.app.good_font(turtle, graph.bounds[0][2] / 10, 1000, gc);
       const paa::Axis axis{graph.range[0][0], graph.range[0][1], 8, false};
       for (const std::pair<double, bool> tick : axis.ticks()) {
         if (!tick.second) continue;
@@ -505,11 +514,8 @@ bool add_chromosomes(const RefCN & ref,
   // Chromosome name
   const double avail_height{0.8 * (graph.bounds[1][0] - graph.border_width)};
   const std::string longest{"22"};  // In practice, does "22" fit into chr 21?
-  static X11Font * last_font{nullptr};
   static GC gc{graph.create_gc(graph.app.black, graph.app.white)};
-  const X11Font * fits{graph.app.fonts.fits(longest, min_w, avail_height)};
-  if (fits != last_font) XSetFont(graph.display(), gc, fits->id());
-
+  const X11Font * fits{graph.app.good_font(longest, min_w, avail_height, gc)};
   static iBounds last_bounds;
   if (graph.bounds != last_bounds) {
     XRectangle clip_rectangle(rect(graph.bounds));
@@ -517,13 +523,12 @@ bool add_chromosomes(const RefCN & ref,
   }
   for (unsigned int c{0}; c != chr.size(); ++c) {
     const std::string name{remove_substring(ref.name(chr[c]), "chr")};
-    if (fits->string_width(name) < widths[c]) {
+    if (fits->string_width(name) < widths[c])
       XDrawString(graph.display(), graph.pixmap, gc, fits->centered_x(
           name, pos[c]), fits->centered_y(
               graph.bounds[1][1] - graph.border_width - avail_height / 2),
                   const_cast<char *>(name.c_str()),
                   static_cast<unsigned int>(name.size()));
-    }
   }
 
   // Chromosome boundary lines
@@ -761,14 +766,12 @@ class AbsposColumns {
       column_types.push_back(column_type);
     }
 
-    if (column_names.size() + implicit_index < 2) {
+    if (column_names.size() + implicit_index < 2)
       throw UsageError("Column loader expects to load at least two columns "
                        "from column string") << columns;
-    }
-    if (ref && implicit_index) {
+    if (ref && implicit_index)
       throw UsageError("Plot types genome and cn cannot be used "
                        "with an implicit index");
-    }
 
     // Input file name
     std::ifstream input{file_name.c_str()};
@@ -803,24 +806,20 @@ class AbsposColumns {
                 column_names[c];
           }
           sort(result.begin(), result.end(),
-               [](const ColumnInfo & lhs, const ColumnInfo & rhs) {
+               [] (const ColumnInfo & lhs, const ColumnInfo & rhs) {
                  return lhs.first < rhs.first;
                });
         }
-        if (column_names.size() != result.size()) {
+        if (column_names.size() != result.size())
           throw UsageError("Could not find all columns specified in")
               << columns;
-        }
         return result;
       }()};
 
     // Reserve space for data
     data.resize(column_names.size());
-    for (unsigned int c{0}; c != data.size(); ++c) {
-      if (!has_chr || c) {  // Do not reserve for possible chr column
-        data.reserve(size_hint);
-      }
-    }
+    for (unsigned int c{0}; c != data.size(); ++c)
+      if (!has_chr || c) data.reserve(size_hint);
 
     // Read in data line by line
     String line;
@@ -865,19 +864,16 @@ class AbsposColumns {
 
     // Check load state
     const uint64_t constant_size{data.front().size()};
-    for (unsigned int col{0}; col != data.size(); ++col) {
+    for (unsigned int col{0}; col != data.size(); ++col)
       if (data[col].size() != constant_size)
         throw Error("Inconsistent column data sizes");
-    }
     if (constant_size == 0) throw Error("Data load size was zero");
 
     if (implicit_index) {
       column_names.insert(column_names.begin(), "index");
       column_types.insert(column_types.begin(), "");
       data.emplace(data.begin(), data[0].size());
-      for (uint64_t i{0}; i != data[0].size(); ++i) {
-        data[0][i] = i + 1;
-      }
+      for (uint64_t i{0}; i != data[0].size(); ++i) data[0][i] = i + 1;
     }
   }
 
@@ -887,9 +883,8 @@ class AbsposColumns {
     if (column_names.empty())
       throw Error("Unexpected empty columns in AbsposColumns::info");
     XColInfo result;
-    for (unsigned int c{1}; c != column_names.size(); ++c) {
+    for (unsigned int c{1}; c != column_names.size(); ++c)
       result.emplace_back(column_names[c], column_types[c]);
-    }
     return result;
   }
 
@@ -897,9 +892,7 @@ class AbsposColumns {
   const String & type(unsigned int c) const { return column_types[c]; }
   uint64_t n_rows() const { return n_cols() ? data[0].size() : 0; }
   uint64_t n_cols() const { return data.size(); }
-  const Column & operator[](const unsigned int c) const {
-    return data[c];
-  }
+  const Column & operator[](const unsigned int c) const { return data[c]; }
 
  private:
   Strings column_names{};
@@ -921,8 +914,7 @@ int main(int argc, char * argv[]) try {
     if (argv[1][0] == '-') {
       const string option{argv[1]};
       auto matches = [&option] (const std::string & full_option) {
-        if (option.size() == 2 &&
-            option[1] == full_option[2]) return true;
+        if (option.size() == 2 && option[1] == full_option[2]) return true;
         if (option == full_option) return true;
         return false;
       };
@@ -935,9 +927,8 @@ int main(int argc, char * argv[]) try {
         char dummy;
         int width, height, x_off, y_off;
         geometry_stream >> width >> dummy >> height >> x_off >> y_off;
-        if (!geometry_stream) {
+        if (!geometry_stream)
           throw UsageError("Problem parsing geometry") << geometry_string;
-        }
         geometry = {{width, height}, {x_off, y_off}};
         set_geometry = true;
         argv += 2;
@@ -963,10 +954,8 @@ int main(int argc, char * argv[]) try {
         argc -= 2;
         argv += 2;
       } else if (matches("--setup")) {
-        if (argc != 2) {
-          throw UsageError("Only two arguments allowed "
-                           "if first is --setup");
-        }
+        if (argc != 2) throw UsageError("Only two arguments allowed "
+                                        "if first is --setup");
         const Reference ref{argv[2]};
         return 0;
       } else {
@@ -988,33 +977,27 @@ int main(int argc, char * argv[]) try {
     ref_ptr = make_unique<const RefCN>(argv[2]);
     argc -= 2; argv += 2;
   }
-  if (fullscreen && set_geometry) {
+  if (fullscreen && set_geometry)
     cerr << "Note that --fullscreen option overrides --geometry" << endl;
-    sleep(1);
-  }
 
   // Columns to show
   const std::string columns{argv[1]};
-  if (columns.find_first_of(',') == string::npos) {
+  if (columns.find_first_of(',') == string::npos)
     throw UsageError("Did not find mandatory comma in column specification ")
         << columns;
-  }
 
   // Names of input files
   argc -= 1; argv += 1;
   const vector<string> names{[argc, argv] () {
       vector<string> result;
       result.reserve(argc);
-      for (int a{0}; a != argc; ++a) {
-        result.emplace_back(argv[a + 1]);
-      }
+      for (int a{0}; a != argc; ++a) result.emplace_back(argv[a + 1]);
       return result;
     }()};
   const Strings short_names{[&names] () {
       Strings result;
-      for (const String & name : names) {
+      for (const String & name : names)
         result.push_back(remove_including_final(name, '/'));
-      }
       return result;
     }()};
 
@@ -1025,18 +1008,14 @@ int main(int argc, char * argv[]) try {
       ThreadPool pool(n_threads);
       using Future = future<AbsposColumns>;
       vector<Future> futures;
-      for (const string & name : names) {
+      for (const string & name : names)
         futures.push_back(pool.run(
-            [&columns, &ref_ptr, n_rows]
-            (const string & file_name) {
+            [&columns, &ref_ptr, n_rows] (const string & file_name) {
               return AbsposColumns{file_name, columns, ref_ptr.get(), n_rows};
             }, name));
-      }
       InputData result;
       result.reserve(names.size());
-      for (Future & fut : futures) {
-        result.push_back(fut.get());
-      }
+      for (Future & fut : futures) result.push_back(fut.get());
       return result;
     }()};
 
@@ -1051,12 +1030,11 @@ int main(int argc, char * argv[]) try {
   using XYSeries = X11Graph::XYSeries;
   using Data = X11Graph::Data;
   Data data(n_sets * n_y, XYSeries(2));
-  for (int r{0}; r != n_sets; ++r) {
+  for (int r{0}; r != n_sets; ++r)
     for (int y{0}; y != n_y; ++y) {
       data[n_sets * y + r][0] = &input_data[r][0];
       data[n_sets * y + r][1] = &input_data[r][y + 1];
     }
-  }
   using Info = std::pair<Strings, AbsposColumns::XColInfo>;
   using DataInfo = std::pair<Data, Info>;
   const DataInfo info{std::move(data),
@@ -1119,13 +1097,8 @@ int main(int argc, char * argv[]) try {
 
   // Preload gene info to avoid wait time after zoom
   future<bool> gene_future;
-  if (do_genome) {
-    gene_future = graph.pool.run(
-        add_genes, std::cref(*ref_ptr), std::ref(graph), Event());
-  }
-
-  // Add special G-Graph features to X11plot graph
-  // add_special_features(graph);
+  if (do_genome) gene_future = graph.pool.run(
+          add_genes, std::cref(*ref_ptr), std::ref(graph), Event());
 
   // Process initial view command line arguments
   if (initial) {
