@@ -591,12 +591,13 @@ class X11WindowT : public Geometry {
     return get_char_and_keysym(event).second;
   }
 
+#if 0
   void show_text_box(const std::string & text, const Point location,
                      const uint64_t height_px = 20,
                      const uint64_t min_chars = 5) {
     return;
-    // return text.size() + height_px + min_chars;
   }
+#endif
 
   void save_image(const std::string & base_name,
                   const uint64_t max_colors = 256,
