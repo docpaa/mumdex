@@ -224,12 +224,12 @@ bool add_genes(const RefCN & ref,
                   entered_search.find_first_of("- ", chr_end + 1)};
                 const std::string chr_pos(entered_search.substr(
                     chr_end + 1, pos_end - chr_end - 1));
-                const uint64_t cp{static_cast<uint64_t>(atol(chr_pos.c_str()))};
+                const uint32_t cp{static_cast<uint32_t>(atol(chr_pos.c_str()))};
                 abspos = ref.cn_abspos(chr, cp);
                 if (pos_end != std::string::npos) {
                   const std::string end_pos(entered_search.substr(pos_end + 1));
-                  const uint64_t end_cp{
-                    static_cast<uint64_t>(atol(end_pos.c_str()))};
+                  const uint32_t end_cp{
+                    static_cast<uint32_t>(atol(end_pos.c_str()))};
                   if (end_cp > cp) {
                     if (0)
                     std::cerr << "Set " << chr << " "

@@ -30,10 +30,10 @@ constexpr int foot{12};
 constexpr int points_per_foot{inch * foot};
 constexpr int page_width{4 * points_per_foot};
 constexpr int page_height{3 * points_per_foot};
-constexpr Geometry page_geometry{page_width, page_height};
+// constexpr Geometry page_geometry{page_width, page_height};
 constexpr int header_height{4 * inch};
 constexpr int header_pos{page_height - header_height};
-constexpr int title_font_size{header_height / 2};
+// constexpr int title_font_size{header_height / 2};
 constexpr int ncol{3};
 constexpr int colw{page_width / 3};
 
