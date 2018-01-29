@@ -57,6 +57,7 @@ DEVELOPMENT_PROGRAMS := \
 	missing_chromosome \
 	model_transmission \
 	mumdex_examples \
+	mumdex_poster \
 	mumdex_sequences \
 	museq_primers \
 	optional_test \

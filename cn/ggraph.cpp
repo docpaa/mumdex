@@ -60,6 +60,7 @@ using paa::rect;
 using paa::remove_substring;
 using paa::remove_including_final;
 using paa::iBounds;
+using paa::CN_abspos;
 using paa::Error;
 using paa::Event;
 using paa::GeneXrefs;
@@ -83,7 +84,7 @@ unsigned int n_threads{std::max(std::thread::hardware_concurrency(), 1U)};
 #endif
 
 constexpr unsigned int max_gene_mb{100};
-constexpr unsigned int max_name_mb{5};
+constexpr unsigned int max_name_mb{10};
 
 class GeneInfo {
  public:
@@ -172,8 +173,12 @@ bool add_genes(const RefCN & ref,
   }
   static const string kgXrefs_name{ref.fasta_file() + ".bin/kgXref.txt"};
   static const GeneXrefs xref{kgXrefs_name};
-  if (first_call) first_call = false;  // to enable pre-loading
+  static const paa::GeneLookup gene_lookup{genes, xref};
   lock.unlock();
+  if (first_call) {
+    first_call = false;  // to enable pre-loading
+    return false;
+  }
 
   static map<X11Graph *, vector<GeneInfo>> all_gene_info;
   vector<GeneInfo> & gene_info{all_gene_info[&graph]};
@@ -184,21 +189,138 @@ bool add_genes(const RefCN & ref,
     static map<X11Graph *, bool> all_inside_coord;
     bool & inside_coord{all_inside_coord[&graph]};
     switch (event.x->type) {
-#if 0
+#if 1
       case KeyPress:
-        {
+        if (inside_coord) {
+          const std::pair<char, KeySym> char_key{graph.get_char_and_keysym(
+              event.x->xkey)};
+          const KeySym & sym{char_key.second};
+          const char c{char_key.first};
+          if (0) std::cerr << "keypress " << static_cast<int>(c) << std::endl;
           static map<X11Graph *, std::string> all_entered_search;
           std::string & entered_search{all_entered_search[&graph]};
-          const char c{graph.get_char(event.x->xkey)};
-          if (inside_coord) std::cerr << "keypress " << c << std::endl;
+          if (c == 13 || sym == XK_Return) {
+            if (0) std::cerr << "Return" << std::endl;
+            const size_t chr_end{entered_search.find_first_of(" :")};
+            int abspos_set{0};
+            double abspos = ref.cn_abspos.n_positions();
+            double abspos_stop = abspos;
+            const double winsize{max_name_mb * 1000000.0 / 2};
+            const std::string first{entered_search.substr(0, chr_end)};
+            for (const bool with_chr : {false, true}) {
+              const std::string s_chr_name{remove_substring(first, "chr")};
+              const std::string chr_name{std::string(with_chr ? "chr" : "") +
+                    s_chr_name};
+              if (!ref.chr_lookup.exists(chr_name)) continue;
+              const unsigned int chr{ref.chr_lookup[chr_name]};
+              if (ref.cn_abspos.ref_offset(chr) == ref.cn_abspos.bad_abspos())
+                continue;
+              if (chr_end == std::string::npos) {
+                abspos = ref.cn_abspos(chr, 0);
+                abspos_stop = abspos + ref.size(chr);
+                abspos_set = 1;
+              } else {
+                const size_t pos_end{
+                  entered_search.find_first_of("- ", chr_end + 1)};
+                const std::string chr_pos(entered_search.substr(
+                    chr_end + 1, pos_end - chr_end - 1));
+                const uint64_t cp{static_cast<uint64_t>(atol(chr_pos.c_str()))};
+                abspos = ref.cn_abspos(chr, cp);
+                if (pos_end != std::string::npos) {
+                  const std::string end_pos(entered_search.substr(pos_end + 1));
+                  const uint64_t end_cp{
+                    static_cast<uint64_t>(atol(end_pos.c_str()))};
+                  if (end_cp > cp) {
+                    if (0)
+                    std::cerr << "Set " << chr << " "
+                              << chr_pos << " " << abspos << " "
+                              << end_pos << " " << end_cp << std::endl;
+                    abspos_stop = ref.cn_abspos(chr, end_cp);
+                    abspos_set = 2;
+                  }
+                }
+                if (!abspos_set) {
+                  abspos_stop = abspos + winsize / 2;
+                  abspos -= winsize / 2;
+                  abspos_set = 3;
+                }
+              }
+              if (abspos_set) break;
+            }
+            std::string gene_found{""};
+            if (!abspos_set) {
+              for (const bool uc : {false, true}) {
+                const std::string gene_name{[&first, uc] () {
+                    std::string result;
+                    for (const char g : first) result += uc ? toupper(g) : g;
+                    return result;
+                  }()};
+                const paa::GeneLookup::ER lookup{
+                  gene_lookup.isoforms(gene_name)};
+                if (lookup.first != lookup.second) {
+                  const KnownGene * longest{lookup.first->second};
+                  for (paa::GeneLookup::Iter i{lookup.first};
+                       i != lookup.second; ++i) {
+                    const KnownGene * g{i->second};
+                    if (g->length() > longest->length()) longest = g;
+                  }
+                  abspos_set = uc ? 5 : 4;
+                  abspos = ref.cn_abspos(
+                      longest->chr, (longest->t_start + longest->t_stop) / 2);
+                  abspos_stop = abspos + winsize / 2;
+                  abspos -= winsize / 2;
+                  gene_found = gene_name;
+                  break;
+                }
+              }
+            }
+            if (0) std::cerr << "abspos " << abspos << std::endl;
+            if (abspos_set) {
+              graph.set_range(0, abspos, abspos_stop);
+              graph.prepare_draw();
+              graph.status =  "Zoomed to ";
+              if (gene_found.size()) graph.status += gene_found + " ";
+              const CN_abspos::ChrPos start_pos{ref.cn_abspos.chrpos(abspos)};
+              CN_abspos::ChrPos stop_pos{
+                ref.cn_abspos.chrpos(abspos_stop)};
+              if (stop_pos.first > start_pos.first &&
+                  stop_pos.second == 0) {
+                stop_pos.first = start_pos.first;
+                stop_pos.second = ref.size(stop_pos.first);
+              }
+              graph.status += ref.name(start_pos.first) + ":" +
+                  std::to_string(start_pos.second) + "-" +
+                  (start_pos.first != stop_pos.first ?
+                   ref.name(stop_pos.first) + ":" : std::string("")) +
+                  std::to_string(stop_pos.second);
+              graph.draw_status();
+              entered_search.clear();
+              return true;
+            }
+            graph.status = "Bad query: ";
+            graph.status += entered_search;
+            graph.draw_status();
+            entered_search.clear();;
+            return false;
+          } else {
+            if (c >= XK_space && c < XK_asciitilde) {
+              entered_search += c;
+            } else if (sym == XK_Delete || sym == XK_BackSpace) {
+              if (entered_search.size()) entered_search.pop_back();
+            }
+            graph.status = std::string("search: ") + entered_search;
+          }
+          if (0) std::cerr << graph.status << std::endl;
+          graph.draw_status(true);
           return true;
         }
+        return false;
 #endif
       case MotionNotify:
         {
           const XMotionEvent & xmotion{event.x->xmotion};
-
-          // Coordinate text entry
+          // For coordinate text entry
+          // if (graph.call_back_radios[1].contains(xmotion)) {
           if (graph.coord_radio.contains(xmotion)) {
             inside_coord = true;
           } else {
@@ -259,7 +381,7 @@ bool add_genes(const RefCN & ref,
             }
           }
         }
-        break;
+        return false;
       case ButtonRelease:
         {
           // Open genome browser
@@ -291,7 +413,7 @@ bool add_genes(const RefCN & ref,
             }
           }
         }
-        break;
+        return false;;
 
       default:
         break;
@@ -308,8 +430,8 @@ bool add_genes(const RefCN & ref,
   std::vector<KnownGene>::const_iterator gene_limits[2];
   for (const bool high : {false, true}) {
     const unsigned int abspos{
-      min(ref.cn_abspos.n_positions(),
-          static_cast<unsigned int>(max(0.0, graph.range[0][high])))};
+      min(ref.cn_abspos.n_positions() - 1,
+          static_cast<unsigned int>(max(1.0, graph.range[0][high])))};
     const ChromPos chrpos_bound{ref.cn_abspos.chrpos(abspos)};
     gene_limits[high] = upper_bound(
         genes.begin(), genes.end(), chrpos_bound,
@@ -384,17 +506,17 @@ bool add_genes(const RefCN & ref,
       const unsigned int exon_stop{ref.cn_abspos(gene.chr, gene.exon_stops[e])};
       if (exon_start >= graph.range[0][1] || exon_stop <= graph.range[0][0])
         continue;
-      const unsigned int mod_start{
-        max(static_cast<unsigned int>(graph.range[0][0]), exon_start)};
-      const unsigned int mod_stop{
-        min(static_cast<unsigned int>(graph.range[0][1]), exon_stop)};
+      const double mod_start{max(graph.range[0][0], 1.0 * exon_start)};
+      const double mod_stop{min(graph.range[0][1], 1.0 * exon_stop)};
       const double frac_pixel{(mod_stop - mod_start) * graph.scale[0]};
       if (frac_pixel < 0.5) continue;
       const int box_start{graph.coord(0, mod_start)};
       const int box_stop{frac_pixel < 1.5 ? box_start + 1 :
             graph.coord(0, mod_stop)};
-      XFillRectangle(graph.display(), graph.pixmap, graph.gc,
-                     box_start, exon_y, box_stop - box_start, exon_height);
+      if (1) {
+        XFillRectangle(graph.display(), graph.pixmap, graph.gc,
+                       box_start, exon_y, box_stop - box_start, exon_height);
+      }
     }
   }
 
@@ -1045,7 +1167,7 @@ int main(int argc, char * argv[]) try {
       (X11Graph & graph) {
     if (do_genome) {
       // Chromosomes and ratio lines
-      graph.add_call_back("Toggle chromosome boundaries and names",
+      graph.add_call_back("Toggle chromosome display",
                           X11Graph::CallBack{std::bind(
                               &add_chromosomes, std::cref(*ref_ptr), _1, _2)});
 
@@ -1067,6 +1189,8 @@ int main(int argc, char * argv[]) try {
       graph.grid_radios[0][0].toggled = false;
       graph.grid_radios[1][0].toggled = false;
       graph.log_radios[0].actions.visible = [] () { return false; };
+      graph.coord_radio.description +=
+      " or search (enter text query while pointer is in this radio control)";
     }
 
     if (do_cn) {

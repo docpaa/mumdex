@@ -87,9 +87,10 @@ class GeneXref {
 class GeneXrefs {
  public:
   explicit GeneXrefs(const std::string & file_name);
-  GeneXref operator[](const std::string & name) const {
+  const GeneXref & operator[](const std::string & name) const {
     return data.at(name);
   }
+
  private:
   std::map<std::string, GeneXref> data{};
 };
@@ -147,6 +148,9 @@ class KnownGene {
   std::vector<unsigned int> exon_starts{};
   std::vector<unsigned int> exon_stops{};
   std::vector<PseudoGeneJunction> junctions{};
+  unsigned int length() const {
+    return t_stop - t_start;
+  }
   bool in_exon(const unsigned int c, const unsigned int p) const {
     if (c != chr) return false;
     for (unsigned int e{0}; e != exon_starts.size(); ++e) {
@@ -258,6 +262,31 @@ class KnownGenes {
  public:
   const Reference & ref;
   std::vector<PseudoGeneJunction> junctions{};
+};
+
+class GeneLookup {
+ public:
+  using KGP = const KnownGene *;
+  using MMap = std::multimap<std::string, KGP>;
+  using MMapI = MMap::value_type;
+  using Iter = MMap::const_iterator;
+  using ER = std::pair<Iter, Iter>;
+  explicit GeneLookup(const KnownGenes & genes_, const GeneXrefs & xrefs) :
+      genes{genes_} {
+    for (const KnownGene & gene : genes) {
+      data.emplace(xrefs[gene.name].geneSymbol, &gene);
+    }
+  }
+  // const GeneXref & operator[](const std::string & name) const {
+  //   return data.at(name);
+  // }
+  ER isoforms(const std::string & name) const {
+     return data.equal_range(name);
+  }
+
+ private:
+  const KnownGenes & genes;
+  MMap data{};
 };
 
 class JunctionCounts {

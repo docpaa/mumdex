@@ -45,8 +45,8 @@ class X11MUMdexViewer : public X11Win {
   X11MUMdexViewer(X11App & app__,
                   const std::vector<std::string> & mumdex_names__,
                   const std::vector<MUMDEX> & mumdexes__,
-                  const Geometry geometry_ = {{1200, 1000}, {0, 0}}) :
-      X11Win{app__, geometry_},
+                  const Geometry geometry__ = {{1200, 1000}, {0, 0}}) :
+      X11Win{app__, geometry__},
     mumdex_names_{mumdex_names__},
     mumdexes_{mumdexes__},
     mumdex_{&mumdexes_.front()},

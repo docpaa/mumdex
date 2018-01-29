@@ -430,6 +430,11 @@ class ChromosomeIndexLookup {
   unsigned int operator()(const std::string & name) const {
     return lookup_table.at(name);
   }
+
+  bool exists(const std::string & chr) const {
+    return lookup_table.find(chr) != lookup_table.end();
+  }
+
   unsigned int size() const {
     return static_cast<unsigned int>(lookup_table.size());
   }

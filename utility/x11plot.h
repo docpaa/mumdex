@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "error.h"
+#include "layout.h"
 #include "files.h"
 #include "plot.h"
 #include "strings.h"
@@ -44,74 +45,6 @@ namespace paa {
 using void_fun = std::function<void ()>;
 using bool_fun = std::function<bool ()>;
 using void_uint_fun = std::function<void (const unsigned int)>;
-
-// Point class
-template <class Type>
-struct PointT {
-  constexpr PointT() = default;
-  constexpr PointT(const Type x_, const Type y_) : x{x_}, y{y_} { }
-  template <class Event>
-  PointT(const Event & event) {  // NOLINT
-    x = event.x;
-    y = event.y;
-  }
-
-  template <class Event>
-  PointT & operator=(const Event & event) {
-    x = event.x;
-    y = event.y;
-    return *this;
-  }
-  Type operator[](const bool y_) const { return y_ ? y : x; }
-  Type & operator[](const bool y_) { return y_ ? y : x; }
-  bool operator==(const PointT rhs) const { return x == rhs.x && y == rhs.y; }
-  bool operator!=(const PointT rhs) const { return x != rhs.x || y != rhs.y; }
-  double distance(const PointT other) const {
-    return sqrt((x - other.x) * (x - other.x) + (y - other.y) * (y - other.y));
-  }
-  double distance(const Type x_, const Type y_) const {
-    return distance(PointT{x_, y_});
-  }
-
-  Type x{0};
-  Type y{0};
-};
-using iPoint = PointT<int>;
-using uPoint = PointT<unsigned int>;
-using bPoint = PointT<bool>;
-using dPoint = PointT<double>;
-using Point = iPoint;
-
-// Line class
-template <class Type>
-struct LineT {
-  constexpr LineT() = default;
-  constexpr LineT(const Type start_, const Type stop_) :
-      start{start_}, stop{stop_} { }
-
-  template <class Line>
-  LineT & operator=(const Line & event) {
-    start = event.start;
-    stop = event.stop;
-    return *this;
-  }
-  Type operator[](const bool stop_) const { return stop_ ? stop : start; }
-  Type & operator[](const bool stop_) { return stop_ ? stop : start; }
-  bool operator==(const LineT rhs) const {
-    return start == rhs.start && stop == rhs.stop;
-  }
-  bool operator!=(const LineT rhs) const {
-    return start != rhs.start || stop != rhs.stop;
-  }
-  double length() const { return start.distance(stop); }
-
-  Type start{0};
-  Type stop{0};
-};
-using iLine = LineT<iPoint>;
-using uLine = LineT<uPoint>;
-using dLine = LineT<dPoint>;
-using Line = dLine;
 
 class X11Font {
  public:
@@ -151,6 +84,7 @@ class X11Font {
     return font->max_bounds.rbearing - font->max_bounds.lbearing;
   }
   int ascent() const { return font->max_bounds.ascent; }
+  int descent() const { return font->max_bounds.descent; }
   int height() const {
     return font->max_bounds.ascent + font->max_bounds.descent;
   }
@@ -165,7 +99,7 @@ class X11Font {
   int below_y(const int y) const { return y + font->max_bounds.ascent; }
   int centered_x(const std::string & text, const int x) const {
     return x - (string_width(text) + 1) / 2 -
-        font->per_char[static_cast<int>(text[0])].lbearing + 1;
+        font->per_char[static_cast<int>(text[0])].lbearing;
   }
   double d_centered_x(const std::string & text, const double x) const {
     return x - (string_width(text) + 1) / 2.0 -
@@ -269,112 +203,6 @@ std::string hex(const XColor & color) {
   return result;
 }
 
-class Geometry {
- public:
-  // Defaults
-  static constexpr int default_width{1280};
-  static constexpr int default_height{720};
-  static constexpr int default_x_offset{0};
-  static constexpr int default_y_offset{0};
-  static Geometry default_geometry() {
-    return {{default_width, default_height},
-      {default_x_offset, default_y_offset}};
-  }
-
-  // Construct
-  Geometry(const Point & size__, const Point & offset__) :
-      size_{size__}, offset_{offset__} { }
-  Geometry(const int width_, const int height_,
-           const int x_offset_, const int y_offset_) :
-      size_{width_, height_}, offset_{x_offset_, y_offset_} { }
-  virtual ~Geometry() { }
-
-  // Comparisons - slice warning!
-  bool operator==(const Geometry & rhs) const {
-    return size() == rhs.size() && offset() == rhs.offset();
-  }
-  bool operator!=(const Geometry & rhs) const {
-    return size() != rhs.size() || offset() != rhs.offset();
-  }
-
-  // Get values
-  Geometry geometry() const { return *this; }
-  Point size() const { return size_; }
-  int size(const bool y) const { return size_[y]; }
-  int width() const { return size_.x; }
-  int height() const { return size_.y; }
-  Point offset() const { return offset_; }
-  int offset(const bool y) const { return offset_[y]; }
-  int x_offset() const { return offset_.x; }
-  int y_offset() const { return offset_.y; }
-
-  // Calculated values
-  int area() const { return width() * height(); }
-  int max_size() const { return std::max(width(), height()); }
-  int min_size() const { return std::min(width(), height()); }
-  int x_low() const { return x_offset(); }
-  int x_high() const { return x_offset() + width(); }
-  int y_low() const { return y_offset(); }
-  int y_high() const { return y_offset() + height(); }
-  int low(const bool y) const { return y ? y_low() : x_low(); }
-  int high(const bool y) const { return y ? y_high() : x_high(); }
-
-  // Set values
-  Geometry & geometry(const Geometry & geometry_) {
-    *this = geometry_;
-    return *this;
-  }
-  Geometry & size(const int width_, const int height_) {
-    size_ = {width_, height_};
-    return *this;
-  }
-  Geometry & width(const int width_) { size_.x = width_; return *this; }
-  Geometry & height(const int height_) { size_.y = height_; return *this; }
-  Geometry & offset(const int x_, const int y_) {
-    offset_ = {x_, y_};
-    return *this;
-  }
-  Geometry & x_offset(const int x_) { offset_.x = x_; return *this; }
-  Geometry & y_offset(const int y_) { offset_.y = y_; return *this; }
-
-  // iBounds-like behavior
-  class BoundsHelper {
-   public:
-    class BoundsHelper2 {
-     public:
-      BoundsHelper2(Geometry & geometry_, const bool y_) :
-          geometry{geometry_}, y{y_} { }
-      int operator[](const int i) {
-        switch (i) {
-          case 0:
-            return geometry.low(y);
-          case 1:
-            return geometry.high(y);
-          case 2:
-            return geometry.size(y);
-          default:
-            throw Error("Bad bounds index") << i;
-        }
-      }
-
-     private:
-      Geometry & geometry;
-      int y;
-    };
-    explicit BoundsHelper(Geometry & geometry_) : geometry{geometry_} {}
-    BoundsHelper2 operator[](const bool y) {
-      return BoundsHelper2{geometry, y};
-    }
-
-   private:
-    Geometry & geometry;
-  };
-
- private:
-  Point size_{default_width, default_height};
-  Point offset_{default_x_offset, default_y_offset};
-};
-
 // X11 convenience functions
 void draw_centered_oval(Display * display, Window window, GC gc_,
                         const int x, const int y,
@@ -426,7 +254,7 @@ bool operator!=(const XPoint lhs, const XPoint & rhs) {
 
 // Window class in an app
 template <class X11App>
-class X11WindowT : public Geometry {
+class X11WindowT {  // : public Geometry {
  public:
   using X11Win = X11WindowT<X11App>;
   static constexpr unsigned int default_window_width{default_doc_width};
@@ -435,13 +263,13 @@ class X11WindowT : public Geometry {
   static constexpr int radio_width{1};
 
   X11WindowT(X11App & app_,
-             const Geometry & geometry_ =
+             const Geometry & geometry__ =
              {{static_cast<int>(default_window_width * window_scale),
                      static_cast<int>(default_window_height * window_scale)},
                {0, 0}},
              const bool map_ = true,
              const std::string title = "") :
-      Geometry{geometry_}, app{app_},
+      geometry_{geometry__}, app{app_},
     window{XCreateSimpleWindow(display(), app.root,
                                x_offset(), y_offset(), width(), height(),
                                0, app.white, app.white)}
@@ -673,6 +501,17 @@ class X11WindowT : public Geometry {
   }
   void prepare_draw() { prepare(); draw(); }
 
+  // Get rid of?
+  int x_offset() const { return geometry_.x_offset(); }
+  int y_offset() const { return geometry_.y_offset(); }
+  int width() const { return geometry_.width(); }
+  int height() const { return geometry_.height(); }
+  Geometry & x_offset(const int x_) { return geometry_.x_offset(x_); }
+  Geometry & y_offset(const int y_) { return geometry_.y_offset(y_); }
+  Geometry & width(const int width_) { return geometry_.width(width_); }
+  Geometry & height(const int height_) { return geometry_.height(height_); }
+
+  Geometry geometry_;
   X11App & app;
   iBounds bounds{};
   Window window{};
@@ -963,7 +802,8 @@ class Event {
 };
 
 // Radio button widget
-struct Radio {
+class Radio {
+ public:
   // Constructor
   Radio(const std::string & description_, X11Win * win_,
         const dPoint specification_, const Actions & actions_ = Actions(),
@@ -1006,6 +846,7 @@ struct Radio {
     Point point;
     const double border{1.0 * min_border()};
     for (const bool y : {false, true}) {
+#if 0
       // Specification near zero is at edges
       if (fabs(specification[y]) >= 0 && fabs(specification[y]) < 50) {
         point[y] = anchor[y] + border *
@@ -1016,6 +857,19 @@ struct Radio {
         const double centered{specification[y] - 100};
         point[y] = (win->bounds[y][0] + win->bounds[y][1]) / 2 +
             centered * border;
+      }
+#endif
+
+      const double shrink{fabs(specification[y]) >= 2 ? 0.9 : 1.0};
+      // Specification near zero is at edges
+      if (specification[y] > 50) {
+        // Specification of around 100 is centered
+        const double centered{specification[y] - 100};
+        point[y] = (win->bounds[y][0] + win->bounds[y][1]) / 2 +
+            centered * border * shrink;
+      } else {
+        point[y] = anchor[y] + border * shrink *
+            (specification[y] + 0.5 + (high[y] ? 1 : -2));
       }
     }
     return point;
@@ -1082,12 +936,23 @@ struct Radio {
     } else {
       erase(point);
     }
+#if 0
+    if (!toggled && dc.size()) {
+      const X11Font * fits{win->app.good_font(
+          "H", radius() * 2, radius() * 2, grey_gc)};
+      XDrawString(win->display(), win->window, grey_gc,
+                  fits->centered_x(dc, point.x), fits->centered_y(point.y),
+                  const_cast<char *>(dc.c_str()),
+                  static_cast<unsigned int>(dc.size()));
+    }
+#endif
   }
 
   void toggle() { toggled = !toggled; }
 
   // Data
   std::string description;  // Help text for radio
+  // std::string dc{};  // Displayed inside the radio
   X11Win * win;  // The window attached to
   dPoint specification;  // Where on page
   Actions actions;  // Actions to perform
@@ -1248,15 +1113,15 @@ class X11Colors : public X11Win {
       const std::vector<std::string> & starting_colors,
       const size_t n_colors_ = 0,
       const bool order = false,
-      const Geometry & geometry_ = Geometry{{side, side}, {0, 0}},
+      const Geometry & geometry__ = Geometry{{side, side}, {0, 0}},
       const CallBack call_back_ = [] (const unsigned int) { },
       const bool close_on_click_ = false,
       const std::string title = "") :
       X11Win{app__,
-        Geometry{{geometry_.width(), geometry_.height()},
-      {geometry_.x_offset() +
-            (order ? geometry_.width() + geometry_.width() / 20 : 0),
-            geometry_.y_offset()}},
+        Geometry{{geometry__.width(), geometry__.height()},
+      {geometry__.x_offset() +
+            (order ? geometry__.width() + geometry__.width() / 20 : 0),
+            geometry__.y_offset()}},
         true, title},
     color_names{starting_colors},
     n_colors{n_colors_ ? n_colors_ : starting_colors.size()},
@@ -1486,34 +1351,6 @@ class SavedConfig {
   std::vector<unsigned char> radio_states{};
 };
 
-// Returns 1 if the lines intersect, otherwise 0. In addition, if the lines
-// intersect the intersection point may be stored in the floats i_x and i_y.
-bool get_line_intersection(double p0_x, double p0_y, double p1_x, double p1_y,
-                           double p2_x, double p2_y, double p3_x, double p3_y,
-                           double *i_x, double *i_y) {
-    double s1_x, s1_y, s2_x, s2_y;
-    s1_x = p1_x - p0_x;     s1_y = p1_y - p0_y;
-    s2_x = p3_x - p2_x;     s2_y = p3_y - p2_y;
-
-    double s, t;
-    s = (-s1_y * (p0_x - p2_x) + s1_x * (p0_y - p2_y)) /
-        (-s2_x * s1_y + s1_x * s2_y);
-    t = (s2_x * (p0_y - p2_y) - s2_y * (p0_x - p2_x)) /
-        (-s2_x * s1_y + s1_x * s2_y);
-
-    if (s >= 0 && s <= 1 && t >= 0 && t <= 1) {
-      // Collision detected
-      if (i_x != NULL)
-        *i_x = p0_x + (t * s1_x);
-      if (i_y != NULL)
-        *i_y = p0_y + (t * s1_y);
-      return true;
-    }
-
-    // No collision
-    return false;
-}
-
 bool point_within_range(const dPoint & point, const Range & range) {
   if (point.x >= range[0][0] && point.x <= range[0][1] &&
       point.y >= range[1][0] && point.y <= range[1][1]) return true;
@@ -1587,20 +1424,18 @@ class X11Graph : public X11Win, public SavedConfig {
                      bool_fun active_fun = []() { return true; });
   void initialize();
 
-  static Geometry default_geometry() {
-    return {{default_width, default_height}, {0, 0}};
-  }
-
-  // Data organization
-  uint64_t n_files() const { return data_info.second.first.size(); }
-  uint64_t n_cols() const { return data_info.second.second.size(); }
-  bool info_ok() const { return n_files() * n_cols() == input_data.size(); }
-  uint64_t file_index(const uint64_t series_index) const {
-    return series_index % n_files();
-  }
-  uint64_t col_index(const uint64_t series_index) const {
-    return series_index / n_files();
-  }
+  // Data organization is series * (x, y) -> point
+  uint64_t n_files() const;
+  uint64_t n_cols() const;
+  bool info_ok() const;
+  uint64_t file_index(const uint64_t series_index) const;
+  uint64_t col_index(const uint64_t series_index) const;
+  void set_tiling();
+  DataInfo data_info{};
+  Data & input_data{data_info.first};
+  Data log_data{}, log_x_data{}, log_y_data{};
+  Data * data{&input_data};
+  std::vector<std::unique_ptr<Values> > log_series{};
 
   // Range functions
   void get_range(const unsigned int a = 2);
@@ -1644,8 +1479,8 @@ class X11Graph : public X11Win, public SavedConfig {
   bool do_lines() const;
   bool can_do_lines() const;
   void prepare_log();
-  static std::string long_status(const bool in, const bool y);
   void draw_border(Drawable d) const;
+  static std::string long_status(const bool in, const bool y);
   void draw_status(const bool force = false) const;
   void draw_controls();
   void draw_grid() const;
@@ -1657,20 +1492,13 @@ class X11Graph : public X11Win, public SavedConfig {
                           const unsigned int height_);
   void set_line_widths(std::vector<GC> gcs, const int width_);
 
-  void set_tiling();
-
   // Assorted functions
+  static Geometry default_geometry();
   virtual bool slow() const;
   void movie(const bool right);
   void save_image(const std::string & base_name);
   bool show_help(const Point point);
-
-  // Data is series * (x, y) -> point
-  DataInfo data_info{};
-  Data & input_data{data_info.first};
-  Data log_data{}, log_x_data{}, log_y_data{};
-  Data * data{&input_data};
-  std::vector<std::unique_ptr<Values> > log_series{};
+  void open_url(const std::string & url) const;
 
   // Graphics contexts and fonts
   GC border_gc{}, tiling_border_gc{}, border_fill_gc{},
@@ -1711,36 +1539,40 @@ class X11Graph : public X11Win, public SavedConfig {
   //
   // Radio controls
   //
-  Radio help_radio{"Toggle showing help text for controls", this, {1, 2},
+  std::vector<Radio> create_unnamed_radios();
+  bool_fun radio_on(const Radio & radio);
+  bool_fun radio_off(const Radio & radio);
+  bool_fun zoom_tester(const bool y);
+  Radio help_radio{"Toggle showing control help text", this, {1, 2},
     {[this]() { coord_radio = false; show_help(click); }}, true, true};
-  Radio coord_radio{"Toggle showing coordinates of cursor", this, {1, 3},
+  Radio coord_radio{"Toggle coordinate display", this, {1, 3},
     {[this]() { help_radio = false; status = ""; draw_controls(); }}, true};
-  Radio arcs_radio{"Toggle display of point markers", this, {-2, -1},
+  Radio arcs_radio{"Toggle point marker display", this, {-2, -1},
     {[this]() { return arcs_radio ? prepare_draw() : draw(); },
           [this]() { return can_do_arcs(); }}, true, true};
-  Radio outlines_radio{"Toggle between solid and outlined markers", this,
+  Radio outlines_radio{"Toggle marker outline display", this,
     {-5.25, -1}, {[this]() { draw(); }, [this]() { return do_arcs(); }}, true};
-  Radio lines_radio{"Toggle display of lines", this, {-1, -2},
+  Radio lines_radio{"Toggle line display", this, {-1, -2},
     {[this]() { return lines_radio ? prepare_draw() : draw(); },
           [this]() { return can_do_lines(); }},  true, true};
   Radio tick_radios[2]{
-    {"Toggle axis labels on X axis (shown when cursor leaves window)",
+    {"Toggle X axis labels (shown when cursor leaves window)",
           this, {5.5, -1}, {[this]() { }}, true},
-    {"Toggle axis labels on Y axis (shown when cursor leaves window)",
+    {"Toggle Y axis labels (shown when cursor leaves window)",
           this, {1, -5.5}, {[this]() { }, radio_off(tiled_radio)}, true}};
   Radio log_radios[2]{
-    {"Toggle logarithmic scale on X axis", this, {6.5, -1},
+    {"Toggle X axis logarithmic scale", this, {6.5, -1},
       {[this]() { prepare_log(); prepare_draw(); }}, true},
-    {"Toggle logarithmic scale on Y axis", this, {1, -6.5},
+    {"Toggle Y axis logarithmic scale", this, {1, -6.5},
       {[this]() { prepare_log(); prepare_draw(); }}, true}};
   Radio grid_radios[2][2]{
-    {{"Toggle major grid lines on X axis", this, {4.25, -1},
+    {{"Toggle X axis major grid lines", this, {4.25, -1},
         {[this]() { draw(); }}, true, true},
-      {"Toggle major grid lines on Y axis", this, {1, -4.25},
+      {"Toggle Y axis major grid lines", this, {1, -4.25},
         {[this]() { draw(); }, radio_off(tiled_radio)}, true, true}},
-    {{"Toggle minor grid lines on X axis", this, {3.25, -1},
+    {{"Toggle X axis minor grid lines", this, {3.25, -1},
         {[this]() { draw(); }}, true, true},
-      {"Toggle minor grid lines on Y axis", this, {1, -3.25},
+      {"Toggle Y axis minor grid lines", this, {1, -3.25},
         {[this]() { draw(); }, radio_off(tiled_radio)}, true, true}}};
   Radio movie_radios[2]{
     {"Play a movie traveling left", this, {97.5, -1},
@@ -1761,7 +1593,7 @@ class X11Graph : public X11Win, public SavedConfig {
                 restore_config(saved_config.back());
                 prepare_draw();
               }}}}};
-  Radio tiled_radio{"Toggle between stacked and tiled views", this, {-1, 2},
+  Radio tiled_radio{"Toggle stacked and tiled views", this, {-1, 3},
     {[this]() { prepare_draw(); }, [this]() { return n_files() - 1; }}, true};
 
   std::vector<Radio> unnamed_radios{};
@@ -1773,16 +1605,15 @@ class X11Graph : public X11Win, public SavedConfig {
         &grid_radios[1][0], &grid_radios[1][1],
         &movie_radios[0], &movie_radios[1],
         &previous_views_radio, &tiled_radio};
-  std::vector<Radio> create_unnamed_radios();
-  bool_fun radio_on(const Radio & radio);
-  bool_fun radio_off(const Radio & radio);
-  bool_fun zoom_tester(const bool y);
 
   // Callback functions
   std::vector<CallBack> call_backs{};
   std::vector<Radio> call_back_radios{};
 
   // Saved configuration history
+  SavedConfig current_config() const;
+  void restore_config(const SavedConfig & config);
+  void save_config(const SavedConfig & config);
   std::deque<SavedConfig> saved_config{};
   std::vector<Radio *> saved_radios{
     &log_radios[0], &log_radios[1],  // Must be listed first for restore_config
@@ -1790,22 +1621,16 @@ class X11Graph : public X11Win, public SavedConfig {
         &tick_radios[0], &tick_radios[1],
         &grid_radios[0][0], &grid_radios[0][1],
         &grid_radios[1][0], &grid_radios[1][1]};
-  SavedConfig current_config() const;
-  void restore_config(const SavedConfig & config);
-  void save_config(const SavedConfig & config);
 
   // Number of threads to use
+  unsigned int n_threads() const;
+  void n_threads(const unsigned int n_threads__);
 #ifdef __CYGWIN__
   unsigned int n_threads_{1};
 #else
   unsigned int n_threads_{std::thread::hardware_concurrency()};
 #endif
   ThreadPool pool{n_threads()};
-  unsigned int n_threads() const;
-  void n_threads(const unsigned int n_threads__);
-
-  // Web url open
-  void open_url(const std::string & url) const;
 
   // Movement directions
   bool x_movement{true};
@@ -1816,10 +1641,10 @@ class X11Graph : public X11Win, public SavedConfig {
 
 // Construct from data in exact format needed
 X11Graph::X11Graph(
-    X11App & app__, const DataInfo & data__, const Geometry & geometry_,
+    X11App & app__, const DataInfo & data__, const Geometry & geometry__,
     const std::string & title, const unsigned int n_threads__,
     SpecialFeatures add_special_features__) :
-    X11Win{app__, geometry_, true, title}, data_info{data__},
+    X11Win{app__, geometry__, true, title}, data_info{data__},
   data{&data_info.first}, n_threads_{n_threads__},
   add_special_features{add_special_features__} {
     initialize();
@@ -1966,7 +1791,7 @@ void X11Graph::initialize() {
     const dPoint spec{-1, radio_start + initial_spacing * (radio_scale - 1) +
           radio_scale * (1.125 * n_cols() * (n_files() - file_index(c) - 1) +
                          (n_cols() - col_index(c) - 1))};
-    series_radios.push_back(Radio{"Pointer clicks toggle display or change "
+    series_radios.push_back(Radio{"Toggle display or change "
             "colors (pointer button 2 or 3) for series " + series_names[c],
             this, spec,
         {[this]() { prepare_draw(); }, [this]() { return inside; }},
@@ -2046,124 +1871,52 @@ void X11Graph::initialize() {
   // XMapWindow(display(), window);
 }
 
-// Colors
-std::vector<std::string> X11Graph::make_colors() const {
-  std::vector<std::string> names{
-    "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
-        "rgb:fc/7c/fc", "rgb:00/18/00", "rgb:00/fc/84", "rgb:fc/fc/a0",
-        "rgb:90/a0/8c", "rgb:00/a8/fc", "rgb:74/54/fc", "rgb:fc/08/fc",
-        "rgb:78/4c/30", "rgb:fc/40/78", "rgb:80/fc/68", "rgb:00/2c/fc",
-        "rgb:fc/9c/78", "rgb:20/a8/68", "rgb:4c/fc/04", "rgb:d0/cc/fc",
-        "rgb:70/9c/04", "rgb:00/64/30", "rgb:00/fc/e8", "rgb:70/00/00",
-        "rgb:64/00/f8", "rgb:70/a8/f4", "rgb:a4/50/a0", "rgb:50/d4/ac",
-        "rgb:2c/24/50", "rgb:fc/fc/34", "rgb:30/90/b8", "rgb:d0/40/24",
-        "rgb:c8/40/f4", "rgb:c4/d0/5c", "rgb:ec/00/9c", "rgb:00/f0/34",
-        "rgb:ac/f4/b8", "rgb:54/38/b4", "rgb:bc/78/54", "rgb:54/70/70",
-        "rgb:a8/08/40", "rgb:b0/80/dc", "rgb:58/cc/3c", "rgb:24/6c/f8",
-        "rgb:b4/00/e4", "rgb:38/48/00", "rgb:00/c4/bc", "rgb:cc/bc/ac",
-        "rgb:e8/6c/ac", "rgb:38/d4/fc", "rgb:fc/0c/4c", "rgb:74/2c/70",
-        "rgb:a0/6c/00", "rgb:28/84/00", "rgb:98/a8/40", "rgb:70/70/bc",
-        "rgb:fc/6c/44", "rgb:fc/30/c4", "rgb:c0/28/78", "rgb:00/2c/bc",
-        "rgb:64/00/48", "rgb:20/00/e0", "rgb:9c/2c/00", "rgb:8c/fc/24",
-        "rgb:90/2c/d4", "rgb:fc/ac/d8", "rgb:e8/fc/e8", "rgb:3c/fc/58",
-        "rgb:4c/90/3c", "rgb:90/c4/c4", "rgb:78/d0/00", "rgb:00/00/38",
-        "rgb:00/98/34", "rgb:d8/a4/3c", "rgb:fc/d0/78", "rgb:00/24/80",
-        "rgb:b0/a0/00", "rgb:40/fc/d0", "rgb:44/30/f0", "rgb:74/cc/78",
-        "rgb:00/78/68", "rgb:c8/fc/7c", "rgb:fc/54/00", "rgb:60/04/b8",
-        "rgb:54/24/20", "rgb:3c/54/44", "rgb:00/68/c8", "rgb:00/d4/64",
-        "rgb:c8/90/90", "rgb:8c/5c/68", "rgb:b0/f8/f8", "rgb:c4/24/b8",
-        "rgb:74/fc/a4", "rgb:64/6c/08", "rgb:c4/fc/3c", "rgb:3c/40/7c",
-        "rgb:54/a8/90", "rgb:40/bc/08", "rgb:00/48/5c", "rgb:18/c4/34",
-        "rgb:84/7c/38", "rgb:14/e4/00", "rgb:00/a0/98", "rgb:ac/a8/fc",
-        "rgb:fc/4c/fc", "rgb:00/34/2c", "rgb:ac/00/04", "rgb:fc/28/14",
-        "rgb:fc/c8/38", "rgb:34/00/0c", "rgb:58/04/80", "rgb:90/d8/48",
-        "rgb:8c/d0/fc", "rgb:fc/d8/c8", "rgb:cc/54/74", "rgb:5c/7c/f0",
-        "rgb:38/60/b0", "rgb:3c/f8/90", "rgb:3c/b0/dc", "rgb:a4/38/48",
-        "rgb:e0/fc/00", "rgb:20/c8/90", "rgb:88/98/c4", "rgb:10/f0/b4",
-        "rgb:18/00/68", "rgb:d0/00/68", "rgb:a8/d8/8c", "rgb:00/58/00",
-        "rgb:6c/a4/60", "rgb:9c/58/d8", "rgb:6c/54/94", "rgb:00/d0/ec",
-        "rgb:64/dc/dc", "rgb:28/7c/8c", "rgb:98/78/98", "rgb:1c/48/dc",
-        "rgb:00/90/d4", "rgb:88/28/a0", "rgb:dc/90/c4", "rgb:40/d4/68",
-        "rgb:d4/18/30", "rgb:d8/64/e0", "rgb:dc/9c/fc", "rgb:ac/5c/30",
-        "rgb:dc/44/a4", "rgb:6c/40/00", "rgb:b8/a8/68", "rgb:e8/78/74",
-        "rgb:bc/c0/24", "rgb:fc/44/40", "rgb:34/e8/28", "rgb:30/94/fc",
-        "rgb:e0/08/d0", "rgb:90/84/68", "rgb:84/20/30", "rgb:50/54/d8",
-        "rgb:d4/e4/a4", "rgb:90/14/fc", "rgb:d0/60/04", "rgb:34/1c/c4",
-        "rgb:c0/80/20", "rgb:fc/a0/18", "rgb:8c/88/fc", "rgb:fc/b8/a4",
-        "rgb:30/fc/fc", "rgb:dc/e0/24", "rgb:f4/f4/68", "rgb:68/84/94",
-        "rgb:3c/70/24", "rgb:64/b4/c0", "rgb:60/f8/38", "rgb:2c/d8/d0",
-        "rgb:cc/24/00", "rgb:c0/00/a8", "rgb:d0/18/fc", "rgb:ec/1c/78",
-        "rgb:2c/78/50", "rgb:8c/0c/68", "rgb:34/00/3c", "rgb:90/08/c4",
-        "rgb:fc/c8/fc", "rgb:bc/d4/d0", "rgb:b4/a4/c8", "rgb:bc/6c/b4",
-        "rgb:84/f8/d0", "rgb:78/b8/24", "rgb:30/24/98", "rgb:00/04/bc",
-        "rgb:2c/a0/20", "rgb:58/34/4c", "rgb:fc/e0/00", "rgb:34/b4/b0",
-        "rgb:9c/40/fc", "rgb:dc/b8/7c", "rgb:30/24/00", "rgb:d4/5c/44",
-        "rgb:28/60/70", "rgb:64/20/d4", "rgb:fc/90/48", "rgb:d8/38/54",
-        "rgb:9c/fc/8c", "rgb:b4/64/fc", "rgb:fc/54/c8", "rgb:78/4c/c0",
-        "rgb:74/30/fc", "rgb:9c/3c/78", "rgb:58/94/d0", "rgb:0c/f8/5c",
-        "rgb:00/54/fc", "rgb:00/84/fc", "rgb:00/7c/a4", "rgb:a8/ec/64",
-        "rgb:80/d8/a0", "rgb:1c/18/24", "rgb:68/64/4c", "rgb:fc/8c/a4",
-        "rgb:30/38/2c", "rgb:44/90/68", "rgb:3c/b0/44", "rgb:bc/44/c8",
-        "rgb:2c/74/d0", "rgb:a0/c0/00", "rgb:00/94/0c", "rgb:24/40/b0",
-        "rgb:00/08/fc", "rgb:00/18/54", "rgb:f0/2c/f4", "rgb:3c/10/fc",
-        "rgb:ac/4c/08", "rgb:b0/e0/2c", "rgb:94/8c/14", "rgb:a4/fc/00",
-        "rgb:94/bc/64", "rgb:d4/b4/dc", "rgb:64/4c/6c", "rgb:60/ec/7c",
-        "rgb:8c/00/20", "rgb:78/f4/00", "rgb:5c/20/98", "rgb:3c/50/fc",
-        "rgb:4c/20/6c", "rgb:bc/70/84", "rgb:d8/94/64", "rgb:54/d8/14",
-        "rgb:0c/38/04", "rgb:00/b4/50", "rgb:50/50/20", "rgb:b0/24/24",
-        "rgb:00/b8/7c", "rgb:fc/60/88", "rgb:a4/b8/a0", "rgb:74/fc/fc"};
-  if (data->size() > max_series)
-    throw Error(std::string("Too many series to display (max is ") +
-                std::to_string(max_series) + ")");
+// Data organization
+inline uint64_t X11Graph::n_files() const {
+  return data_info.second.first.size();
+}
 
-  if (names.size() < data->size()) {
-    const unsigned int doublings{5};
-    names.reserve(names.size() * pow(2, doublings));
-    for (unsigned int n{0}; n != doublings; ++n) {
-      if (names.size() > data->size()) break;
-      names.insert(names.end(), names.begin(), names.end());
+inline uint64_t X11Graph::n_cols() const {
+  return data_info.second.second.size();
+}
+
+inline bool X11Graph::info_ok() const {
+  return n_files() * n_cols() == input_data.size();
+}
+
+inline uint64_t X11Graph::file_index(const uint64_t series_index) const {
+  return series_index % n_files();
+}
+
+inline uint64_t X11Graph::col_index(const uint64_t series_index) const {
+  return series_index / n_files();
+}
+
+inline void X11Graph::set_tiling() {
+  std::vector<unsigned char> group_off(n_files(), true);
+  for (unsigned int s{0}; s != data->size(); ++s)
+    if (series_radios[s]) group_off[file_index(s)] = false;
+  shrink = 0;
+  for (unsigned int g{0}; g != n_files(); ++g)
+    if (!group_off[g]) ++shrink;
+  std::vector<int> file_steps;
+  unsigned int g_on{0};
+  for (unsigned int g{0}; g != n_files(); ++g)
+    if (group_off[g]) {
+      file_steps.push_back(0);
+    } else {
+      const double val{1.0 * (shrink - ++g_on) * bounds[1][2] / shrink};
+      file_steps.push_back(val);
     }
-  }
-  names.resize(std::max(100UL, data->size()));
-  return names;
-}
-
-inline void X11Graph::set_color(const unsigned int series,
-                                const unsigned int color) {
-  // Change GCs and redraw
-  XSetForeground(display(), series_arc_gcs[series],
-                 series_colors[color].pixel);
-  XSetForeground(display(), series_line_gcs[series],
-                 series_colors[color].pixel);
-  XSetForeground(display(), series_radio_gcs[series],
-                 series_colors[color].pixel);
-}
-
-inline void X11Graph::reset_colors() {
-  for (unsigned int series{0}; series != series_radios.size(); ++series) {
-    set_color(series, series);
-  }
-}
-
-void color_change_callback(
-    const unsigned int color, const unsigned int series, X11Graph & graph,
-    const X11App & app__, const Window & win__) {
-  // Make sure color chooser does not outlive graph!
-  if (!app__.exists(win__)) {
-    std::cerr << "Parent graph has exited - "
-              << "color chooser is now non-functional" << std::endl;
-    return;
-  }
-
-  if (color != series) graph.colors_changed = true;
-  graph.set_color(series, color);
-  graph.draw();
+  steps.clear();
+  for (unsigned int s{0}; s != data->size(); ++s)
+    steps.push_back(file_steps[file_index(s)]);
+  if (shrink == 0) shrink = 1;  // prob unnecessary
 }
 
 // Range functions
 inline void X11Graph::get_range(const unsigned int a) {
-  constexpr double padding{0.01};
+  constexpr double padding{0.00};
   for (const bool y : {0, 1}) {
     if (a != 2 && a != y) continue;
     range[y] = {unset(1.0), nunset(1.0), 0};
@@ -2176,8 +1929,10 @@ inline void X11Graph::get_range(const unsigned int a) {
       }
     }
     range[y][2] = range[y][1] - range[y][0];
+    range[y][2] = range[y][1] - range[y][0];
     range[y][0] -= padding * range[y][2];
     range[y][1] += padding * range[y][2];
+    range[y][2] = range[y][1] - range[y][0];
     range[y][2] = range[y][1] - range[y][0];
     zoomed[y] = false;
   }
@@ -2499,11 +2254,15 @@ inline void X11Graph::motion(const XMotionEvent & event) {
 
   Event motion_event{Event::X, &event};
   bool call_back_acted{false};
-  for (unsigned int c{0}; c != call_backs.size(); ++c)
-    if (call_back_radios[c] && call_backs[c](*this, motion_event)) {
+  for (unsigned int c{0}; c != call_backs.size(); ++c) {
+    const Radio & radio{call_back_radios[c]};
+    if ((radio || (coord_radio.contains(event) &&
+                   radio.description.find("chrpos") != std::string::npos)) &&
+        call_backs[c](*this, motion_event)) {
       call_back_acted = true;
       break;
     }
+  }
 
   if (!call_back_acted) {
     // Status text
@@ -2622,6 +2381,21 @@ inline void X11Graph::motion(const XMotionEvent & event) {
     small_move = true;
     prepare_draw();
   }
+}
+
+void color_change_callback(
+    const unsigned int color, const unsigned int series, X11Graph & graph,
+    const X11App & app__, const Window & win__) {
+  // Make sure color chooser does not outlive graph!
+  if (!app__.exists(win__)) {
+    std::cerr << "Parent graph has exited - "
+              << "color chooser is now non-functional" << std::endl;
+    return;
+  }
+
+  if (color != series) graph.colors_changed = true;
+  graph.set_color(series, color);
+  graph.draw();
 }
 
 inline void X11Graph::button_release(const XButtonEvent & event) {
@@ -2964,16 +2738,16 @@ void X11Graph::prepare_log() {
   get_range();
 }
 
+void X11Graph::draw_border(Drawable d) const {
+  XDrawRectangle(display(), d, border_gc,
+                 bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
+}
+
 inline std::string X11Graph::long_status(const bool in, const bool y) {
   return std::string("Pointer (1 - 2/shift - 3/control) clicks ") +
       "(center - zoom in - zoom out) at point " +
       "and drags (select - scroll - zoom) for " +
       (in ? "X and Y axes" : (y ? "Y axis" : "X axis"));
-}
-
-void X11Graph::draw_border(Drawable d) const {
-  XDrawRectangle(display(), d, border_gc,
-                 bounds[0][0], bounds[1][0], bounds[0][2], bounds[1][2]);
 }
 
 void X11Graph::draw_status(const bool force) const {
@@ -3076,36 +2850,17 @@ inline void X11Graph::set_line_widths(std::vector<GC> gcs, const int width_) {
                        CapButt, JoinRound);
 }
 
-inline void X11Graph::set_tiling() {
-  std::vector<unsigned char> group_off(n_files(), true);
-  for (unsigned int s{0}; s != data->size(); ++s)
-    if (series_radios[s]) group_off[file_index(s)] = false;
-  shrink = 0;
-  for (unsigned int g{0}; g != n_files(); ++g)
-    if (!group_off[g]) ++shrink;
-  std::vector<int> file_steps;
-  unsigned int g_on{0};
-  for (unsigned int g{0}; g != n_files(); ++g)
-    if (group_off[g]) {
-      file_steps.push_back(0);
-    } else {
-      const double val{1.0 * (shrink - ++g_on) * bounds[1][2] / shrink};
-      file_steps.push_back(val);
-    }
-  steps.clear();
-  for (unsigned int s{0}; s != data->size(); ++s)
-    steps.push_back(file_steps[file_index(s)]);
-  if (shrink == 0) shrink = 1;  // prob unnecessary
-}
-
-
 //
 // Assorted functions
 //
+inline Geometry X11Graph::default_geometry() {
+  return {{default_width, default_height}, {0, 0}};
+}
+
 inline bool X11Graph::slow() const { return true; }
 
 // Bug in code? sometimes movie cannot be started until after zoom out
-void X11Graph::movie(const bool right) {
+void X11Graph::movie(bool right) {
   status = "Playing the movie - click movie radio button again to stop";
   using Time = std::chrono::time_point<std::chrono::system_clock>;
   const Time start_time{std::chrono::system_clock::now()};
@@ -3122,6 +2877,11 @@ void X11Graph::movie(const bool right) {
       if (movie_radios[right].release(event.xbutton)) {
         movie_radios[right] = false;
         return;
+      }
+      if (movie_radios[1 - right].release(event.xbutton)) {
+        movie_radios[right] = !movie_radios[right];
+        movie_radios[1 - right] = !movie_radios[1 - right];
+        right = 1 - right;
       }
     }
 
@@ -3140,15 +2900,19 @@ void X11Graph::movie(const bool right) {
     const double seconds{std::chrono::duration_cast<std::chrono::milliseconds>(
         frame_time - last_time).count() / 1000.0};
     const double movement{page_rate * seconds * range[0][2]};
-    range_jump(0, (right ? 1 : -1) * movement);
-    last_time = frame_time;
-    if (!(range[0][0] > max_range[0][0] && range[0][1] < max_range[0][1])) {
-      movie_radios[right] = false;
-      return;
-    }
     small_move = true;
-    prepare_draw();
-    XSync(display(), false);
+    range_jump(0, (right ? 1 : -1) * movement);
+
+    if ((right && range[0][1] > max_range[0][1] + range[0][2] / 16) ||
+        (!right && range[0][0] + range[0][2] / 16 < max_range[0][0])) {
+      movie_radios[right] = false;
+      prepare_draw();
+      return;
+    } else {
+      last_time = frame_time;
+      prepare_draw();
+      XSync(display(), false);
+    }
   }
 }
 
@@ -3174,10 +2938,8 @@ void X11Graph::save_image(const std::string & base_name) {
 }
 
 bool X11Graph::show_help(const Point point) {
-  if (help_radio.contains(point)) {
-    clear_window();
-    draw_border(window);
-    for (const Radio * radio : radios) radio->draw();
+  if (help_radio && help_radio.contains(point)) {
+    if (help_shown) return true;
     auto group = [](const Radio * r) {
       const double xs{r->specification.x};
       if (xs > 0 && xs < 1.5) {
@@ -3185,15 +2947,15 @@ bool X11Graph::show_help(const Point point) {
       } else if (xs > -1.5 && xs < 0) {
         const double ys{r->specification.y};
         if (ys < 0) {
-          return 4;  // Right bottom
+          return 5;  // Right bottom
         } else {
           return 3;  // Right top
         }
       } else {
         if (xs < 0) {
-          return 5;  // Bottom right
+          return 6;  // Bottom right
         } else if (xs > 50) {
-          return 6;  // Bottom middle
+          return 4;  // Bottom middle
         } else {
           return 2;  // Bottom left
         }
@@ -3237,7 +2999,7 @@ bool X11Graph::show_help(const Point point) {
                  if (!dne(lhs->specification.y, rhs->specification.y)) {
                    const double lx{lhs->specification.x};
                    const double rx{rhs->specification.x};
-                   if (lg == 5) {
+                   if (lg == 6) {
                      return lx > rx;
                    } else {
                      return lx < rx;
@@ -3266,41 +3028,61 @@ bool X11Graph::show_help(const Point point) {
         return result;
       }()};
     const int line_spacing{bounds[1][2] / (n_lines + 1)};
-    const int border{bounds[0][2] / 22};
+    const int border{bounds[0][2] / 30};
     X11Font * fits{app.good_font(longest, bounds[0][2] / 2 - border,
-                                 line_spacing, help_gc)};
-    for (const bool draw_text : {false, true}) {
-      int l_y_pos{bounds[1][0] + line_spacing / 3};
+                                 line_spacing * 0.9, help_gc)};
+    XSetLineAttributes(display(), arrow_gc, std::max(1, border / 15),
+                       LineSolid, CapRound, JoinRound);
+    std::vector<int> right_edges;
+    clear_window();
+    for (const Radio * radio : radios) radio->draw();
+    draw_border(window);
+    for (const int pass : {1, 2, 3}) {
+      int l_y_pos{bounds[1][0] + line_spacing / 4};
       int r_y_pos{l_y_pos};
-      int shift45{0};
+      int line{0};
       for (const Radio * radiop : most_radios) {
+        const std::string description{shorten(radiop)};
         const int g{group(radiop)};
         const bool right_side{radiop->specification.x < 0 ||
               radiop->specification.x > 50};
         const int y_pos{right_side ? (r_y_pos += line_spacing) :
               (l_y_pos += line_spacing)};
-        const std::string description{shorten(radiop)};
-        const bool right_arrow{g == 3 || g == 4 || g == 5};
+        const bool right_arrow{g == 3 || g == 5 || g == 6};
         const int left_edge{bounds[0][0] + border};
         const int right_edge{bounds[0][1] - border};
         const int sw{fits->string_width(description)};
-        const int small_space{fits->width() / 5};
-        const int l_pos{right_side && g != 6 ? right_edge - sw -
-              ((g == 4 || g == 5) ? (shift45 += border / 2.5) : 0) :
-              std::max(radiop->location().x, left_edge) - small_space};
-        const int r_pos{l_pos + sw};
-        if (draw_text) {
-          XFillRectangle(display(), window, fill_gc,
-                         l_pos - 1, y_pos - fits->ascent() - 1,
-                         r_pos - l_pos + 2, fits->ascent() + 2);
-          XDrawString(display(), window, help_gc, l_pos, y_pos,
-                      const_cast<char *>(description.c_str()),
-                      static_cast<unsigned int>(description.size()));
-        } else {
-          XDrawLine(display(), window, arrow_gc,
-                    right_arrow ? r_pos - small_space : l_pos + small_space,
-                    y_pos - fits->height() / 3,
-                    radiop->location().x, radiop->location().y);
+        const int small_space{fits->width() / 6};
+        int l_pos{(!right_side || g == 4) ?
+              std::max(radiop->location().x, left_edge) - small_space :
+              std::min(radiop->location().x, right_edge) + small_space - sw};
+        if (true)
+          l_pos = right_side ?
+              std::max(l_pos, right_edges[line - n_lines] + 2 * fits->width()) :
+              std::min(l_pos, bounds[0][0] + bounds[0][1] / 2 - sw);
+       const int r_pos{l_pos + sw};
+       if (static_cast<int>(right_edges.size()) < ++line)
+         right_edges.push_back(r_pos);
+       switch (pass) {
+          case 1:
+            XDrawLine(display(), window, arrow_gc,
+                      right_arrow ? r_pos - small_space : l_pos + small_space,
+                      y_pos - fits->height() / 3,
+                      radiop->location().x, radiop->location().y);
+            break;
+          case 2:
+            XFillRectangle(display(), window, fill_gc,
+                           l_pos - 1,
+                           y_pos - fits->ascent() + 1,
+                           r_pos - l_pos + 1, fits->height() + 1);
+            break;
+          case 3:
+            XDrawString(display(), window, help_gc, l_pos, y_pos,
+                        const_cast<char *>(description.c_str()),
+                        static_cast<unsigned int>(description.size()));
+            break;
+          default:
+            break;
         }
       }
     }
@@ -3317,34 +3099,151 @@ bool X11Graph::show_help(const Point point) {
   }
 }
 
+void X11Graph::open_url(const std::string & url) const {
+  std::ostringstream browser;
+#ifdef __APPLE__
+  const std::string open_browser{"open -a safari"};
+#else
+#ifdef __CYGWIN__
+  const std::string open_browser{
+    "/cygdrive/c/Program*Files/Internet*Explorer/iexplore.exe"};
+#else
+  const std::string open_browser{"firefox"};
+#endif
+#endif
+  browser << open_browser << " " << url << " &";
+  if (system(browser.str().c_str()) == -1)
+    std::cerr << "Problem starting browser" << std::endl;
+}
+
+// Colors
+std::vector<std::string> X11Graph::make_colors() const {
+  std::vector<std::string> names{
+    "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
+        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
+        "rgb:fc/7c/fc", "rgb:00/18/00", "rgb:00/fc/84", "rgb:fc/fc/a0",
+        "rgb:90/a0/8c", "rgb:00/a8/fc", "rgb:74/54/fc", "rgb:fc/08/fc",
+        "rgb:78/4c/30", "rgb:fc/40/78", "rgb:80/fc/68", "rgb:00/2c/fc",
+        "rgb:fc/9c/78", "rgb:20/a8/68", "rgb:4c/fc/04", "rgb:d0/cc/fc",
+        "rgb:70/9c/04", "rgb:00/64/30", "rgb:00/fc/e8", "rgb:70/00/00",
+        "rgb:64/00/f8", "rgb:70/a8/f4", "rgb:a4/50/a0", "rgb:50/d4/ac",
+        "rgb:2c/24/50", "rgb:fc/fc/34", "rgb:30/90/b8", "rgb:d0/40/24",
+        "rgb:c8/40/f4", "rgb:c4/d0/5c", "rgb:ec/00/9c", "rgb:00/f0/34",
+        "rgb:ac/f4/b8", "rgb:54/38/b4", "rgb:bc/78/54", "rgb:54/70/70",
+        "rgb:a8/08/40", "rgb:b0/80/dc", "rgb:58/cc/3c", "rgb:24/6c/f8",
+        "rgb:b4/00/e4", "rgb:38/48/00", "rgb:00/c4/bc", "rgb:cc/bc/ac",
+        "rgb:e8/6c/ac", "rgb:38/d4/fc", "rgb:fc/0c/4c", "rgb:74/2c/70",
+        "rgb:a0/6c/00", "rgb:28/84/00", "rgb:98/a8/40", "rgb:70/70/bc",
+        "rgb:fc/6c/44", "rgb:fc/30/c4", "rgb:c0/28/78", "rgb:00/2c/bc",
+        "rgb:64/00/48", "rgb:20/00/e0", "rgb:9c/2c/00", "rgb:8c/fc/24",
+        "rgb:90/2c/d4", "rgb:fc/ac/d8", "rgb:e8/fc/e8", "rgb:3c/fc/58",
+        "rgb:4c/90/3c", "rgb:90/c4/c4", "rgb:78/d0/00", "rgb:00/00/38",
+        "rgb:00/98/34", "rgb:d8/a4/3c", "rgb:fc/d0/78", "rgb:00/24/80",
+        "rgb:b0/a0/00", "rgb:40/fc/d0", "rgb:44/30/f0", "rgb:74/cc/78",
+        "rgb:00/78/68", "rgb:c8/fc/7c", "rgb:fc/54/00", "rgb:60/04/b8",
+        "rgb:54/24/20", "rgb:3c/54/44", "rgb:00/68/c8", "rgb:00/d4/64",
+        "rgb:c8/90/90", "rgb:8c/5c/68", "rgb:b0/f8/f8", "rgb:c4/24/b8",
+        "rgb:74/fc/a4", "rgb:64/6c/08", "rgb:c4/fc/3c", "rgb:3c/40/7c",
+        "rgb:54/a8/90", "rgb:40/bc/08", "rgb:00/48/5c", "rgb:18/c4/34",
+        "rgb:84/7c/38", "rgb:14/e4/00", "rgb:00/a0/98", "rgb:ac/a8/fc",
+        "rgb:fc/4c/fc", "rgb:00/34/2c", "rgb:ac/00/04", "rgb:fc/28/14",
+        "rgb:fc/c8/38", "rgb:34/00/0c", "rgb:58/04/80", "rgb:90/d8/48",
+        "rgb:8c/d0/fc", "rgb:fc/d8/c8", "rgb:cc/54/74", "rgb:5c/7c/f0",
+        "rgb:38/60/b0", "rgb:3c/f8/90", "rgb:3c/b0/dc", "rgb:a4/38/48",
+        "rgb:e0/fc/00", "rgb:20/c8/90", "rgb:88/98/c4", "rgb:10/f0/b4",
+        "rgb:18/00/68", "rgb:d0/00/68", "rgb:a8/d8/8c", "rgb:00/58/00",
+        "rgb:6c/a4/60", "rgb:9c/58/d8", "rgb:6c/54/94", "rgb:00/d0/ec",
+        "rgb:64/dc/dc", "rgb:28/7c/8c", "rgb:98/78/98", "rgb:1c/48/dc",
+        "rgb:00/90/d4", "rgb:88/28/a0", "rgb:dc/90/c4", "rgb:40/d4/68",
+        "rgb:d4/18/30", "rgb:d8/64/e0", "rgb:dc/9c/fc", "rgb:ac/5c/30",
+        "rgb:dc/44/a4", "rgb:6c/40/00", "rgb:b8/a8/68", "rgb:e8/78/74",
+        "rgb:bc/c0/24", "rgb:fc/44/40", "rgb:34/e8/28", "rgb:30/94/fc",
+        "rgb:e0/08/d0", "rgb:90/84/68", "rgb:84/20/30", "rgb:50/54/d8",
+        "rgb:d4/e4/a4", "rgb:90/14/fc", "rgb:d0/60/04", "rgb:34/1c/c4",
+        "rgb:c0/80/20", "rgb:fc/a0/18", "rgb:8c/88/fc", "rgb:fc/b8/a4",
+        "rgb:30/fc/fc", "rgb:dc/e0/24", "rgb:f4/f4/68", "rgb:68/84/94",
+        "rgb:3c/70/24", "rgb:64/b4/c0", "rgb:60/f8/38", "rgb:2c/d8/d0",
+        "rgb:cc/24/00", "rgb:c0/00/a8", "rgb:d0/18/fc", "rgb:ec/1c/78",
+        "rgb:2c/78/50", "rgb:8c/0c/68", "rgb:34/00/3c", "rgb:90/08/c4",
+        "rgb:fc/c8/fc", "rgb:bc/d4/d0", "rgb:b4/a4/c8", "rgb:bc/6c/b4",
+        "rgb:84/f8/d0", "rgb:78/b8/24", "rgb:30/24/98", "rgb:00/04/bc",
+        "rgb:2c/a0/20", "rgb:58/34/4c", "rgb:fc/e0/00", "rgb:34/b4/b0",
+        "rgb:9c/40/fc", "rgb:dc/b8/7c", "rgb:30/24/00", "rgb:d4/5c/44",
+        "rgb:28/60/70", "rgb:64/20/d4", "rgb:fc/90/48", "rgb:d8/38/54",
+        "rgb:9c/fc/8c", "rgb:b4/64/fc", "rgb:fc/54/c8", "rgb:78/4c/c0",
+        "rgb:74/30/fc", "rgb:9c/3c/78", "rgb:58/94/d0", "rgb:0c/f8/5c",
+        "rgb:00/54/fc", "rgb:00/84/fc", "rgb:00/7c/a4", "rgb:a8/ec/64",
+        "rgb:80/d8/a0", "rgb:1c/18/24", "rgb:68/64/4c", "rgb:fc/8c/a4",
+        "rgb:30/38/2c", "rgb:44/90/68", "rgb:3c/b0/44", "rgb:bc/44/c8",
+        "rgb:2c/74/d0", "rgb:a0/c0/00", "rgb:00/94/0c", "rgb:24/40/b0",
+        "rgb:00/08/fc", "rgb:00/18/54", "rgb:f0/2c/f4", "rgb:3c/10/fc",
+        "rgb:ac/4c/08", "rgb:b0/e0/2c", "rgb:94/8c/14", "rgb:a4/fc/00",
+        "rgb:94/bc/64", "rgb:d4/b4/dc", "rgb:64/4c/6c", "rgb:60/ec/7c",
+        "rgb:8c/00/20", "rgb:78/f4/00", "rgb:5c/20/98", "rgb:3c/50/fc",
+        "rgb:4c/20/6c", "rgb:bc/70/84", "rgb:d8/94/64", "rgb:54/d8/14",
+        "rgb:0c/38/04", "rgb:00/b4/50", "rgb:50/50/20", "rgb:b0/24/24",
+        "rgb:00/b8/7c", "rgb:fc/60/88", "rgb:a4/b8/a0", "rgb:74/fc/fc"};
+  if (data->size() > max_series)
+    throw Error(std::string("Too many series to display (max is ") +
+                std::to_string(max_series) + ")");
+
+  if (names.size() < data->size()) {
+    const unsigned int doublings{5};
+    names.reserve(names.size() * pow(2, doublings));
+    for (unsigned int n{0}; n != doublings; ++n) {
+      if (names.size() > data->size()) break;
+      names.insert(names.end(), names.begin(), names.end());
+    }
+  }
+  names.resize(std::max(100UL, data->size()));
+  return names;
+}
+
+inline void X11Graph::set_color(const unsigned int series,
+                                const unsigned int color) {
+  // Change GCs and redraw
+  XSetForeground(display(), series_arc_gcs[series],
+                 series_colors[color].pixel);
+  XSetForeground(display(), series_line_gcs[series],
+                 series_colors[color].pixel);
+  XSetForeground(display(), series_radio_gcs[series],
+                 series_colors[color].pixel);
+}
+
+inline void X11Graph::reset_colors() {
+  for (unsigned int series{0}; series != series_radios.size(); ++series) {
+    set_color(series, series);
+  }
+}
+
 //
 // Radio functions
 //
 std::vector<Radio> X11Graph::create_unnamed_radios() {
   return std::vector<Radio>{
-    {"Save an image of graph, and add all images so far to a pdf",
-          this, {-1, 3}, {[this]() { save_image("cn"); }}},
-    {"Zoom out both axes", this, {1, -1}, {[this]() { get_range(2);
+    {"Save an image as xpm, png, pdf",
+          this, {-1, 2}, {[this]() { save_image("cn"); }}},
+    {"Zoom both axes out", this, {1, -1}, {[this]() { get_range(2);
           prepare_draw(); }, [this]() { return zoomed[0] || zoomed[1]; }}},
-    {"Zoom out X axis", this, {2, -1}, {[this]() {
+    {"Zoom X axis out", this, {2, -1}, {[this]() {
           get_range(0); prepare_draw(); }, zoom_tester(0)}},
-    {"Zoom out Y axis", this, {1, -2}, {[this]() {
+    {"Zoom Y axis out", this, {1, -2}, {[this]() {
           get_range(1); prepare_draw(); }, zoom_tester(1)}},
-    {"Jump left X axis by one screen", this, {98.5, -1}, {[this]() {
+    {"Jump X axis left by one screen", this, {98.5, -1}, {[this]() {
           range_jump(0, -range[0][2]); prepare_draw(); }, zoom_tester(0)}},
-    {"Jump left X axis by half a screen", this, {99.5, -1}, {[this]() {
+    {"Jump X axis left by half a screen", this, {99.5, -1}, {[this]() {
           range_jump(0, -range[0][2] / 2); prepare_draw(); }, zoom_tester(0)}},
-    {"Jump right X axis by half a screen", this, {100.5, -1}, {[this]() {
+    {"Jump X axis right by half a screen", this, {100.5, -1}, {[this]() {
           range_jump(0, range[0][2] / 2); prepare_draw(); }, zoom_tester(0)}},
-    {"Jump right X axis by one screen", this, {101.5, -1}, {[this]() {
+    {"Jump X axis right by one screen", this, {101.5, -1}, {[this]() {
           range_jump(0, range[0][2]); prepare_draw(); }, zoom_tester(0)}},
-    {"Jump up Y axis by one screen", this, {1, 98.5}, {[this]() {
+    {"Jump Y axis up by one screen", this, {1, 98.5}, {[this]() {
           range_jump(1, range[1][2]); prepare_draw(); }, zoom_tester(1)}},
-    {"Jump up Y axis by half a screen", this, {1, 99.5}, {[this]() {
+    {"Jump Y axis up by half a screen", this, {1, 99.5}, {[this]() {
           range_jump(1, range[1][2] / 2); prepare_draw(); }, zoom_tester(1)}},
-    {"Jump down Y axis by half a screen", this, {1, 100.5}, {[this]() {
+    {"Jump Y axis down by half a screen", this, {1, 100.5}, {[this]() {
           range_jump(1, -range[1][2] / 2); prepare_draw(); }, zoom_tester(1)}},
-    {"Jump down Y axis by one screen", this, {1, 101.5}, {[this]() {
+    {"Jump Y axis down by one screen", this, {1, 101.5}, {[this]() {
           range_jump(1, -range[1][2]); prepare_draw(); }, zoom_tester(1)}},
     {"Make markers bigger", this, {-3, -1}, {[this]() {
           arc_radius += 1; prepare_draw(); }, [this]() { return do_arcs(); }}},
@@ -3364,9 +3263,9 @@ std::vector<Radio> X11Graph::create_unnamed_radios() {
           line_width -= 1;
           set_line_widths(series_line_gcs, (line_width == 1 ? 0 : line_width));
           draw(); }, [this]() {return do_lines() && line_width >= 2; }}},
-    {"Open G-Graph tutorial webpage to the GUI help section", this, {1, 1},
+    {"Open G-Graph GUI tutorial", this, {1, 1},
       {[this]() { open_url("http://mumdex.com/ggraph/#gui"); }}},
-    {"Set series display properties to defaults", this, {-1, -1},
+    {"Reset series display properties", this, {-1, -1},
       {[this]() {
           line_width = default_line_width;
           lines_radio = true; arcs_radio = true; outlines_radio = false;
@@ -3426,24 +3325,6 @@ inline void X11Graph::n_threads(const unsigned int n_threads__) {
   n_threads_ = n_threads__;
 }
 
-void X11Graph::open_url(const std::string & url) const {
-  std::ostringstream browser;
-#ifdef __APPLE__
-  const std::string open_browser{"open -a safari"};
-#else
-#ifdef __CYGWIN__
-  const std::string open_browser{
-    "/cygdrive/c/Program*Files/Internet*Explorer/iexplore.exe"};
-#else
-  const std::string open_browser{"firefox"};
-#endif
-#endif
-  browser << open_browser << " " << url << " &";
-  if (system(browser.str().c_str()) == -1)
-    std::cerr << "Problem starting browser" << std::endl;
-}
-
-
 //
 // Text grid selector
 //
@@ -3463,8 +3344,8 @@ class X11TextGrid : public X11Win {
       const std::vector<unsigned int> & exclusive_rows_ = {},
       CallBack call_back_ = CallBack(),
       CallBack cell_test_ = CallBack(),
-      const Geometry & geometry_ = Geometry{{1000, 800}, {0, 0}}) :
-      X11Win(app__, geometry_, false),
+      const Geometry & geometry__ = Geometry{{1000, 800}, {0, 0}}) :
+      X11Win(app__, geometry__, false),
       data{data_.size() ? data_ : Data(1, Column{"Empty"})},
     inactive_cols{inactive_cols_}, inactive_rows{inactive_rows_},
     exclusive_cols{exclusive_cols_}, exclusive_rows{exclusive_rows_},

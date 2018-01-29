@@ -242,6 +242,7 @@ void add_gaps(PSGraph & graph, const Gaps & gaps, const unsigned int chr) {
 
 class CN_abspos {
  public:
+  using ChrPos = std::pair<unsigned int, unsigned int>;
   explicit CN_abspos(const Reference & ref,
                      const unsigned int min_size = 40000000) :
       ref_offsets(ref.n_chromosomes() + 1) {
@@ -279,8 +280,7 @@ class CN_abspos {
   unsigned int ref_size(const unsigned int chr) const {
     return ref_offsets[chr + 1] - ref_offsets[chr];
   }
-  std::pair<unsigned int, unsigned int> chrpos(
-      const unsigned int abspos) const {
+  ChrPos chrpos(const unsigned int abspos) const {
     const unsigned int c(static_cast<unsigned int>(
         upper_bound(cn_offsets.begin(), cn_offsets.end(),
                     abspos) - cn_offsets.begin() - 1));
