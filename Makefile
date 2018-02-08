@@ -13,8 +13,8 @@ all :
 SHELL := bash
 
 # Which modules to compile and where to find source files
-MODULES := core cn convert utility unstable python
-VPATH := $(MODULES)
+include project.mk
+VPATH := $(MODULES) $(INCLUDES)
 include $(wildcard $(addsuffix /*.mk,$(MODULES)))
 
 # Automatic dependency file creation
@@ -33,7 +33,7 @@ FAST := -Ofast
 DEBUG := # -g -ggdb
 LDFLAGS	:= $(FAST)
 LIBS :=
-INCFLAGS := $(addprefix -I ,$(MODULES))
+INCFLAGS := $(addprefix -I ,$(INCLUDES))
 
 # For precompiled binaries... need different flags etc.
 # precompiled = defined
@@ -147,7 +147,7 @@ endif
 
 # Automatic linting of all source code in all subdirectories
 LINTDIR := .lint
-LINTCODE := $(wildcard */*.h) $(wildcard */*.cpp)
+LINTCODE := $(wildcard $(addsuffix /*.h,$(MODULES))) $(wildcard $(addsuffix /*.cpp,$(MODULES)))
 LINT := ./make/cpplint.py --filter=-readability/streams,-runtime/printf,-build/header_guard,-build/c++11,-runtime/references
 LINTGREP := grep -v -e 'Done process' -e 'Total err'
 $(shell mkdir -p $(LINTDIR) > /dev/null)
