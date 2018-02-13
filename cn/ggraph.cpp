@@ -19,6 +19,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <random>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -851,7 +852,9 @@ class AbsposColumns {
   AbsposColumns(const String & file_name,
                 const String & columns,
                 const RefCN * ref,
-                const uint64_t size_hint = 500000) {
+                const uint64_t size_hint = 500000,
+                const bool add_jitter = false,
+                const double percent = 100.0) {
     // Get list of desired column names or numbers
     iStream column_input{columns.c_str()};
     String column_spec;
@@ -943,12 +946,18 @@ class AbsposColumns {
     for (unsigned int c{0}; c != data.size(); ++c)
       if (!has_chr || c) data.reserve(size_hint);
 
+    std::random_device rd{};
+    std::mt19937_64 mersenne{rd()};
+    auto randGen = std::bind(
+        std::uniform_real_distribution<double>(0.0, 100.0), mersenne);
+
     // Read in data line by line
     String line;
     String text;
     String chr_name;
     double value{0};
     while (getline(input, line)) {
+      if (percent < 100.0 && randGen() > percent) continue;
       iStream stream{line.c_str()};
       ColumnLookup::const_iterator nc{column_numbers.begin()};
       unsigned int c{0};
@@ -997,6 +1006,20 @@ class AbsposColumns {
       data.emplace(data.begin(), data[0].size());
       for (uint64_t i{0}; i != data[0].size(); ++i) data[0][i] = i + 1;
     }
+
+    // Add X jitter if requested
+    if (!add_jitter) return;
+    vector<double> & x_vals{data[0]};
+    if (x_vals.size() < 2) return;
+    double last_value{2 * x_vals[0] - x_vals[1]};
+    for (uint64_t i{0}; i != x_vals.size(); ++i) {
+      const double low{(x_vals[i] + last_value) / 2};
+      const double next_value{i + 1 == x_vals.size() ?
+            2 * x_vals[i] - x_vals[i - 1] : x_vals[i + 1]};
+      const double high{(x_vals[i] + next_value) / 2};
+      last_value = x_vals[i];
+      x_vals[i] = std::uniform_real_distribution<double>(low, high)(mersenne);
+    }
   }
 
   using OneColInfo = std::pair<String, String>;
@@ -1031,6 +1054,8 @@ int main(int argc, char * argv[]) try {
   char ** initial{nullptr};
   bool fullscreen{false};
   uint64_t n_rows{471000};  // size of trial data, to minimize extra memory
+  bool x_jitter{false};
+  double percent{100.0};
   --argc;
   while (argc) {
     if (argv[1][0] == '-') {
@@ -1073,6 +1098,16 @@ int main(int argc, char * argv[]) try {
         argv += 1;
       } else if (matches("--rows")) {
         n_rows = atoi(argv[2]);
+        argc -= 2;
+        argv += 2;
+      } else if (matches("--jitter")) {
+        x_jitter = true;
+        --argc;
+        ++argv;
+      } else if (matches("--percent")) {
+        percent = atof(argv[2]);
+        if (percent <= 0 || percent > 100)
+          throw UsageError("Percent value must be between 0 and 100");
         argc -= 2;
         argv += 2;
       } else if (matches("--setup")) {
@@ -1126,14 +1161,16 @@ int main(int argc, char * argv[]) try {
   // Read in columns from multiple data files in parallel
   using InputData = vector<AbsposColumns>;
   const InputData input_data{
-    [&names, &columns, &ref_ptr, n_rows] () {
+    [&names, &columns, &ref_ptr, n_rows, x_jitter, percent] () {
       ThreadPool pool(n_threads);
       using Future = future<AbsposColumns>;
       vector<Future> futures;
       for (const string & name : names)
         futures.push_back(pool.run(
-            [&columns, &ref_ptr, n_rows] (const string & file_name) {
-              return AbsposColumns{file_name, columns, ref_ptr.get(), n_rows};
+            [&columns, &ref_ptr, n_rows, x_jitter, percent]
+            (const string & file_name) {
+              return AbsposColumns{
+                file_name, columns, ref_ptr.get(), n_rows, x_jitter, percent};
             }, name));
       InputData result;
       result.reserve(names.size());
@@ -1258,6 +1295,8 @@ Optional leading arguments (CAPS for numeric):
   -r | --rows NROWS
   -f | --fullscreen
   -s | --setup ref_fasta
+  -j | --jitter
+  -p | --percent NN
   -h | --help
 
 Use optional leading argument --help to display additional usage information
@@ -1300,7 +1339,9 @@ or visit http://mumdex.com/ggraph/ to view the G-Graph tutorial)xxx"};
   10. The --fullscreen option only tries to make a maximum window size 
   11. The --setup option allows binary reference cache pre-generation, but
       that would happen anyway on first loading. This option was added only to
-      reduce first load wait time when using the G-Graph install script)xxx"
+      reduce first load wait time when using the G-Graph install script
+  12. The --jitter option adds a little randomness to loaded X coordinates
+  13. The --percent option only loads a fraction of the data, randomly)xxx"
             << std::endl;
 
   return 0;

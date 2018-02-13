@@ -196,6 +196,8 @@ div iframe { display: block; margin:0px; width: 100%; height: 550px;}
         std::ostringstream component;
         component << variables[index] << "=";
         for (Index i{0}; i != values[index].size(); ++i) {
+          if (i && (values[index][i] == "all" ||
+                    values[index][i] == "default")) continue;
           if (i) component << ",";
           component << values[index][i];
         }

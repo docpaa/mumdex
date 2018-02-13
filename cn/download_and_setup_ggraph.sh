@@ -142,7 +142,12 @@ for genome in $genomes ; do
     fi
 done
 
-echo 
+# make permissions on xwin directory good for all users
+mkdir -p /var/log/xwin
+chmod 777 /var/log/xwin
+
+# Give instructions to user
+echo
 echo Setup all done!
 for genome in $genomes ; do
     echo
@@ -155,4 +160,7 @@ for genome in $genomes ; do
             but it will still display "(slightly incorrectly)" for hg38
     fi
 done
+
+
+
 

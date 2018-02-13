@@ -487,11 +487,14 @@ template <> class HashMap<true> : public HashMapBase<int64_t> {
 template <class Count>
 class CountsT {
  public:
-  Count operator[](const bool rc) const { return counts[rc]; }
-  Count & operator[](const bool rc) { return counts[rc]; }
+  // Count operator[](const bool rc) const { return counts[rc]; }
+  // Count & operator[](const bool rc) { return counts[rc]; }
+  Count count() const { return count_; }
+  Count & count() { return count_; }
 
  private:
-  Count counts[2]{0, 0};
+  unsigned int count_{0};
+  // Count counts[2]{0, 0};
 };
 
 using Sequence = std::string;
@@ -566,11 +569,9 @@ class BaseAssembler {
           const StoredSequence stored_result{get_canonical(sequence.substr(
               sequence.size() - kmer))};
           const Sequence & canonical_sequence{stored_result.first};
-          const bool stored_rc{stored_result.second};
           Node * const this_node{&*nodes.emplace(
               canonical_sequence, Counts{}).first};
-          ++this_node->second[stored_rc];
-          if (do_rc) ++this_node->second[!stored_rc];
+          ++this_node->second.count();
         }
       }
     }
@@ -580,16 +581,10 @@ class BaseAssembler {
     if (!clip) return;
     std::cerr << "Size before clip " << nodes.size() << std::endl;
     for (NodeIter node{nodes.begin()}; node != nodes.end();) {
-      Counts & counts{node->second};
-      if (counts[0] <= clip && counts[1] <= clip) {
+      Count & count{node->second.count()};
+      if (count <= clip) {
         node = nodes.erase(node);
       } else {
-        for (const bool rc : {false, true}) {
-          if (counts[rc] <= clip) {
-            counts[rc] = 0;
-            break;
-          }
-        }
         ++node;
       }
     }
@@ -615,8 +610,8 @@ class BaseAssembler {
       const Sequence & canonical_sequence{stored_result.first};
       ConstNodeIter edge_node{nodes.find(canonical_sequence)};
       if (edge_node == nodes.end()) continue;
-      const bool stored_rc{stored_result.second};
-      const Count matching_count{edge_node->second[stored_rc]};
+      // const bool stored_rc{stored_result.second};
+      const Count matching_count{edge_node->second.count()};
       if (matching_count <= clip) continue;
       result.emplace_back(matching_count, base);
       if (quit_at_two && result.size() == 2) return result;
@@ -676,9 +671,8 @@ class BaseAssembler {
     if (seen.count(sequence)) return;
     const StoredSequence stored_result{get_canonical(sequence)};
     const Sequence & canonical_sequence{stored_result.first};
-    const bool stored_rc{stored_result.second};
     const ConstNodeIter node{nodes.find(canonical_sequence)};
-    const Count count{node->second[stored_rc]};
+    const Count count{node->second.count()};
     if (count <= clip) return;
 
     const Sequence prefix{sequence.substr(0, km1)};
@@ -709,7 +703,7 @@ class BaseAssembler {
     Seen seen;
     for (const Node & node : nodes) {
       for (const bool rc : {false, true}) {
-        if (node.second[rc] <= clip) continue;
+        if (node.second.count() <= clip) continue;
         const Sequence & canonical_sequence{node.first};
         Sequence sequence{rc ? reverse_complement(canonical_sequence) :
               canonical_sequence};
@@ -718,13 +712,54 @@ class BaseAssembler {
     }
   }
 
-  void output_dot(const std::string & name) const {
-    if (nodes.size() > 7000) exit(1);
+  const Node * output_dot(const Sequence & sequence,
+                          std::ostream & out, Seen & seen,
+                          const bool reversed = false) const {
+    // Get node count
+    const StoredSequence stored{get_canonical(sequence)};
+    const Sequence & canonical{stored.first};
+    const ConstNodeIter node{nodes.find(canonical)};
+    if (node == nodes.end()) return nullptr;
+    const Count count{node->second.count()};
+    if (count <= clip) return nullptr;
 
-    const bool multiedge{false};
-    // const bool join_nodes{false};
-    const bool shorten_nodes{true};
-    const bool separate_end_nodes{true};
+    // Check if already processed
+    if (!seen.emplace(canonical).second) return &*node;
+
+    // Define node
+    const uint64_t this_id{hash(canonical)};
+
+    unsigned int n_right{100};
+    for (const bool right : {true, false}) {
+      const Sequence suffix{right ? sequence.substr(sequence.size() - km1) :
+            reverse_complement(sequence.substr(0, km1))};
+      const bool next_reversed{right == reversed};
+      for (const char c : bases) {
+        const Sequence next_sequence{suffix + c};
+        const Node * next_node{output_dot(next_sequence, out, seen,
+                                          next_reversed)};
+        if (!next_node) continue;
+        // if (right != reversed) ++n_right;
+        const Sequence & next_canonical{next_node->first};
+        if (canonical > next_canonical) continue;
+        // Show link
+        if (next_reversed) {
+          out << "\"" << hash(next_canonical) << "\" -> \"" << this_id << '"';
+        } else {
+          out << "\"" << this_id << "\" -> \"" << hash(next_canonical) << '"';
+        }
+        out << ";" << std::endl;
+      }
+    }
+
+    out << "\"" << this_id << "\"";
+    out << " [label=\""
+        << (n_right ? (Sequence() + sequence.front()) : sequence)
+        << "\"];" << std::endl;
+    return &*node;
+  }
+
+  void output_dot(const std::string & name) const {
     const std::string dot_name{name + ".dot"};
     std::ofstream out{dot_name.c_str()};
     if (!out) throw Error("Could not open dot file for writing") << dot_name;
@@ -732,53 +767,16 @@ class BaseAssembler {
     out << "rankdir=LR;" << std::endl;
     out << "node [fontname=Courier, shape=box];" << std::endl;
     out << "edge [";
-    // out << "dir=\"none\", tailport=e, headport=w, ";
     out << "color=blue, ";
-    // out << "style=dotted";
     out << "];" << std::endl;
-    for (const Node & node : nodes) {
-      const Sequence & canonical_sequence{node.first};
-      for (const bool rc : {false, true}) {
-        Count count{node.second[rc]};
-        if (count <= clip) continue;
-        Count max_count{count};
-        Sequence sequence{rc ? reverse_complement(canonical_sequence) :
-              canonical_sequence};
-        const uint64_t left_id{hash(sequence)};
-        // bool in_run{false};
-        // bool skip_node{false};
-        const Sequence prefix{sequence.substr(sequence.size() - kmer, km1)};
-        const Sequence suffix{sequence.substr(sequence.size() - km1)};
-        const EdgeCounts next_results{get_out_counts(suffix)};
-        const EdgeCounts next_return_results{get_in_counts(suffix)};
-        const std::string node_label{std::to_string(count) +
-              ((next_results.empty() || !shorten_nodes) && !separate_end_nodes ?
-               sequence : prefix.substr(0, 1))};
-        out << "\"" << left_id << "\"";
-        out << " [label=\"" << node_label << "\"];" << std::endl;
-        for (const EdgeCount & next_result : next_results) {
-          const Count next_count{next_result.first};
-          const char next_base{next_result.second};
-          const unsigned int stop_count{multiedge ? next_count : 1};
-          for (unsigned int i{0}; i != stop_count; ++i) {
-            out << "\"" << left_id << "\" -> \""
-                << hash(suffix + next_base) << '"';
-            if (!multiedge) {
-              const double weight{
-                floor(0.01 + log(max_count + next_count - 1))};
-              out << " [weight=" << weight << "]";
-            }
-            out << ";" << std::endl;
-          }
-        }
-      }
-    }
+    Seen seen;
+    for (const Node & node : nodes) output_dot(node.first, out, seen);
     out << "}" << std::endl;
   }
 
   void create_graph(std::string name, const bool show = true) const {
-    if (nodes.size() > 10000) {
-      std::cerr << "Too many nodes to render" << std::endl;
+    if (nodes.size() > 100000) {
+      std::cerr << "Too many nodes to render " << nodes.size() << std::endl;
       return;
     }
     std::ostringstream suffix{};
@@ -801,7 +799,8 @@ class BaseAssembler {
       }
       render << "echo Rendering graph " << renderer << " 1>&2 ; ";
       pdf_type_name += ".pdf";
-      render << renderer << " -Tpdf -o " << pdf_type_name << " " << dot_name
+      render << renderer << " -Tpdf -o "
+             << pdf_type_name << " " << dot_name
              << " ;";
       if (show) {
         // render << "echo Displaying graph " << renderer << " ; ";
@@ -837,7 +836,7 @@ using std::exception;
 using paa::Error;
 
 int main(int argc, char* argv[]) try {
-  if (true) {
+  if (false) {
     paa::CharacterEncoding<paa::c_bases>::test();
     paa::CharacterEncoding<paa::c_lc_bases>::test();
     paa::CharacterEncoding<paa::c_letters>::test();
@@ -889,311 +888,3 @@ int main(int argc, char* argv[]) try {
 }
 
 
-
-#if 0
-class BaseAssembler_old {
- public:
-  using Node = std::pair<const Sequence, Counts>;
-  using HashMap = std::unordered_map<Sequence, Counts>;
-  using NodeIter = HashMap::iterator;
-  using ConstNodeIter = HashMap::const_iterator;
-  using NodeInsert = std::pair<NodeIter, bool>;
-  using StoredSequence = std::pair<Sequence, bool>;
-  using StoredSequences = std::vector<StoredSequence>;
-
-  explicit BaseAssembler_old(const std::string & sequence_file_name,
-                             const bool do_rc_ = true,
-                             const uint64_t max_lines_ = 0,
-                             const uint64_t kmer_ = 30,
-                             const uint64_t clip_ = 2) :
-      max_lines{max_lines_},
-      do_rc{do_rc_},
-    kmer{kmer_},
-    km1{kmer - 1},
-    clip{clip_} {
-      std::cerr << "Creating graph " << std::endl;
-      std::ifstream sequence_file{sequence_file_name};
-      if (!sequence_file)
-        throw Error("Could not open sequence file") << sequence_file_name;
-      char c;
-      Sequence sequence;
-      while (sequence_file.get(c)) {
-        if (c == '\n') {
-          sequence.clear();
-          if (++n_lines == max_lines) break;
-          continue;
-        }
-        const uint64_t char_index{bases.find(c)};  // Can speed up find
-        if (char_index == Sequence::npos) {
-          sequence.clear();
-          continue;
-        }
-        sequence += c;
-        if (sequence.size() >= kmer) {
-          const StoredSequence stored_result{get_canonical(sequence.substr(
-              sequence.size() - kmer))};
-          const Sequence & canonical_sequence{stored_result.first};
-          const bool stored_rc{stored_result.second};
-          Node * const this_node{&*nodes.emplace(
-              canonical_sequence, Counts{}).first};
-          ++this_node->second[stored_rc];
-          if (do_rc) ++this_node->second[!stored_rc];
-        }
-      }
-    }
-
-  void do_clip() {
-    // Clip graph nodes
-    if (!clip) return;
-    std::cerr << "Size before clip " << nodes.size() << std::endl;
-    for (NodeIter node{nodes.begin()}; node != nodes.end();) {
-      Counts & counts{node->second};
-      if (counts[0] <= clip && counts[1] <= clip) {
-        node = nodes.erase(node);
-      } else {
-        for (const bool rc : {false, true}) {
-          if (counts[rc] <= clip) {
-            counts[rc] = 0;
-            break;
-          }
-        }
-        ++node;
-      }
-    }
-    std::cerr << "Size after clip " << nodes.size() << std::endl;
-  }
-
-  using EdgeCount = std::pair<const Count, const char>;
-  using EdgeCounts = std::vector<EdgeCount>;
-  EdgeCounts get_edge_counts(Sequence sequence, const bool out,
-                             const bool quit_at_two = false) const {
-    if (out) {
-      sequence += ' ';
-    } else {
-      sequence = std::string(" ") + sequence;
-    }
-    if (sequence.size() != kmer)
-      throw Error(std::string("Expected different sequence size in get_") +
-                  (out ? "out" : "in")+ "_counts");
-    EdgeCounts result;
-    for (const char base : bases) {
-      sequence[out ? sequence.size() - 1 : 0] = base;
-      const StoredSequence stored_result{get_canonical(sequence)};
-      const Sequence & canonical_sequence{stored_result.first};
-      ConstNodeIter edge_node{nodes.find(canonical_sequence)};
-      if (edge_node == nodes.end()) continue;
-      const bool stored_rc{stored_result.second};
-      const Count matching_count{edge_node->second[stored_rc]};
-      if (matching_count <= clip) continue;
-      result.emplace_back(matching_count, base);
-      if (quit_at_two && result.size() == 2) return result;
-    }
-    return result;
-  }
-  EdgeCounts get_out_counts(const Sequence & sequence) const {
-    return get_edge_counts(sequence, true);
-  }
-  EdgeCounts get_in_counts(const Sequence & sequence) const {
-    return get_edge_counts(sequence, false);
-  }
-  EdgeCounts up_to_two_out(const Sequence & sequence) const {
-    return get_edge_counts(sequence, true, true);
-  }
-  EdgeCounts up_to_two_in(const Sequence & sequence) const {
-    return get_edge_counts(sequence, false, true);
-  }
-  bool is_in_and_return_single(const Sequence & sequence) const {
-    if (up_to_two_in(sequence).size() != 1 ||
-        up_to_two_out(sequence).size() != 1) {
-      return false;
-    } else {
-      return true;
-    }
-  }
-  bool is_out_return_single(const Sequence & sequence) const {
-    if (up_to_two_in(sequence).size() != 1) {
-      return false;
-    } else {
-      return true;
-    }
-  }
-
-  const StoredSequence get_canonical(const Sequence & seen_sequence) const {
-    const Sequence reversed_sequence{reverse_complement(seen_sequence)};
-    if (seen_sequence < reversed_sequence) {
-      return {seen_sequence, false};
-    } else {
-      return {reversed_sequence, true};
-    }
-  }
-
-  void do_join_nodes() {
-    for (NodeIter node{nodes.begin()}; node != nodes.end();) {
-    }
-  }
-
-  uint64_t hash(const Sequence & sequence) const {
-    return std::hash<Sequence>{}(sequence);
-  }
-
-  using Seen = std::unordered_set<Sequence>;
-  void output_run(const Sequence & sequence, Seen & seen,
-                  const uint64_t run_size = 0) const {
-    // First see if sequence is good
-    if (seen.count(sequence)) return;
-    const StoredSequence stored_result{get_canonical(sequence)};
-    const Sequence & canonical_sequence{stored_result.first};
-    const bool stored_rc{stored_result.second};
-    const ConstNodeIter node{nodes.find(canonical_sequence)};
-    const Count count{node->second[stored_rc]};
-    if (count <= clip) return;
-
-    const Sequence prefix{sequence.substr(0, km1)};
-    const EdgeCounts in_edges{up_to_two_in(prefix)};
-    const EdgeCounts in_return_edges{up_to_two_out(prefix)};
-    const bool is_in_single{in_edges.size() == 1 &&
-          in_return_edges.size() == 1};
-    if (!run_size) {
-      if (is_in_single) return;
-      std::cout << "Run: ";
-    }
-    seen.emplace(sequence);
-    std::cout << sequence[0];
-
-    const Sequence suffix{sequence.substr(1)};
-    const EdgeCounts out_edges{up_to_two_out(suffix)};
-    const EdgeCounts out_return_edges{up_to_two_in(suffix)};
-    const bool is_out_single{out_edges.size() == 1 &&
-          out_return_edges.size() == 1};
-    if (is_out_single) {
-      output_run(suffix + out_edges.front().second, seen, run_size + 1);
-    } else {
-      std::cout << suffix << " " << run_size  << std::endl;
-    }
-  }
-
-  void output_runs() const {
-    Seen seen;
-    for (const Node & node : nodes) {
-      for (const bool rc : {false, true}) {
-        if (node.second[rc] <= clip) continue;
-        const Sequence & canonical_sequence{node.first};
-        Sequence sequence{rc ? reverse_complement(canonical_sequence) :
-              canonical_sequence};
-        output_run(sequence, seen);
-      }
-    }
-  }
-
-  void output_dot(const std::string & name) const {
-    if (nodes.size() > 7000) exit(1);
-
-    const bool multiedge{false};
-    // const bool join_nodes{false};
-    const bool shorten_nodes{true};
-    const bool separate_end_nodes{true};
-    const std::string dot_name{name + ".dot"};
-    std::ofstream out{dot_name.c_str()};
-    if (!out) throw Error("Could not open dot file for writing") << dot_name;
-    out << "digraph pseudogene {" << std::endl;
-    out << "rankdir=LR;" << std::endl;
-    out << "node [fontname=Courier, shape=box];" << std::endl;
-    out << "edge [";
-    // out << "dir=\"none\", tailport=e, headport=w, ";
-    out << "color=blue, ";
-    // out << "style=dotted";
-    out << "];" << std::endl;
-    for (const Node & node : nodes) {
-      const Sequence & canonical_sequence{node.first};
-      for (const bool rc : {false, true}) {
-        Count count{node.second[rc]};
-        if (count <= clip) continue;
-        Count max_count{count};
-        Sequence sequence{rc ? reverse_complement(canonical_sequence) :
-              canonical_sequence};
-        const uint64_t left_id{hash(sequence)};
-        // bool in_run{false};
-        // bool skip_node{false};
-        const Sequence prefix{sequence.substr(sequence.size() - kmer, km1)};
-        const Sequence suffix{sequence.substr(sequence.size() - km1)};
-        const EdgeCounts next_results{get_out_counts(suffix)};
-        const EdgeCounts next_return_results{get_in_counts(suffix)};
-        const std::string node_label{std::to_string(count) +
-              ((next_results.empty() || !shorten_nodes) && !separate_end_nodes ?
-               sequence : prefix.substr(0, 1))};
-        out << "\"" << left_id << "\"";
-        out << " [label=\"" << node_label << "\"];" << std::endl;
-        for (const EdgeCount & next_result : next_results) {
-          const Count next_count{next_result.first};
-          const char next_base{next_result.second};
-          const unsigned int stop_count{multiedge ? next_count : 1};
-          for (unsigned int i{0}; i != stop_count; ++i) {
-            out << "\"" << left_id << "\" -> \""
-                << hash(suffix + next_base) << '"';
-            if (!multiedge) {
-              const double weight{
-                floor(0.01 + log(max_count + next_count - 1))};
-              out << " [weight=" << weight << "]";
-            }
-            out << ";" << std::endl;
-          }
-        }
-      }
-    }
-    out << "}" << std::endl;
-  }
-
-  void create_graph(std::string name, const bool show = true) const {
-    if (nodes.size() > 10000) {
-      std::cerr << "Too many nodes to render" << std::endl;
-      return;
-    }
-    std::ostringstream suffix{};
-    suffix << "-" << max_lines << "-" << kmer << "-" << clip;
-    name += suffix.str();
-    std::cerr << "Outputting graph " << name << std::endl;
-    output_dot(name);
-    std::ostringstream render;
-    std::vector<std::string> renderers{"neato"};
-    // renderers.push_back("dot");
-    // renderers.push_back("fdp");
-    std::vector<std::string> pdf_names;
-    const std::string dot_name{name + ".dot"};
-    const std::string pdf_name{name + ".pdf"};
-    for (const std::string & renderer : renderers) {
-      std::string pdf_type_name{name};
-      if (renderers.size() > 1) {
-        pdf_type_name += ".";
-        pdf_type_name += renderer;
-      }
-      render << "echo Rendering graph " << renderer << " 1>&2 ; ";
-      pdf_type_name += ".pdf";
-      render << renderer << " -Tpdf -o " << pdf_type_name << " " << dot_name
-             << " ;";
-      if (show) {
-        // render << "echo Displaying graph " << renderer << " ; ";
-        if (0) render << "xpdf -z "
-                      << (renderer == "dot" ? "50%" : "page")
-                      << " -g 1200x800+0+0 " << pdf_type_name << "& ";
-      }
-      pdf_names.push_back(std::move(pdf_type_name));
-    }
-    // render << "echo Waiting for exit ; wait";
-    if (system(render.str().c_str()) == -1) {
-      std::cerr << "Problem rendering graph" << std::endl;
-    }
-    unlink(dot_name.c_str());
-  }
-
- private:
-  uint64_t max_lines{0};
-  uint64_t n_lines{0};
-  HashMap nodes{};
-  const bool do_rc;
-  const uint64_t kmer;
-  const uint64_t km1;
-
- public:
-  uint64_t clip;
-};
-#endif
