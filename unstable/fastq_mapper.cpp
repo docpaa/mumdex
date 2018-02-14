@@ -38,7 +38,18 @@ using paa::SimpleHit;
 
 int main(int argc, char* argv[])  try {
   read_ahead = false;
-  if (--argc != 3) throw Error("usage: mapper ref_fasta fastq1 fastq2");
+
+  unsigned int min_len{1};
+  if (--argc > 3) {
+    const std::string option_name{argv[1]};
+    if (option_name == "-l") {
+      min_len = atoi(argv[2]);
+      argc -= 2;
+      argv += 2;
+    }
+  }
+  if (argc != 3)
+    throw Error("usage: mapper [-l min_len] ref_fasta fastq1 fastq2");
 
   const string ref_fasta{argv[1]};
   const longSA sa{ref_fasta.c_str(), true, true, false};
@@ -62,8 +73,7 @@ int main(int argc, char* argv[])  try {
       istringstream line_str{line.c_str()};
       line_str >> name;
       fastq >> read >> c >> line;
-      // cout << read << endl;
-      const vector<SimpleHit> mums{sa.find_mams(read)};
+      const vector<SimpleHit> mums{sa.find_mams(read, min_len)};
       for (const auto mum : mums) {
         sout << name << read2 << ref.name(mum.chr) << mum.pos
              << mum.off << mum.len << mum.dir << endl;
