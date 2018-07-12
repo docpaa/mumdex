@@ -929,7 +929,6 @@ int main(int argc, char * argv[]) try {
       }
     }
   }
-
   return 0;
 } catch (Error & e) {
   cerr << "paa::Error:" << endl;

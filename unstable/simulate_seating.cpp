@@ -243,7 +243,8 @@ int main(int argc, char* argv[]) try {
   const Marker marker{paa::circle(), 0.3, "0 0 0", 1, true, "0 0 0"};
 
   // Plot true vs perturbed distances
-  const uint64_t points_sampling{n_distances / min(10000ul, n_distances)};
+  const uint64_t points_sampling{n_distances /
+        min(static_cast<uint64_t>(10000), n_distances)};
   PSGraph truth_vs_perturbed_graph{plots,
         "Seating Chart Added Noise;Actual Distance;Perturbed Distance"};
   PSXYSeries truth_vs_perturbed{truth_vs_perturbed_graph, marker};

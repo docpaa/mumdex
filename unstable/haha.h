@@ -515,7 +515,7 @@ std::vector<double> coverage_lowess(const std::string & title,
     smoothed_coverage_series->graph()};
   smoothed_coverage_graph.log_y(true);
 
-  for (uint64_t sample{0}; sample != fragment_table.n_samples(); ++sample) {
+  for (unsigned int sample{0}; sample != fragment_table.n_samples(); ++sample) {
     for (uint64_t frag{0}; frag != fragment_table.n_fragments(); ++frag) {
       const uint64_t count{fragment_table(sample, frag)};
       for (uint64_t c{0}; c != count; ++c) {
@@ -557,7 +557,8 @@ class CoverageHMM {
   using Trans = Matrix<double, nCopies, nCopies>;
   using Emit = Matrix<double, nCopies, nObservations>;
   using StateProbs = Array<double, nCopies>;
-  using StateChoices = unsigned char[nCopies];
+  // using StateChoices = unsigned char[nCopies];  // fails to compile on mac
+  using StateChoices = Array<unsigned char, nCopies>;
 
   CoverageHMM(const std::string & title_,
               const FragmentTable & fragments_,
@@ -632,7 +633,7 @@ class CoverageHMM {
             emissions[f][c][o] = log(1 - total);
           } else {
             const double val{gsl_ran_poisson_pdf(
-                o, (c + background) * est_rate)};
+                static_cast<unsigned int>(o), (c + background) * est_rate)};
             total += val;
             emissions[f][c][o] = log(val);
           }
@@ -667,9 +668,9 @@ class CoverageHMM {
       }
     }
     unsigned int * const v{viterbis[s]};
-    unsigned int z(std::max_element(
+    unsigned int z(static_cast<unsigned int>(std::max_element(
         &T1[nFragments - 1][0], &T1[nFragments - 1][0] + nCopies) -
-                   &T1[nFragments - 1][0]);
+                                             &T1[nFragments - 1][0]));
     viterbi_probs[s] = T1[nFragments - 1][z];
     if (v[nFragments - 1] != z) converged = false;
     v[nFragments - 1] = z;
@@ -738,7 +739,7 @@ class CoverageHMM {
                 luc.expected += coverages[f] / init1;
               }
               if (f + 1 == nFragments || (state != last && f)) {
-                segment_starts[s].push_back(lastf);
+                segment_starts[s].push_back(static_cast<unsigned int>(lastf));
                 const uint64_t length{
                   fragments[f].start() - fragments[lastf].start()};
                 luc.lengths[state] += length;
@@ -1836,7 +1837,7 @@ class HaHaHMM {
   std::vector<double> p_mom_as{std::vector<double>(nHets, log(0.5))};
 
   static constexpr double p_mom_a_tol{0.001};
-  static constexpr double flip_threshold{log(1.001)};
+  double flip_threshold{log(1.001)};
   static constexpr uint64_t first_flip_iteration{10};
   static constexpr uint64_t min_iterations{first_flip_iteration + 10};
   static constexpr uint64_t max_iterations{500};

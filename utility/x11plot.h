@@ -1402,7 +1402,7 @@ class SavedConfig {
   double arc_width{default_arc_width};
   int line_width{default_line_width};
   int line_type{default_line_type};
-  std::vector<uint64_t> series_order{};
+  std::vector<unsigned int> series_order{};
   Range range{{unset(1.0), nunset(1.0), 0}, {unset(1.0), nunset(1.0), 0}};
   Range max_range{range};
   std::vector<unsigned char> zoomed{false, false};
@@ -1881,7 +1881,7 @@ void X11Graph::initialize() {
   }
 
   unnamed_radios = create_unnamed_radios();
-  for (uint64_t r{0}; r != n_files(); ++r) {
+  for (unsigned int r{0}; r != n_files(); ++r) {
     if (n_files() > 1) {
       // Series order radio
       unnamed_radios.push_back(Radio{
@@ -1891,15 +1891,16 @@ void X11Graph::initialize() {
               {-0.7, series_radios[r].specification[1] - 0.5 * radio_scale},
           {[this, r]() {
               // Find location of series in ordering list
-              std::vector<uint64_t>::iterator riter{
+              std::vector<unsigned int>::iterator riter{
                 find(series_order.begin(), series_order.end(), r)};
-              const uint64_t rindex{
-                static_cast<uint64_t>(riter - series_order.begin())};
+              const unsigned int rindex{
+                static_cast<unsigned int>(riter - series_order.begin())};
               for (uint64_t y{0}; y != n_cols(); ++y) {
-                std::vector<uint64_t>::iterator togo{
+                std::vector<unsigned int>::iterator togo{
                   series_order.begin() + (y + 1) * n_files()};
-                series_order.insert(togo, r + y * n_files());
-                std::vector<uint64_t>::iterator toremove{
+                series_order.insert(togo, static_cast<unsigned int>(
+                    r + y * n_files()));
+                std::vector<unsigned int>::iterator toremove{
                   series_order.begin() + y * n_files() + rindex};
                 series_order.erase(toremove);
               }
@@ -2685,7 +2686,7 @@ void X11Graph::draw() {
   // The graph arcs and points to connect with lines
   const uint64_t arc_block{max_request / 3};
   const uint64_t line_block{max_request / 2};
-  for (const uint64_t s : series_order) {
+  for (const unsigned int s : series_order) {
     if (do_arcs(s)) {
       if (tiled_radio && tiled_colors) set_color(s, current_colors[0], false);
       for (unsigned int bs{0}; bs < arcs[s].size(); bs += arc_block) {

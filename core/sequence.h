@@ -338,7 +338,7 @@ class Mismatches {
  public:
   static constexpr uint64_t max_mismatch{2};
   static constexpr uint64_t n_values{max_mismatch + 1};
-  static constexpr uint64_t block_size{1000000};
+  static constexpr unsigned int block_size{1000000};
   static constexpr uint64_t min_len{10};
   static constexpr uint64_t max_len{254};
 
@@ -365,12 +365,12 @@ class Mismatches {
     // Construct from text files
     std::vector<unsigned int> data_(n_values * ref.size());
     uint64_t n_probs{0};
-    for (uint64_t chr{0}; chr != ref.n_chromosomes(); ++chr) {
+    for (unsigned int chr{0}; chr != ref.n_chromosomes(); ++chr) {
       const std::string chr_name{ref.name(chr)};
-      uint64_t start{0};
-      const uint64_t size{ref.size(chr)};
+      unsigned int start{0};
+      const unsigned int size{ref.size(chr)};
       while (start < size) {
-        const uint64_t stop{std::min(size, start + block_size)};
+        const unsigned int stop{std::min(size, start + block_size)};
         const std::string file_name{text_input_dir + "/chr" + chr_name +
               "_" + std::to_string(start) + ".txt"};
         std::cerr << "Loading " << file_name << std::endl;
@@ -379,7 +379,7 @@ class Mismatches {
         if (!input_file) {
           throw Error("Cannot open file") << file_name;
         } else {
-          for (uint64_t pos{start}; pos != stop; ++pos) {
+          for (unsigned int pos{start}; pos != stop; ++pos) {
             // if (input_file.peek() == 'R') input_file.ignore(100000000, '\n');
             input_file >> c >> p >> m >> s;
             if (p != pos) throw Error("Position mismatch")
@@ -411,24 +411,24 @@ class Mismatches {
     new (this) Mismatches{ref};
   }
 
-  uint64_t index(const uint64_t abspos,
+  uint64_t index(const unsigned int abspos,
                  const uint64_t n_mismatches = 0) const {
     return abspos * n_values + n_mismatches;
   }
-  unsigned int count(const uint64_t abspos) const {
+  unsigned int count(const unsigned int abspos) const {
     const uint64_t start_index{index(abspos)};
     unsigned int result{0};
     for (uint64_t i{start_index}; i != start_index + n_values; ++i)
       result += data[i];
     return result;
   }
-  unsigned int count(const uint64_t abspos,
+  unsigned int count(const unsigned int abspos,
                      const uint64_t n_mismatches) const {
     return data[index(abspos, n_mismatches)];
   }
-  unsigned int count(const uint64_t chr, const uint64_t pos,
+  unsigned int count(const unsigned int chr, const unsigned int pos,
                      const uint64_t n_mismatches) const {
-    const uint64_t abspos{ref.abspos(chr, pos)};
+    const unsigned int abspos{ref.abspos(chr, pos)};
     return count(abspos, n_mismatches);
   }
 

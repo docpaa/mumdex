@@ -43,8 +43,10 @@ int main(int argc, char* argv[]) try {
   // Read command line arguments
   if (--argc != 2)
     throw Error("usage: random_uniform_distances n_points max_dim");
-  const uint64_t n_points = strtoul(argv[1], nullptr, 10);
-  const uint64_t max_dim = strtoul(argv[2], nullptr, 10);
+  const unsigned int n_points = static_cast<unsigned int>(
+      strtoul(argv[1], nullptr, 10));
+  const unsigned int max_dim = static_cast<unsigned int>(
+      strtoul(argv[2], nullptr, 10));
 
   // Set up uniform real random number generator
   random_device rd;
@@ -59,7 +61,7 @@ int main(int argc, char* argv[]) try {
 
   // Distances
   vector<double> distances;
-  const uint64_t n_distances{n_points * n_points / 2};
+  const unsigned int n_distances{n_points * n_points / 2};
   distances.reserve(n_distances);
 
   // loop over dimensions
@@ -105,7 +107,7 @@ int main(int argc, char* argv[]) try {
           *distances_graph, red_marker}};
       ownp(inv_distances_plot);
       for (uint64_t p{0}; p < distances.size();
-           p += max(n_distances / 1000, 1ul)) {
+           p += max(n_distances / 1000, 1u)) {
         distances_plot->add_point(p, distances[p] / distances.back());
         inv_distances_plot->add_point(distances.size() - p - 1,
                                       1.0 - distances[p] / distances.back());

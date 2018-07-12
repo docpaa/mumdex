@@ -174,9 +174,11 @@ int main(int argc, char * argv[]) try {
   const MUMdex mumdex{argv[2], ref};
   const string bam_name{argv[3]};
   const string chr_name{argv[4]};
-  const uint64_t chr{chr_lookup[chr_name]};
-  const uint64_t start{strtoul(argv[5], nullptr, 10)};
-  const uint64_t stop{strtoul(argv[6], nullptr, 10)};
+  const unsigned int chr{chr_lookup[chr_name]};
+  const unsigned int start{static_cast<unsigned int>(
+      strtoul(argv[5], nullptr, 10))};
+  const unsigned int stop{static_cast<unsigned int>(
+      strtoul(argv[6], nullptr, 10))};
 
   PSDoc plots{"coverage"};
   plots.pdf(true);
@@ -190,8 +192,8 @@ int main(int argc, char * argv[]) try {
   PSGraph mappability_graph{coverage_page, ";Position;Mappability"};
   PSXYSeries low_map{mappability_graph, low_marker};
   PSXYSeries high_map{mappability_graph, high_marker};
-  for (uint64_t p{start}; p != stop; ++p) {
-    const uint64_t abspos{ref.abspos(chr, p)};
+  for (unsigned int p{start}; p != stop; ++p) {
+    const unsigned int abspos{ref.abspos(chr, p)};
     low_map.add_point(p, map.low(abspos));
     high_map.add_point(p, map.high(abspos));
   }
@@ -216,9 +218,9 @@ int main(int argc, char * argv[]) try {
     if (pair.dupe()) continue;
     const MUM mum{mumdex.mum(pm)};
     if (pair.bad(mum.read_2())) continue;
-    for (uint64_t b{0}; b != mum.length(); ++b) {
-      const uint64_t pos{mum.position0() + b};
-      const uint64_t abspos{ref.abspos(chr, pos)};
+    for (unsigned int b{0}; b != mum.length(); ++b) {
+      const unsigned int pos{mum.position0() + b};
+      const unsigned int abspos{ref.abspos(chr, pos)};
       if (pos >= start && pos < stop) {
         if (map.low(abspos - b) + excess_cutoff <= mum.length())
           ++coverage_vec[pos - start];
@@ -229,7 +231,7 @@ int main(int argc, char * argv[]) try {
       }
     }
   }
-  for (uint64_t b{0}; b != stop - start; ++b) {
+  for (unsigned int b{0}; b != stop - start; ++b) {
     bam_series.add_point(start + b, bam.base_counts[b]);
     coverage_series.add_point(start + b, coverage_vec[b]);
     low_series.add_point(start + b, low_vec[b]);

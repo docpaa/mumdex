@@ -90,7 +90,7 @@ int main(int argc, char* argv[])  try {
       if (length > Mismatches::min_len && length < Mismatches::max_len) {
         const string sequence{ref.subseq(chr, pos, pos + length)};
         if (sequence.find_first_not_of("ACGTacgt") == string::npos) {
-          seq2index[sequence] = sequences.size();
+          seq2index[sequence] = static_cast<unsigned int>(sequences.size());
           sequences.push_back(sequence);
           reasons.push_back(0);
         } else {

@@ -166,8 +166,12 @@ class HMMparams_t {
     return stream;
   }
 
-  unsigned int n_states() const { return transitions_.size(); }
-  unsigned int n_symbols() const { return emissions_.front().size(); }
+  unsigned int n_states() const {
+    return static_cast<unsigned int>(transitions_.size());
+  }
+  unsigned int n_symbols() const {
+    return static_cast<unsigned int>(emissions_.front().size());
+  }
   const Matrix & emissions() const { return emissions_; }
   const Matrix & transitions() const { return transitions_; }
   const Vector & initial_probs() const { return initial_probs_; }
@@ -204,7 +208,9 @@ class HMM_t {
 
   unsigned int n_states() const { return params_.n_states(); }
   unsigned int n_symbols() const { return params_.n_symbols(); }
-  unsigned int n_observations() const { return observations_.size(); }
+  unsigned int n_observations() const {
+    return static_cast<unsigned int>(observations_.size());
+  }
 
   void forward(Matrix & alpha) const {
     for (unsigned int i{0}; i != n_states(); ++i) {
