@@ -900,7 +900,7 @@ int main(int argc, char * argv[]) try {
             const bool mom_a2{counts.all_calls[j].p_mom_a > 0.5};
             if (obs2 == 0 || obs2 == 3) continue;
             ++opp;
-            dist += abs(pos2 - pos1);
+            dist += pos2 > pos1 ? pos2 - pos1 : pos1 - pos2;
             if ((obs1 == obs2 && mom_a1 == mom_a2) ||
                 (obs1 != obs2 && mom_a1 != mom_a2)) {
               ++val;
