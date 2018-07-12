@@ -29,8 +29,17 @@ include $(wildcard $(DEPDIR)/*.dep)
 # Compile command and flags
 CXX :=  g++
 STD := -std=c++11
-FAST := -Ofast
-DEBUG := # -g -ggdb
+
+# debug = 1
+ifdef debug
+  FAST := -Ofast # -Ofast -DNDEBUG
+  DEBUG := -g -ggdb
+else
+  FAST := -Ofast -DNDEBUG 
+# -g -pg
+  DEBUG := # -g -ggdb
+endif
+
 LDFLAGS	:= $(FAST)
 LIBS :=
 INCFLAGS := $(addprefix -I ,$(INCLUDES))
@@ -135,6 +144,12 @@ COMPILE.cpp = $(CXX) $(CXXFLAGS) -c
 	$(COMPILE.cpp) $(DEPFLAGS) $< -o $@
 	$(POSTCOMPILE)
 % : %.gslo ; $(CXX) $(LDFLAGS) $^ -o $@ -lgsl -lgslcblas $(LIBS)
+
+# Special rules for eigen compilation and linking
+# give .gslo prerequisite if eigen headers are needed
+%.eo : %.cpp $(DEPDIR)/%.dep
+	$(COMPILE.cpp) $(DEPFLAGS) $< -o $@
+	$(POSTCOMPILE)% : %.eo ; $(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
 
 # Do not compile gsl programs under Mac OS (remove if gsl available)
 ifeq ($(UNAME),Darwin)

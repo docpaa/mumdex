@@ -536,6 +536,53 @@ template <class Type> using UnMappedVector = TMappedVector<Type, false>;
 // Use UnMapped as default
 template <class Type> using MappedVector = UnMappedVector<Type>;
 
+//
+// Class that loads data from text file the first time,
+// and saves binary cache for later use of file
+//
+template <class Data>
+class BinaryCache {
+ public:
+  class NormalFileEnd {};
+
+  template <class ParseStreamFun>
+  BinaryCache(const std::string & input_file_name,
+              ParseStreamFun parse_line,
+              std::string binary_file_name = "") {
+    if (binary_file_name.empty()) {
+      binary_file_name = input_file_name + ".bin";
+    }
+    if (!readable(binary_file_name)) {
+      try {
+        std::ifstream in_stream{input_file_name.c_str()};
+        std::ofstream out_stream{binary_file_name.c_str(), std::ios::binary};
+        if (!in_stream) throw Error("Could not open input file in BinaryCache")
+                         << input_file_name;
+        while (in_stream) {
+          const Data item{parse_line(in_stream)};
+          out_stream.write(reinterpret_cast<const char *>(&item), sizeof(Data));
+        }
+      } catch (NormalFileEnd &) {
+        if (false) std::cerr << "File end" << std::endl;
+      }
+    }
+    new (this) BinaryCache<Data>{binary_file_name};
+  }
+
+  explicit BinaryCache(const std::string & binary_file_name) :
+      data{binary_file_name} { }
+
+  uint64_t size() const { return data.size(); }
+  const Data & operator[](const uint64_t index) const {
+    return data[index];
+  }
+  const Data * begin() const { return data.begin(); }
+  const Data * end() const { return data.end(); }
+
+ private:
+  const PreMappedVector<Data> data{"/dev/null", false};
+};
+
 inline void bwritec(FILE * output, const void * data, const std::string & name,
                     const uint64_t count) {
   const uint64_t written = fwrite(data, 1, count, output);

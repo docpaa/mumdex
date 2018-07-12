@@ -71,7 +71,7 @@ class DiagMatrix {
     if (!file) throw Error("Problem opening matrix file for reading")
                    << file_name;
     for (uint64_t x{0}; x != n_; ++x) {
-      file >> (*this)(x, x);
+      file >> (*this)(x);
     }
     if (!file) throw Error("DiagMatrix parse error") << file_name;
   }
@@ -90,12 +90,9 @@ class DiagMatrix {
   uint64_t nx() const { return n_; }
   uint64_t ny() const { return n_; }
 
-  Type & operator()(const uint64_t x, const uint64_t y) {
-    return x == y ? data_[x] : zero;
-  }
-  Type operator()(const uint64_t x, const uint64_t y) const {
-    return x == y ? data_[x] : zero;
-  }
+  // Type operator()(const uint64_t x, const uint64_t y) const {
+  //  return x == y ? data_[x] : Type(0);
+  // }
   Type & operator()(const uint64_t x) {
     return data_[x];
   }
@@ -106,7 +103,6 @@ class DiagMatrix {
  private:
   uint64_t n_{};
   FlexVector<Type> data_{};
-  Type zero{0};
 };
 
 template <class Type>
@@ -116,25 +112,25 @@ inline std::ostream & operator<<(std::ostream & out,
 }
 
 template <class Type>
-class Matrix {
+class BMatrix {
  public:
-  Matrix(Matrix &&) = default;
-  Matrix(const Matrix &) = delete;
-  Matrix & operator=(const Matrix &) = delete;
-  Matrix & operator=(Matrix &&) = delete;
+  BMatrix(BMatrix &&) = default;
+  BMatrix(const BMatrix &) = delete;
+  BMatrix & operator=(const BMatrix &) = delete;
+  BMatrix & operator=(BMatrix &&) = delete;
 
-  Matrix(const uint64_t nx__, const uint64_t ny__, bool row_major_ = true) :
+  BMatrix(const uint64_t nx__, const uint64_t ny__, bool row_major_ = true) :
       nx_{nx__}, ny_{ny__}, data_(nx_ * ny_), row_major{row_major_} { }
-  Matrix(const uint64_t nx__, const uint64_t ny__, const Type val,
+  BMatrix(const uint64_t nx__, const uint64_t ny__, const Type val,
          bool row_major_ = true) :
-      Matrix{nx__, ny__, row_major_} {
+      BMatrix{nx__, ny__, row_major_} {
     set(val);
   }
-  explicit Matrix(const std::string file_name, bool row_major_ = true) :
+  explicit BMatrix(const std::string file_name, bool row_major_ = true) :
       row_major{row_major_} {
     const uint64_t found{file_name.find("_matrix")};
     if (found == std::string::npos) {
-      throw Error("Filename bad format in Matrix") << file_name;
+      throw Error("Filename bad format in BMatrix") << file_name;
     }
     const std::string matrix_string{file_name.substr(found)};
     std::istringstream file_stream{matrix_string.c_str()};
@@ -152,15 +148,16 @@ class Matrix {
     }
   }
   // Create from rows of other matrix
-  Matrix(const Matrix & other, const uint64_t y_start, const uint64_t n_rows) :
-      Matrix{other.nx_, n_rows} {
+  BMatrix(const BMatrix & other, const uint64_t y_start,
+          const uint64_t n_rows) :
+      BMatrix{other.nx_, n_rows} {
     for (uint64_t y{0}; y != ny_; ++y) {
       for (uint64_t x{0}; x != nx_; ++x) {
         (*this)(x, y) = other(x, y + y_start);
       }
     }
   }
-  ~Matrix() { }
+  ~BMatrix() { }
 
   void save(const std::string & base_name) const {
     std::ostringstream file_name;
@@ -182,7 +179,7 @@ class Matrix {
   }
   void read(const std::string & file_name) {
     std::ostringstream message;
-    message << "Reading Matrix " << nx_ << " x " << ny_;
+    message << "Reading BMatrix " << nx_ << " x " << ny_;
     Progress progress(ny_, 0.1, message.str());
     std::ifstream file{file_name.c_str()};
     if (!file) throw Error("Problem opening matrix file for reading")
@@ -193,7 +190,7 @@ class Matrix {
         file >> (*this)(x, y);
       }
     }
-    if (!file) throw Error("Matrix parse error") << file_name;
+    if (!file) throw Error("BMatrix parse error") << file_name;
   }
   std::string write(const std::string & base_name) const {
     std::ostringstream file_name;
@@ -220,13 +217,13 @@ class Matrix {
       const uint64_t n_rows{std::min(n_rows_goal, ny_ - y)};
       std::ostringstream out_name;
       out_name << base << "." << y;
-      const Matrix rows{*this, y, n_rows};
+      const BMatrix rows{*this, y, n_rows};
       result.push_back(std::pair<std::string, unsigned int>(
           rows.write(out_name.str()), n_rows));
     }
     return result;
   }
-  Matrix dist_mul(const Matrix & rhs, const std::string & out_dir) const {
+  BMatrix dist_mul(const BMatrix & rhs, const std::string & out_dir) const {
     throw Error("Set up distributed runs with Peter first");
     std::cerr << "Writing matrices for distributed computation" << std::endl;
     const std::string rhs_name{rhs.write("rhs")};
@@ -268,9 +265,9 @@ class Matrix {
       }
       progress();
     }
-    Matrix result{rhs.nx_, ny_};
+    BMatrix result{rhs.nx_, ny_};
     for (unsigned int j{0}; j != names.size(); ++j) {
-      const Matrix input{result_names[j]};
+      const BMatrix input{result_names[j]};
       for (unsigned int x{0}; x != result.nx_; ++x) {
         result(x, j) = input(x, 0);
       }
@@ -285,13 +282,13 @@ class Matrix {
   }
 
   // Slow algorithm
-  Matrix operator*(const Matrix & rhs) const {
+  BMatrix operator*(const BMatrix & rhs) const {
     if (nx_ != rhs.ny_) {
-      throw Error("Matrix dimensions bad for multiplication")
+      throw Error("BMatrix dimensions bad for multiplication")
           << "lhs nx" << nx_ << "!=" << "rhs ny" << rhs.ny_;
     }
-    Matrix result(rhs.nx_, ny_, 0.0);
-    Progress progress{rhs.nx_ * ny_, 0.01, "Matrix multiplication"};
+    BMatrix result(rhs.nx_, ny_, 0.0);
+    Progress progress{rhs.nx_ * ny_, 0.01, "BMatrix multiplication"};
     for (uint64_t x2{0}; x2 != rhs.nx_; ++x2) {
       for (uint64_t y1{0}; y1 != ny_; ++y1) {
         progress();
@@ -320,17 +317,17 @@ class Matrix {
   }
 
   // Parallel algorithm
-  Matrix thread_mul(const Matrix & rhs, const unsigned int n_threads) const {
+  BMatrix thread_mul(const BMatrix & rhs, const unsigned int n_threads) const {
     if (nx_ != rhs.ny_) {
-      throw Error("Matrix dimensions bad for multiplication")
+      throw Error("BMatrix dimensions bad for multiplication")
           << "lhs nx" << nx_ << "!=" << "rhs ny" << rhs.ny_;
     }
     if (rhs.nx_ == 1 || n_threads == 1) { return (*this) * rhs; }
-    Matrix result(rhs.nx_, ny_, 0.0);
+    BMatrix result(rhs.nx_, ny_, 0.0);
     ThreadPool pool{n_threads};
     ThreadPool::Results<void> results;
     for (uint64_t x2{0}; x2 != rhs.nx_; ++x2) {
-      pool.run(results, [this, x2, &rhs](Matrix & result_) {
+      pool.run(results, [this, x2, &rhs](BMatrix & result_) {
           for (uint64_t y1{0}; y1 != ny_; ++y1) {
             for (uint64_t x1{0}; x1 != nx_; ++x1) {
               result_(x2, y1) += (*this)(x1, y1) * rhs(x2, x1);
@@ -338,7 +335,7 @@ class Matrix {
           }}, std::ref(result));
     }
 
-    Progress progress{rhs.nx_, 0.01, "Matrix multiplication"};
+    Progress progress{rhs.nx_, 0.01, "BMatrix multiplication"};
     while (results.size()) {
       results.get();
       progress();
@@ -346,13 +343,13 @@ class Matrix {
     return result;
   }
 
-  Matrix operator*(const DiagMatrix<Type> & rhs) const {
+  BMatrix operator*(const DiagMatrix<Type> & rhs) const {
     if (nx_ != rhs.ny()) {
-      throw Error("Matrix dimensions bad for multiplication")
+      throw Error("BMatrix dimensions bad for multiplication")
           << "lhs nx" << nx_ << "!=" << "rhs ny" << rhs.ny();
     }
-    Matrix result(rhs.nx(), ny_, 0.0);
-    Progress progress{ny_, 0.1, "Diagonal Matrix multiplication"};
+    BMatrix result(rhs.nx(), ny_, 0.0);
+    Progress progress{ny_, 0.1, "Diagonal BMatrix multiplication"};
     for (uint64_t y1{0}; y1 != ny_; ++y1) {
       progress();
       for (uint64_t x2{0}; x2 != rhs.nx(); ++x2) {
@@ -362,18 +359,18 @@ class Matrix {
     return result;
   }
 
-  Matrix diag_mul(const DiagMatrix<Type> & rhs,
+  BMatrix diag_mul(const DiagMatrix<Type> & rhs,
                   const unsigned int n_threads) const {
     if (nx_ != rhs.ny()) {
-      throw Error("Matrix dimensions bad for multiplication")
+      throw Error("BMatrix dimensions bad for multiplication")
           << "lhs nx" << nx_ << "!=" << "rhs ny" << rhs.ny();
     }
-    Matrix result(rhs.nx(), ny_, 0.0);
+    BMatrix result(rhs.nx(), ny_, 0.0);
     ThreadPool pool{n_threads};
     ThreadPool::Results<void> results;
-    Progress progress{ny_, 0.1, "Diagonal Matrix multiplication"};
+    Progress progress{ny_, 0.1, "Diagonal BMatrix multiplication"};
     for (uint64_t y1{0}; y1 != ny_; ++y1) {
-      pool.run(results, [this, y1, &rhs](Matrix & result_) {
+      pool.run(results, [this, y1, &rhs](BMatrix & result_) {
           for (uint64_t x2{0}; x2 != rhs.nx(); ++x2) {
             result_(x2, y1) += (*this)(x2, y1) * rhs(x2);
           }
@@ -399,7 +396,7 @@ class Matrix {
 
 template <class Type>
 inline std::ostream & operator<<(std::ostream & out,
-                                 const Matrix<Type> & matrix) {
+                                 const BMatrix<Type> & matrix) {
   return matrix.output(out);
 }
 

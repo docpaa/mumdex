@@ -3,14 +3,12 @@
 //
 // Try to find a specific indel, with some slop allowed
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2018 Peter Andrews CSHL
 //
 
 #include <algorithm>
 #include <exception>
-#include <iomanip>
 #include <iostream>
-#include <map>
 #include <sstream>
 #include <string>
 
@@ -26,10 +24,7 @@ using std::cout;
 using std::endl;
 using std::exception;
 using std::lower_bound;
-using std::map;
 using std::ostringstream;
-using std::right;
-using std::setw;
 using std::string;
 
 using paa::sout;
@@ -56,11 +51,11 @@ int main(int argc, char* argv[])  try {
   const string bridges_dir{argv[2]};
   const Population pop{argv[3]};
   const string chr_name{argv[4]};
-  const unsigned int pos{static_cast<unsigned int>(atoi(argv[5]))};
+  const int pos{atoi(argv[5])};
   const int invariant{atoi(argv[6])};
-  const int64_t pos_slop{atol(argv[7]) + abs(invariant)};
-  const unsigned int pos_range{static_cast<unsigned int>(atoi(argv[8]))};
-  const unsigned int invariant_slop{static_cast<unsigned int>(atoi(argv[9]))};
+  const int pos_slop{atoi(argv[7]) + abs(invariant)};
+  const int pos_range{atoi(argv[8])};
+  const int invariant_slop{atoi(argv[9])};
 
   argc -= 9;
   argv += 9;
@@ -97,9 +92,9 @@ int main(int argc, char* argv[])  try {
       for (FileVector<BridgeInfo>::const_iterator test_iter{start};
            test_iter != bridges.end(); ++test_iter) {
         const BridgeInfo test{*test_iter};
-        if (test.pos1() > pos + pos_slop + pos_range) break;
-        if (pos + pos_slop >= test.pos1() &&
-            pos <= test.pos2() + pos_slop &&
+        if (static_cast<int>(test.pos1()) > pos + pos_slop + pos_range) break;
+        if (pos + pos_slop >= static_cast<int>(test.pos1()) &&
+            pos <= static_cast<int>(test.pos2()) + pos_slop &&
             test.invariant() + invariant_slop >= invariant &&
             test.invariant() <= invariant + invariant_slop &&
             test.chr1() == test.chr2() &&

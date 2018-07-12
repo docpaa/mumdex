@@ -33,10 +33,10 @@
 
 namespace paa {
 
-// using MUMDEX = PreMappedMUMdex;
+using MUMDEX = PreMappedMUMdex;
 // using MUMDEX = MemoryMUMdex;
 // using MUMDEX = FileMUMdex;
-using MUMDEX = MUMdex;
+// using MUMDEX = MUMdex;
 
 class X11MUMdexViewer : public X11Win {
  public:

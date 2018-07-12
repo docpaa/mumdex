@@ -66,7 +66,6 @@ class GraphSettings {
     minor_dash_{minor_dash__},
     fill_{fill__} { }
 
-
   GraphSettings & reset() { return *this = GraphSettings(); }
   double title_size() const { return title_size_; }
   double & title_size() { return title_size_; }
@@ -209,8 +208,6 @@ constexpr inline bool is_unset(const int val) {
 constexpr inline bool is_unset(const unsigned int val) {
   return val == unset(1U) || val == nunset(1U);
 }
-
-
 
 // Rectangle class
 template <class ValType>

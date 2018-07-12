@@ -45,6 +45,7 @@ int main(int argc, char * argv[]) try {
   X11Colors & colors{app.create<X11Colors>(starting_colors, n_colors)};
   app.create<X11Colors>(colors.color_names, 0, true);
   if (true) colors.print_names();
+  if (true) colors.print_fracs();
   app.run();
 
   return 0;

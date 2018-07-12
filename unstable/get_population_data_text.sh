@@ -1,14 +1,16 @@
 #! /bin/bash
 
+# for chr in {1..22} X Y ; do start=20000000 ; stop=$((start+1000000)) ; ~/mumdex/unstable/get_population_data_text.sh ~/bridges ~/human_g1k_v37.fasta $chr $start $stop ; done
+
 bridges_dir=$1
 ref=$2
 chr=$3
 start=$4
 stop=$5
 
-index=$(perl -ne '$n++ ; print $n if /^'$chr'\s/' $ref.fai)
+index=$(perl -ne '$n++ ; print $n - 1 if /^'$chr'\s/' $ref.fai)
 
-echo Info is $ref $bridges_dir $chr $start $stop
+echo Info is $ref $bridges_dir $chr $start $stop $index
 
 window=$chr-$start-$stop
 mkdir -p $window
@@ -23,8 +25,8 @@ for sample in $(cd $bridges_dir/ ; ls -d $(echo SSC*/) | perl -pe 's+/++g') ; do
     bridge_file=$bridge_dir/chrbridges.$index.bin
     out=$sample.txt.gz
     n=$((n+1))
-    echo $window $n 1>&2
     if [ ! -e $out ] ; then
+        echo $window $n 1>&2
         echo "./mumdex/bridges2txt $ref $bridge_file $chr $start $stop | gzip -c > $out && echo finished $sample $n"
     fi
-done | qsub -cwd -N test -o out.txt -e err.txt 
+done | qsub -l h_vmem=20G -cwd -N test -o out.txt -e err.txt 

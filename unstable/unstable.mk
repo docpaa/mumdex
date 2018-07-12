@@ -2,11 +2,14 @@ DEVELOPMENT_PROGRAMS := \
 	add_abspos \
 	analyze_transmission \
 	anchor_reads \
+	anchor_mismatches \
 	anchor_repeatness \
 	annotate_repeats \
 	assembler \
 	assembly_index \
+	assess_haha \
 	assess_known_cn_events \
+	averages \
 	bam_genotyper \
 	bin_events \
 	bin_p \
@@ -14,6 +17,7 @@ DEVELOPMENT_PROGRAMS := \
 	bridge_effect \
 	bridge_gene2 \
 	bridge_gene \
+	bridge_properties \
 	cancer_pop \
 	candidate_stats \
 	check_bridges \
@@ -38,8 +42,10 @@ DEVELOPMENT_PROGRAMS := \
 	dsDNAvt \
 	encode \
 	event_histogram \
+	explore_coverage \
 	family_count \
 	family_figure \
+	fastplot \
 	fastq_kmer_counter \
 	fastq_mapper \
 	fastq_vt_mapper \
@@ -47,18 +53,23 @@ DEVELOPMENT_PROGRAMS := \
 	find_indel \
 	find_microsatellite \
 	gene_view \
+	haha \
+	hist_compare \
 	jackpot \
 	karyotype \
 	local_similarity \
 	lookup_bridge \
+	make_reference \
 	male_cn_stats \
 	mapper \
 	matrix \
+	mismatches \
 	missing_chromosome \
 	model_transmission \
 	mumdex_examples \
 	mumdex_sequences \
 	museq_primers \
+	nlaIII_bsrsI \
 	optional_test \
 	pair_view \
 	pivot_table \
@@ -77,6 +88,7 @@ DEVELOPMENT_PROGRAMS := \
 	process_bisulfite_rna \
 	random_mumdex_sequences \
 	random_position \
+	random_uniform_distances \
 	rare \
 	repeatness \
 	repeats \
@@ -89,11 +101,14 @@ DEVELOPMENT_PROGRAMS := \
 	simulate_cn \
 	simulate_events2 \
 	simulate_events \
+	simulate_seating \
 	skbr3_in_skn1 \
 	smooth_data \
 	snp_report \
 	sssa \
 	subsample \
+	table_stats \
+	test_hmm \
 	test_mumdex \
 	test_numerical \
 	test_psplot \
@@ -113,6 +128,7 @@ all : $(DEVELOPMENT_PROGRAMS)
 anchor_reads : genes.o utility.o
 anchor_repeatness : files.o
 assess_known_cn_events : assess_known_cn_events.gslo
+assess_haha : assess_haha.gslo
 bam_genotyper : utility.o
 bridge_effect : genes.o utility.o
 bridge_gene : genes.o utility.o
@@ -140,6 +156,7 @@ fastq_vt_mapper : files.o utility.o
 find_bridge : utility.o
 find_indel : utility.o
 gene_view : genes.o utility.o
+haha: haha.gslo
 lookup_bridge : utility.o
 mapper : files.o utility.o
 mumdex_examples : utility.o

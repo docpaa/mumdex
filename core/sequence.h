@@ -10,11 +10,14 @@
 #define PAA_SEQUENCE_H
 
 #include <algorithm>
+#include <array>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "error.h"
+#include "mumdex.h"
 #include "pstream.h"
 
 namespace paa {
@@ -331,6 +334,111 @@ class GCATscore {
   unsigned int score{0};
 };
 
+class Mismatches {
+ public:
+  static constexpr uint64_t max_mismatch{2};
+  static constexpr uint64_t n_values{max_mismatch + 1};
+  static constexpr uint64_t block_size{1000000};
+  static constexpr uint64_t min_len{10};
+  static constexpr uint64_t max_len{254};
+
+  // Load from cache
+  explicit Mismatches(const Reference & ref_) :
+      ref{ref_}, data{cache_filename()} { }
+
+  // Load from text or cache, depending
+  Mismatches(const Reference & ref_,
+             const std::string & text_input_dir) :
+      ref{ref_} {
+    if (readable(cache_filename())) {
+      new (this) Mismatches{ref};
+      return;
+    }
+
+    std::cerr << "Building mismatch cache at " << cache_filename() << std::endl;
+
+    std::string c;  // chr
+    unsigned int p;  // pos
+    unsigned int m;  // mappability
+    unsigned int s;  // skipped
+
+    // Construct from text files
+    std::vector<unsigned int> data_(n_values * ref.size());
+    uint64_t n_probs{0};
+    for (uint64_t chr{0}; chr != ref.n_chromosomes(); ++chr) {
+      const std::string chr_name{ref.name(chr)};
+      uint64_t start{0};
+      const uint64_t size{ref.size(chr)};
+      while (start < size) {
+        const uint64_t stop{std::min(size, start + block_size)};
+        const std::string file_name{text_input_dir + "/chr" + chr_name +
+              "_" + std::to_string(start) + ".txt"};
+        std::cerr << "Loading " << file_name << std::endl;
+
+        std::ifstream input_file{file_name.c_str()};
+        if (!input_file) {
+          throw Error("Cannot open file") << file_name;
+        } else {
+          for (uint64_t pos{start}; pos != stop; ++pos) {
+            // if (input_file.peek() == 'R') input_file.ignore(100000000, '\n');
+            input_file >> c >> p >> m >> s;
+            if (p != pos) throw Error("Position mismatch")
+                              << p << pos << "in" << file_name;
+            if (c != chr_name) throw Error("Chromosome mismatch")
+                                   << c << " " << chr_name << "in" << file_name;
+            std::array<unsigned int, n_values> & cs{
+              *reinterpret_cast<std::array<unsigned int, n_values> *>(
+                  &data_[index(ref.abspos(chr, pos))])};
+            for (unsigned int & v : cs) input_file >> v;
+            if (cs[0] != 1 && !s) {  // check for unexpected zero-mismatch  ma
+              const std::string sequence{ref.subseq(chr, pos, pos + m)};
+              std::cerr << "Unexpected zero mismatch count"
+                        << chr_name << " " << pos << " "  << cs[0]
+                        << " "  << s << " " << sequence.size()
+                        << " " << sequence << std::endl;;
+            }
+            if (!input_file) throw Error("Problem reading file")
+                                 << file_name << "at position" << pos << "of"
+                                 << start << "to" << stop;
+            input_file.get();
+          }
+        }
+        start = stop;
+      }
+    }
+    std::cerr << n_probs << " problems encountered" << std::endl;
+    bwrite(cache_filename(), data_[0], "Mismatch binary", data_.size());
+    new (this) Mismatches{ref};
+  }
+
+  uint64_t index(const uint64_t abspos,
+                 const uint64_t n_mismatches = 0) const {
+    return abspos * n_values + n_mismatches;
+  }
+  unsigned int count(const uint64_t abspos) const {
+    const uint64_t start_index{index(abspos)};
+    unsigned int result{0};
+    for (uint64_t i{start_index}; i != start_index + n_values; ++i)
+      result += data[i];
+    return result;
+  }
+  unsigned int count(const uint64_t abspos,
+                     const uint64_t n_mismatches) const {
+    return data[index(abspos, n_mismatches)];
+  }
+  unsigned int count(const uint64_t chr, const uint64_t pos,
+                     const uint64_t n_mismatches) const {
+    const uint64_t abspos{ref.abspos(chr, pos)};
+    return count(abspos, n_mismatches);
+  }
+
+ private:
+  std::string cache_filename() const {
+    return ref.fasta_file() + ".bin/mismatches.bin";
+  }
+  const Reference & ref;
+  MappedVector<unsigned int> data{"/dev/null", false};
+};
 
 }  // namespace paa
 

@@ -1,4 +1,10 @@
 //
+// lowess.h
+//
+// Parts at end copyright 2018 Peter Andrews @ CSHL
+//
+
+//
 // Copyright (c) 2015, Hannes Roest
 // All rights reserved.
 //
@@ -169,6 +175,7 @@
 #include <stdlib.h>
 #include <cmath>
 #include <algorithm>    // std::min, std::max
+#include <vector>
 
 namespace CppLowess {
 
@@ -548,5 +555,81 @@ class TemplatedLowess {
   }
 };
 }  // namespace CppLowess
+
+namespace paa {
+
+template <class XType, class YType>
+std::vector<double> lowess_correction(const std::vector<XType> & x_vals,
+                                      const std::vector<YType> & y_vals) {
+  // Sort data by X value
+  const std::vector<unsigned int> ordered_indexes{[&x_vals]() {
+      std::vector<unsigned int> result(x_vals.size());
+      for (unsigned int i{0}; i != result.size(); ++i) {
+        result[i] = i;
+      }
+      sort(result.begin(), result.end(),
+           [&x_vals](const unsigned int lhs, const unsigned int rhs) {
+             return x_vals[lhs] < x_vals[rhs];
+           });
+      return result;
+    }()};
+
+  // Get X values in order
+  const std::vector<double> ordered_x{[&ordered_indexes, &x_vals]() {
+      std::vector<double> result;
+      result.reserve(ordered_indexes.size());
+      for (const unsigned int i : ordered_indexes) {
+        result.push_back(x_vals[i]);
+      }
+      return result;
+    }()};
+
+  // Get Y values in order
+  const std::vector<double> ordered_y{[&ordered_indexes, &y_vals]() {
+      std::vector<double> result;
+      result.reserve(ordered_indexes.size());
+      for (const unsigned int i : ordered_indexes) {
+        result.push_back(y_vals[i]);
+      }
+      return result;
+    }()};
+
+  // Do LOWESS
+  const std::vector<double> ordered_smoothed{[&ordered_x, &ordered_y]() {
+      std::vector<double> result(ordered_x.size());
+      std::vector<double> resid_weights(ordered_x.size());
+      std::vector<double> weights(ordered_x.size());
+      CppLowess::TemplatedLowess<std::vector<double>, double> Lowess;
+      Lowess.lowess(ordered_x, ordered_y, 0.1, 5, 0.01,
+                    result, resid_weights, weights);
+      return result;
+    }()};
+
+  // Get inverted indexes
+  const std::vector<unsigned int> inverse_indexes{[&ordered_indexes]() {
+      std::vector<unsigned int> result;
+      result.reserve(ordered_indexes.size());
+      for (unsigned int i{0}; i != ordered_indexes.size(); ++i) {
+        result.push_back(i);
+      }
+      sort(result.begin(), result.end(),
+           [&ordered_indexes](const unsigned int lhs, const unsigned int rhs) {
+             return ordered_indexes[lhs] < ordered_indexes[rhs];
+           });
+      return result;
+    }()};
+
+  // Get smoothed results in good order
+  std::vector<double> result;
+  result.reserve(inverse_indexes.size());
+  for (const unsigned int i : inverse_indexes) {
+    result.push_back(ordered_smoothed[i]);
+  }
+  return result;
+}
+
+}  // namespace paa
+
+
 #endif  // CPPLOWESS_LOWESS_H
 

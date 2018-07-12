@@ -1,7 +1,7 @@
 //
 // matrix
 //
-// test matrix class
+// test BMatrix matrix class
 //
 // Copyright 2016 Peter Andrews @ CSHL
 //
@@ -24,7 +24,7 @@ using std::string;
 
 using paa::DiagMatrix;
 using paa::Error;
-using paa::Matrix;
+using paa::BMatrix;
 using paa::Progress;
 
 int main(int argc, char* argv[], char * []) try {
@@ -52,10 +52,10 @@ int main(int argc, char* argv[], char * []) try {
     std::uniform_real_distribution<double> real{0, 1};
     auto gen = bind(real, mersenne);
 
-    Matrix<double> l{nx, ny};
+    BMatrix<double> l{nx, ny};
     DiagMatrix<double> d{nx};
-    Matrix<double> r{nx2, nx, false};
-    Progress progress1{nx * ny, 0.1, "Matrix fill 1"};
+    BMatrix<double> r{nx2, nx, false};
+    Progress progress1{nx * ny, 0.1, "BMatrix fill 1"};
     for (uint64_t y{0}; y != ny; ++y) {
       for (uint64_t x{0}; x != nx; ++x) {
         l(x, y) = gen();
@@ -65,7 +65,7 @@ int main(int argc, char* argv[], char * []) try {
     for (uint64_t x{0}; x != nx; ++x) {
       d(x) = gen();
     }
-    Progress progress2{nx2 * nx, 0.1, "Matrix fill 2"};
+    Progress progress2{nx2 * nx, 0.1, "BMatrix fill 2"};
     for (uint64_t x{0}; x != nx2; ++x) {
       for (uint64_t y{0}; y != nx; ++y) {
         r(x, y) = gen();
@@ -78,7 +78,7 @@ int main(int argc, char* argv[], char * []) try {
     r.write("r");
 #endif
     const time_t start_time{time(nullptr)};
-    const Matrix<double> m{dist ?
+    const BMatrix<double> m{dist ?
           l.diag_mul(d, n_threads).dist_mul(r, out_dir) :
           l.diag_mul(d, n_threads).thread_mul(r, n_threads)};
     const time_t stop_time{time(nullptr)};
@@ -96,12 +96,12 @@ int main(int argc, char* argv[], char * []) try {
       cout << m << endl;
     }
   } else if (type == "read") {
-    const Matrix<double> l{argv[2]};
+    const BMatrix<double> l{argv[2]};
     const DiagMatrix<double> d{argv[3]};
-    const Matrix<double> r{argv[4], false};
+    const BMatrix<double> r{argv[4], false};
     const bool dist{static_cast<bool>(atoi(argv[5]))};
     const time_t start_time{time(nullptr)};
-    const Matrix<double> m{dist ?
+    const BMatrix<double> m{dist ?
           l.diag_mul(d, n_threads).dist_mul(r, out_dir) :
           l.diag_mul(d, n_threads).thread_mul(r, n_threads)};
     const time_t stop_time{time(nullptr)};
@@ -109,8 +109,8 @@ int main(int argc, char* argv[], char * []) try {
          << " minutes" << endl;
     m.save("read_result");
   } else if (type == "row") {
-    const Matrix<double> l{argv[2]};
-    const Matrix<double> r{argv[3], false};
+    const BMatrix<double> l{argv[2]};
+    const BMatrix<double> r{argv[3], false};
     const string out{argv[4]};
     l.thread_mul(r, n_threads).write(out);
   } else {

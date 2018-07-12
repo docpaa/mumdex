@@ -59,6 +59,12 @@ class DocSettings {
     pdf_ = pdf__;
     return *this;
   }
+  bool ticks() const { return ticks_; }
+  bool & ticks() { return ticks_; }
+  DocSettings & ticks(const bool ticks__) {
+    ticks_ = ticks__;
+    return *this;
+  }
   unsigned int width() const { return width_; }
   unsigned int & width() { return width_; }
   DocSettings & width(const unsigned int width__) {
@@ -82,6 +88,7 @@ class DocSettings {
   bool eps_{false};
   bool ps_{true};
   bool pdf_{false};
+  bool ticks_{true};
   unsigned int width_{default_doc_width};
   unsigned int height_{default_doc_height};
   double padding_{default_doc_padding};
@@ -107,7 +114,7 @@ class Layout {
   // Number X [optional x fractions]
   // Number Y [optional y fractions]
   // Sub-formats: space X index Y index CHAR format CHAR
-  // NX [(xf1 xf2 ... xfN-1X)] Y [(yf1 yf2 ... yfN-1X)][ ^x y layout^]...
+  // X [(xf1 xf2 ... xfN-1X)] Y [(yf1 yf2 ... yfN-1Y)][ ^x y layout^]...
   explicit Layout(Bounds bounds__, const std::string format = "",
                   double padding = 0.01) :
       bounds_{bounds__} {
@@ -314,6 +321,29 @@ class Multiplexer {
     managed_children_.push_back(std::move(m));
     return *this;
   }
+#if 1
+  template <class PTR>
+  Multiplexer & ownp(PTR * m) {
+    // parents().front()->managed_children_.push_back(std::unique_ptr<PTR>{m});
+    parents().front()->managed_children_.emplace_back(m);
+    return *this;
+  }
+#endif
+#if 0
+  template <class PTR>
+  Multiplexer & ownp(std::unique_ptr<Self> && m) {
+    parents().front().managed_parents_.push_back(std::move(m));
+    return *this;
+  }
+#endif
+  Multiplexer & own(std::unique_ptr<Parent> && m) {
+    managed_parents_.push_back(std::move(m));
+    return *this;
+  }
+  Multiplexer & own(std::unique_ptr<Child> && m) {
+    managed_children_.push_back(std::move(m));
+    return *this;
+  }
 
   // Access
   const std::vector<Parent *> & parents() const { return parents_; }
@@ -342,9 +372,16 @@ class Multiplexer {
   Self * self_{};
   std::vector<Parent *> parents_{};
   std::vector<Child *> children_{};
+
+ public:
   std::vector<std::unique_ptr<Parent>> managed_parents_{};
   std::vector<std::unique_ptr<Child>> managed_children_{};
 };
+
+template <class PTR>
+void ownp(const PTR ptr) {
+  if (ptr) ptr->ownp(ptr);
+}
 
 // Postscript document
 template<class PSPage>
@@ -877,8 +914,8 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     const Axis y_axis{range().yl(), range().yh(),
           (this->log_y_ ? 3 : 7) * y_page_scale, this->log_y_};
     using Ticks = std::vector<std::pair<double, bool>>;
-    const Ticks x_ticks{x_axis.ticks()};
-    const Ticks y_ticks{y_axis.ticks()};
+    const Ticks x_ticks{do_ticks_ ? x_axis.ticks() : Ticks()};
+    const Ticks y_ticks{do_ticks_ ? y_axis.ticks() : Ticks()};
     if (y_ticks.size()) {
       unsigned int max_size{0};
       for (const std::pair<double, bool> tick : y_ticks) {
@@ -892,16 +929,16 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
       }
       bounds.xl() += 0.65 * max_size * tick_size__;
     } else {
-      bounds.xl() += 0.7 * tick_size__;
+      if (do_ticks_) bounds.xl() += 0.7 * tick_size__;
     }
-    bounds.yl() += 1.3 * tick_size__;
+    if (do_ticks_) bounds.yl() += 1.3 * tick_size__;
 
     // Set x y scales
     double scales[2]{bounds.xw() / range().xw(), bounds.yw() / range().yw()};
 
     // Bounding box
     const double eb{border_width() * scale / 2};
-    do_bbox(doc, scale, bounds, eb);
+    if (do_border_) do_bbox(doc, scale, bounds, eb);
 
     // Axes and ticks and labels
     const double width1{0.5 * grid_width() * scale};
@@ -925,7 +962,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
 
     unsigned int n_pname{0};
     for (const bool y : {false, true}) {
-      for (const std::pair<double, bool> tick : (y ? y_axis : x_axis).ticks()) {
+      for (const std::pair<double, bool> tick : (y ? y_ticks : x_ticks)) {
         std::ostringstream pname_out;
         pname_out << "p" << ++n_pname;
         const std::string pname{pname_out.str()};
@@ -1044,6 +1081,16 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     std::unique_ptr<PSPage> page_{std::make_unique<PSPage>()};
     page_->manage(std::move(doc_));
     manage(std::move(page_));
+    return *this;
+  }
+
+  PSGraphT & do_ticks(const bool do_ticks__) {
+    do_ticks_ = do_ticks__;
+    return *this;
+  }
+
+  PSGraphT & do_border(const bool do_border__) {
+    do_border_ = do_border__;
     return *this;
   }
 
@@ -1181,6 +1228,8 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
   Text title_{};
   Text labels_[2];
   bool hist_{false};
+  bool do_ticks_{doc_defaults.ticks()};
+  bool do_border_{true};
   std::string ps_{};
 };
 
@@ -1486,6 +1535,9 @@ class PSSeries : public Multiplexer<PSPartT<PSSeries>, PSSeries, PSSeries> {
   virtual Marker marker(const double scale__ = 1.0) const {
     return Marker(circle(), scale__);
   }
+  PSPart & graph() {
+    return *parents().front();
+  }
 };
 
 std::string mix_colors(const std::string & c1, const std::string & c2) {
@@ -1637,7 +1689,8 @@ class PSHSeries : public PSSeries {
       doc << "sp} def\n";
       for (unsigned int i{0}; i != h_.size(); ++i) {
         if (h_[i] > 0) {
-          doc << y_val(i) * scales[1] << " " << bounds.xl() + i * binw << " h"
+          doc << (y_val(i) - range.yl()) * scales[1]
+              << " " << bounds.xl() + i * binw << " h"
               << "\n";
         }
       }
@@ -1833,7 +1886,7 @@ class PSXYSeries : public PSSeries {
 
   // Finalize
   void finalize(PSDoc & doc, const Bounds & bounds,
-                const Bounds & range, const PSPart & graph) {
+                const Bounds & range, const PSPart & part) {
     const double scales[2]{bounds.xw() / range.xw(),
           bounds.yw() / range.yw()};
     const double scale{pow(bounds.xw() * bounds.yw() /
@@ -1850,10 +1903,10 @@ class PSXYSeries : public PSSeries {
       lines_out << "0.5 lw np\n";
     }
     for (unsigned int i{0}; i != x.size(); ++i) {
-      if (graph.log_x() && x[i] <= 0) continue;
-      if (graph.log_y() && y[i] <= 0) continue;
-      const double xv{graph.log_x() ? log10(x[i]) : x[i]};
-      const double yv{graph.log_y() ? log10(y[i]) : y[i]};
+      if (part.log_x() && x[i] <= 0) continue;
+      if (part.log_y() && y[i] <= 0) continue;
+      const double xv{part.log_x() ? log10(x[i]) : x[i]};
+      const double yv{part.log_y() ? log10(y[i]) : y[i]};
       if (range.includes(xv, yv)) {
         doc << bounds.xl() + (xv - range.xl()) * scales[0] << " "
             << bounds.yl() + (yv - range.yl()) * scales[1] << " "
@@ -2111,7 +2164,7 @@ class PSXYMSeries : public PSXYSeries {
 
   // Finalize
   void finalize(PSDoc & doc, const Bounds & bounds,
-                const Bounds & range, const PSPart & graph) {
+                const Bounds & range, const PSPart & part) {
     const double scales[2]{bounds.xw() / range.xw(),
           bounds.yw() / range.yw()};
     const double scale{pow(bounds.xw() * bounds.yw() /
@@ -2120,10 +2173,10 @@ class PSXYMSeries : public PSXYSeries {
     doc << "/p {gs tr np " << scale << " sc "
         << draw_commands_ << "sp gr} def\n";
     for (unsigned int i{0}; i != x.size(); ++i) {
-      if (graph.log_x() && x[i] <= 0) continue;
-      if (graph.log_y() && y[i] <= 0) continue;
-      const double xv{graph.log_x() ? log10(x[i]) : x[i]};
-      const double yv{graph.log_y() ? log10(y[i]) : y[i]};
+      if (part.log_x() && x[i] <= 0) continue;
+      if (part.log_y() && y[i] <= 0) continue;
+      const double xv{part.log_x() ? log10(x[i]) : x[i]};
+      const double yv{part.log_y() ? log10(y[i]) : y[i]};
       if (range.includes(xv, yv)) {
         doc << bounds.xl() + (xv - range.xl()) * scales[0] << " "
             << bounds.yl() + (yv - range.yl()) * scales[1] << " ";

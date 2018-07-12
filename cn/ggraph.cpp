@@ -670,7 +670,7 @@ bool add_chromosomes(const RefCN & ref,
 bool add_ratio_lines(const vector<double> cn_lines,  // Not a reference
                      X11Graph & graph, const Event & event = Event()) {
   if (event.type != Event::Draw) return false;
-  if (graph.tiled_radio) return false;
+  // if (graph.tiled_radio) return false;
 
   // Ratio lines
   for (double y : cn_lines) {
@@ -680,8 +680,16 @@ bool add_ratio_lines(const vector<double> cn_lines,  // Not a reference
     }
     if (y > graph.range[1][0] && y < graph.range[1][1]) {
       const unsigned int y_pos(graph.coord(1, y));
-      XDrawLine(graph.display(), graph.pixmap, graph.gc,
-                graph.bounds[0][0], y_pos, graph.bounds[0][1], y_pos);
+      if (graph.tiled_radio) {
+        for (unsigned int s{0}; s != graph.n_files(); ++s) {
+          const int y_tiled{graph.y_tile(s, y_pos)};
+          XDrawLine(graph.display(), graph.pixmap, graph.gc,
+                    graph.bounds[0][0], y_tiled, graph.bounds[0][1], y_tiled);
+        }
+      } else {
+        XDrawLine(graph.display(), graph.pixmap, graph.gc,
+                  graph.bounds[0][0], y_pos, graph.bounds[0][1], y_pos);
+      }
     }
   }
   return false;
@@ -1056,6 +1064,7 @@ int main(int argc, char * argv[]) try {
   uint64_t n_rows{471000};  // size of trial data, to minimize extra memory
   bool x_jitter{false};
   double percent{100.0};
+  std::string display_name{X11Graph::default_title};
   --argc;
   while (argc) {
     if (argv[1][0] == '-') {
@@ -1108,6 +1117,10 @@ int main(int argc, char * argv[]) try {
         percent = atof(argv[2]);
         if (percent <= 0 || percent > 100)
           throw UsageError("Percent value must be between 0 and 100");
+        argc -= 2;
+        argv += 2;
+      } else if (matches("--name")) {
+        display_name = argv[2];
         argc -= 2;
         argv += 2;
       } else if (matches("--setup")) {
@@ -1245,7 +1258,7 @@ int main(int argc, char * argv[]) try {
 
       graph.add_call_back("Toggle ratio lines", X11Graph::CallBack{std::bind(
           &add_ratio_lines, cn_lines, _1, _2)}, false, true,
-        [&graph]() { return !graph.tiled_radio; });
+        [&graph]() { return true; /* !graph.tiled_radio; */ });
 
       graph.grid_radios[1][1].toggled = false;
       graph.grid_radios[0][1].toggled = false;
@@ -1253,7 +1266,7 @@ int main(int argc, char * argv[]) try {
   };
 
   // All individuals graph
-  X11Graph & graph{app.create<X11Graph>(info, geometry, "G-Graph", n_threads,
+  X11Graph & graph{app.create<X11Graph>(info, geometry, display_name, n_threads,
                                         add_special_features)};
 
   // Preload gene info to avoid wait time after zoom
@@ -1292,6 +1305,7 @@ Optional leading arguments (CAPS for numeric):
   -g | --geometry WIDTHxHEIGHT+XOFF+YOFF
   -i | --initial XLOW XHIGH YLOW YHIGH
   -t | --threads NTHREADS
+  -n | --name graph_title_word
   -r | --rows NROWS
   -f | --fullscreen
   -s | --setup ref_fasta

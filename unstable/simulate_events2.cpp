@@ -171,10 +171,10 @@ int main(int argc, char * argv[]) try {
   cout << "Mapping queries" << endl;
   ostringstream mummer;
   mummer << "echo 'rm -Rf ./mumdex && "
-         << "~/code/mumdex/mummer -verbose -samin -threads 12 -l "
+         << "~/mumdex/mummer -verbose -samin -threads 12 -l "
          << min_mum << " ~/analysis/mums/hg19/chrAll.fa "
          << "queries.sam && echo Merging MUMdex && "
-         << "~/code/mumdex/merge_mumdex mumdex 2> /dev/null' | bash";
+         << "~/mumdex/merge_mumdex mumdex 10 10 2> /dev/null' | bash";
   const time_t start_time{time(nullptr)};
   if (system(mummer.str().c_str()) == -1) {
     cerr << "Problem running mummer" << endl;

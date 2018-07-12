@@ -1093,6 +1093,15 @@ class Color {
     return result.str();
   }
 
+  std::string to_frac_string() const {
+    std::ostringstream result{};
+    for (unsigned int c{0}; c != 3; ++c) {
+      if (c) result << " ";
+      result << 1.0 * (&r)[c] / 255;
+    }
+    return result.str();
+  }
+
  private:
   int64_t r{0};
   int64_t g{0};
@@ -1237,9 +1246,25 @@ class X11Colors : public X11Win {
     if (close_on_click) app.close_window(window);
   }
 
+  void print_fracs() const {
+    // Output color names
+    for (unsigned int c{0}; c != colors.size(); ++c) {
+      if (c) {
+        std::cout << ",";
+        if ((c % 2) == 0) {
+          std::cout << std::endl;
+        } else {
+          std::cout << " ";
+        }
+      }
+      std::cout << '"' << colors[c].to_frac_string() << '"';
+    }
+    std::cout << std::endl;                          \
+  }
+
   void print_names() const {
     // Output color names
-    for (unsigned int c{0}; c != color_names.size(); ++c) {
+    for (unsigned int c{0}; c != colors.size(); ++c) {
       if (c) {
         std::cout << ",";
         if ((c % 4) == 0) {
@@ -1340,6 +1365,39 @@ class SavedConfig {
     return;
   }
 
+  template <class Graph>
+  void write_config(const std::string config_name,
+                    const Graph & graph) const {
+    std::ofstream config_file{config_name.c_str()};
+    if (!config_file) throw Error("Could not open graph config file for output")
+                          << config_name;
+    config_file
+        << "Default arc_radius = " << arc_radius << '\n'
+        << "Default arc_width = " << arc_width << '\n'
+        << "Default line_width = " << line_width << '\n';
+    for (unsigned int r{0}; r != graph.n_radios_to_write ; ++r) {
+      const unsigned int state{radio_states[r]};
+      config_file << "Radio " << r << " = " << state
+                  << " [" << graph.saved_radios[r]->description << "]\n";
+    }
+  }
+  void read_config(const std::string config_name) {
+    std::ifstream config_file{config_name.c_str()};
+    if (!config_file) throw Error("Could not open graph config file for input")
+                          << config_name;
+    std::string dummy;
+    config_file
+        >> dummy >> dummy >> dummy >> arc_radius
+        >> dummy >> dummy >> dummy >> arc_width
+        >> dummy >> dummy >> dummy >> line_width;
+    bool state;
+    unsigned int n_radios{0};
+    while (config_file >> dummy >> dummy >> dummy >> state) {
+      radio_states[n_radios++] = state;
+      config_file.ignore(1000, '\n');
+    }
+  }
+
   double arc_radius{default_arc_radius};
   double arc_width{default_arc_width};
   int line_width{default_line_width};
@@ -1400,13 +1458,11 @@ class X11Graph : public X11Win, public SavedConfig {
   X11Graph(X11App & app__, const DataInfo & data__,
            const Geometry & geometry_ =
            Geometry{{default_width, default_height}, {0, 0}},
-           const std::string & title = "",
+           const std::string & title_ = default_title,
            const unsigned int n_threads__ =
            std::thread::hardware_concurrency(),
            SpecialFeatures add_special_features =
            SpecialFeatures{[](X11Graph &) {}});
-
- public:
   template <class ... Input>
   X11Graph(X11App & app__, Values & x__, Values & y__, Input && ... input);
   virtual ~X11Graph();
@@ -1457,6 +1513,7 @@ class X11Graph : public X11Win, public SavedConfig {
   XPoint xcoord(const Point point) const;
   double icoord(const bool y, const int val) const;
   dPoint icoord(const Point point) const;
+  int y_tile(const unsigned int series, const int pos) const;
   unsigned int get_quadrant(const Point point) const;
   int min_border() const;
 
@@ -1485,6 +1542,7 @@ class X11Graph : public X11Win, public SavedConfig {
   void draw_controls();
   void draw_grid() const;
   void draw_ticks(Drawable drawable);
+  void draw_name();
   void redraw();
   void erase_border(Drawable drawable);
   void set_clip_rectangle(const unsigned int x, const unsigned int y,
@@ -1509,10 +1567,12 @@ class X11Graph : public X11Win, public SavedConfig {
 
   // Colors and GCs and shapes and names for series
   std::vector<std::string> make_colors() const;
-  void set_color(const unsigned int series, const unsigned int color);
+  void set_color(const unsigned int series, const unsigned int color,
+                 const bool save_color = true);
   void reset_colors();
   bool colors_changed{false};
   std::vector<std::string> color_names{};
+  std::vector<unsigned int> current_colors{};
   std::vector<std::string> series_names{};
   std::vector<XColor> series_colors{};
   std::vector<GC> series_arc_gcs{};
@@ -1595,6 +1655,7 @@ class X11Graph : public X11Win, public SavedConfig {
               }}}}};
   Radio tiled_radio{"Toggle stacked and tiled views", this, {-1, 3},
     {[this]() { prepare_draw(); }, [this]() { return n_files() - 1; }}, true};
+  Radio tiled_colors{"Toggle single color tiled view", this, {0, 0}, {}, true};
 
   std::vector<Radio> unnamed_radios{};
   std::deque<Radio *> radios{&help_radio, &coord_radio,
@@ -1611,6 +1672,7 @@ class X11Graph : public X11Win, public SavedConfig {
   std::vector<Radio> call_back_radios{};
 
   // Saved configuration history
+  std::string config_file_name{"ggraph.cfg"};
   SavedConfig current_config() const;
   void restore_config(const SavedConfig & config);
   void save_config(const SavedConfig & config);
@@ -1620,7 +1682,9 @@ class X11Graph : public X11Win, public SavedConfig {
         &arcs_radio, &outlines_radio, &lines_radio, &tiled_radio,
         &tick_radios[0], &tick_radios[1],
         &grid_radios[0][0], &grid_radios[0][1],
-        &grid_radios[1][0], &grid_radios[1][1]};
+        &grid_radios[1][0], &grid_radios[1][1], &tiled_colors};
+  const uint64_t n_radios_to_write{saved_radios.size()};
+  void read_config();
 
   // Number of threads to use
   unsigned int n_threads() const;
@@ -1637,16 +1701,22 @@ class X11Graph : public X11Win, public SavedConfig {
   bool y_movement{false};
 
   SpecialFeatures add_special_features{};
+
+  // Graph title
+  static constexpr const char * default_title{"G-Graph"};
+  const std::string title{default_title};
+  const std::string plot_name{title == default_title ? "cn" : title};
 };
 
 // Construct from data in exact format needed
 X11Graph::X11Graph(
     X11App & app__, const DataInfo & data__, const Geometry & geometry__,
-    const std::string & title, const unsigned int n_threads__,
+    const std::string & title_, const unsigned int n_threads__,
     SpecialFeatures add_special_features__) :
-    X11Win{app__, geometry__, true, title}, data_info{data__},
+    X11Win{app__, geometry__, true, title_}, data_info{data__},
   data{&data_info.first}, n_threads_{n_threads__},
-  add_special_features{add_special_features__} {
+  add_special_features{add_special_features__},
+  title{title_} {
     initialize();
   }
 
@@ -1664,7 +1734,7 @@ X11Graph::X11Graph(X11App & app__, Values & x__, Values & y__,
 X11Graph::~X11Graph() {
   // Save accumulated images as pdf
   if (image_names.size()) {
-    const std::string pdf_name{get_next_file("cn", "pdf")};
+    const std::string pdf_name{get_next_file(plot_name, "pdf")};
     std::ostringstream pdf_command;
     pdf_command << "convert -quality 100 -density "
                 << app.pixels_per_inch(0) << "x" << app.pixels_per_inch(1);
@@ -1681,6 +1751,8 @@ X11Graph::~X11Graph() {
                 << " in pdf file " << pdf_name << std::endl;
     }
   }
+  const SavedConfig to_save{current_config()};
+  to_save.write_config("ggraph.cfg.new", *this);
 
   // Free all graphics contexts
   for (GC gc_ : {border_gc, tiling_border_gc, border_fill_gc,
@@ -1744,6 +1816,7 @@ void X11Graph::initialize() {
 
   // Series colors and names
   color_names = make_colors();
+  current_colors.resize(color_names.size());
   series_names.resize(color_names.size());
   series_colors.resize(color_names.size());
   series_arc_gcs.resize(color_names.size());
@@ -1758,6 +1831,7 @@ void X11Graph::initialize() {
     }
     std::string & color_name{color_names[c]};
     XColor & color{series_colors[c]};
+    current_colors[c] = c;
     // std::cerr << c << " " << color_name << std::endl;
     if (!XAllocNamedColor(display(), app.colormap, color_name.c_str(),
                           &color, &color))
@@ -1865,10 +1939,11 @@ void X11Graph::initialize() {
     {&series_radios, &unnamed_radios})
     for (Radio & radio : (*radio_vec)) radios.push_back(&radio);
 
-  // set_tiling();
-  add_special_features(*this);
   // Map the window
   // XMapWindow(display(), window);
+
+  read_config();
+  add_special_features(*this);
 }
 
 // Data organization
@@ -2181,6 +2256,9 @@ inline void X11Graph::key(const XKeyEvent & event) {
               graph.prepare();
             });
         break;
+      case 'l':
+        read_config();
+        prepare_draw();
       default:
         return;
     }
@@ -2481,6 +2559,10 @@ inline void X11Graph::leave(const XCrossingEvent &) {
   draw_controls();
 }
 
+int X11Graph::y_tile(const unsigned int series, const int pos) const {
+  return (pos - bounds[1][0]) / shrink + steps[series] + bounds[1][0];
+}
+
 void X11Graph::prepare() {
   drawn = false;
   // Set graph area and clip rectangle
@@ -2525,7 +2607,8 @@ void X11Graph::prepare() {
     using YMap = std::function<int (int)>;
     YMap yident{[](const int pos) { return pos; }};
     YMap ytile{[this, s](const int pos) {
-        return (pos - bounds[1][0]) / shrink + steps[s] + bounds[1][0];
+        return y_tile(s, pos);
+        // return (pos - bounds[1][0]) / shrink + steps[s] + bounds[1][0];
       }};
     YMap ymap{tiled_radio ? ytile : yident};
     using XYMap = std::function<XPoint (double, double)>;
@@ -2604,6 +2687,7 @@ void X11Graph::draw() {
   const uint64_t line_block{max_request / 2};
   for (const uint64_t s : series_order) {
     if (do_arcs(s)) {
+      if (tiled_radio && tiled_colors) set_color(s, current_colors[0], false);
       for (unsigned int bs{0}; bs < arcs[s].size(); bs += arc_block) {
         const uint64_t n{bs + arc_block < arcs[s].size() ?
               arc_block : arcs[s].size() - bs};
@@ -2611,8 +2695,11 @@ void X11Graph::draw() {
                 display(), pixmap, series_arc_gcs[s], &arcs[s][bs],
                 static_cast<unsigned int>(n));
       }
+      if (tiled_radio && tiled_colors) set_color(s, current_colors[s], false);
     }
     if (do_lines(s)) {
+      if (tiled_radio && tiled_colors)
+        set_color(s, current_colors[1], false);
       for (unsigned int bs{0}; bs < points[s].size(); bs += line_block) {
         const uint64_t n{bs + line_block < points[s].size() ?
               line_block : points[s].size() - bs};
@@ -2620,6 +2707,7 @@ void X11Graph::draw() {
                           &points[s][bs], static_cast<unsigned int>(n),
                           CoordModeOrigin);
       }
+      if (tiled_radio && tiled_colors) set_color(s, current_colors[s], false);
     }
   }
   // Handle special drawing commands
@@ -2816,6 +2904,17 @@ void X11Graph::draw_ticks(Drawable drawable) {
   }
 }
 
+void X11Graph::draw_name() {
+  if (title == default_title) return;
+  const double avail_height{bounds[1][0] * 0.65};
+  const X11Font * fits{app.good_font(title, bounds[0][2], avail_height, gc)};
+  XDrawString(display(), pixmap, gc,
+              fits->centered_x(title, width() / 2),
+              fits->centered_y((bounds[1][0] - border_width) / 2),
+              const_cast<char *>(title.c_str()),
+              static_cast<unsigned int>(title.size()));
+}
+
 inline void X11Graph::redraw() {
   XCopyArea(display(), pixmap, window, gc, bounds[0][0], bounds[1][0],
             bounds[0][2], bounds[1][2], bounds[0][0], bounds[1][0]);
@@ -2928,6 +3027,7 @@ void X11Graph::save_image(const std::string & base_name) {
   help_radio = false;
   draw_controls();
   draw_ticks(pixmap);
+  draw_name();
   X11Win::save_image(base_name, n_files() * n_cols() + 10, call_back);
   erase_border(pixmap);
   inside = true;
@@ -3200,7 +3300,8 @@ std::vector<std::string> X11Graph::make_colors() const {
 }
 
 inline void X11Graph::set_color(const unsigned int series,
-                                const unsigned int color) {
+                                const unsigned int color,
+                                const bool save_color) {
   // Change GCs and redraw
   XSetForeground(display(), series_arc_gcs[series],
                  series_colors[color].pixel);
@@ -3208,6 +3309,7 @@ inline void X11Graph::set_color(const unsigned int series,
                  series_colors[color].pixel);
   XSetForeground(display(), series_radio_gcs[series],
                  series_colors[color].pixel);
+  if (save_color) current_colors[series] = color;
 }
 
 inline void X11Graph::reset_colors() {
@@ -3222,7 +3324,7 @@ inline void X11Graph::reset_colors() {
 std::vector<Radio> X11Graph::create_unnamed_radios() {
   return std::vector<Radio>{
     {"Save an image as xpm, png, pdf",
-          this, {-1, 2}, {[this]() { save_image("cn"); }}},
+          this, {-1, 2}, {[this]() { save_image(plot_name); }}},
     {"Zoom both axes out", this, {1, -1}, {[this]() { get_range(2);
           prepare_draw(); }, [this]() { return zoomed[0] || zoomed[1]; }}},
     {"Zoom X axis out", this, {2, -1}, {[this]() {
@@ -3311,12 +3413,20 @@ inline void X11Graph::restore_config(const SavedConfig & config) {
   for (unsigned int r{0}; r != saved_radios.size(); ++r)
     saved_radios[r]->toggled = config.radio_states[r];
   SavedConfig::restore_config(config);
+  if (n_files() == 1 && tiled_radio) tiled_radio.toggle();
   if (log_change) prepare_log();
   drawn = false;
 }
 
 inline void X11Graph::save_config(const SavedConfig & config) {
   saved_config.push_back(std::move(config));
+}
+inline void X11Graph::read_config() {
+  if (readable(config_file_name)) {
+    SavedConfig new_config{current_config()};
+    new_config.read_config(config_file_name);
+    restore_config(new_config);
+  }
 }
 
 inline unsigned int X11Graph::n_threads() const { return n_threads_; }

@@ -220,7 +220,7 @@ class EventMaker : public Event {
   const Reference & ref_;
   const Mappability & map_;
   random_device rd{};
-  const string bases{"acgt"};
+  const string bases{"ACGT"};
   mt19937_64 mersenne{rd()};
   function<uint32_t()> posGen;
   function<uint32_t()> boolGen;
@@ -247,7 +247,6 @@ int main(int argc, char * argv[]) try {
 
   vector<Event> events;
   ofstream queries{"queries.sam"};
-  ofstream sequences{"sequences.txt"};
   Progress generate_progress(n_events, 0.01, "Generate queries loop");
   for (unsigned int n{0}; n != n_events; ++n) {
     generate_progress();
@@ -260,23 +259,16 @@ int main(int argc, char * argv[]) try {
           << event.seq() << event.err()
         // << event.tag()
           << '\n';
-    sequences << event.seq() << endl;
     // tout << n << out.str() << event.tag() << flush;
     queries << out.str();
   }
   queries.close();
-  sequences.close();
-  cout << "Capitalizing sequence and zipping sam" << endl;
-  if (system("perl -p -e 'tr/acgt/ACGT/' queries.sam | "
-             "gzip -c > /mnt/wigclust20/data/temp/paa/queries.sam.gz") == -1) {
-    cerr << "Problem setting up query file" << endl;
-  }
   ostringstream mummer;
-  mummer << "echo '~/code/mumdex/mummer -verbose -samin -qthreads 12 -l "
-         << 2 << " ~/analysis/mums/hg19/chrAll.fa "
-         << "<(zcat /mnt/wigclust20/data/temp/paa/queries.sam.gz) "
-         << "2>&1 | grep ran && echo Merging MUMdex && "
-         << "~/code/mumdex/merge_mumdex mumdex 2> /dev/null' | bash";
+  mummer << "echo 'rm -Rf mumdex && ~/code/mumdex/mummer "
+         << "-verbose -samin -qthreads 24 -l "
+         << 2 << " ~/analysis/mums/hg19/chrAll.fa queries.sam "
+         << "&& echo Merging MUMdex && "
+         << "~/code/mumdex/merge_mumdex mumdex 10 10 2> /dev/null' | bash";
   cout << "Mapping queries" << endl;
   const time_t start_time{time(nullptr)};
   if (system(mummer.str().c_str()) == -1) {
@@ -287,10 +279,11 @@ int main(int argc, char * argv[]) try {
   sout << "MUMdex processing time was" << elapsed << "seconds or"
        << 60.0 * events.size() / elapsed / 1000000
        << "million reads per minute" << endl;
-  if (system("ms=$(du -bs mumdex | awk '{print $1}'); "
-             "ss=$(du -bs sequences.txt | awk '{print $1}'); "
-             "echo MUMdex size is $ms bytes, sequence size is $ss bytes, "
-             "sequence compression is $(perl -e 'print '$ss'/'$ms)") == -1) {
+  if (system(("ms=$(du -bs mumdex | awk '{print $1}'); "
+              "ss=" + std::to_string(n_events * (max_length + 1)) + "; "
+              "echo MUMdex size is $ms bytes, sequence size is $ss bytes, "
+              "sequence compression is $(perl -e 'print '$ss'/'$ms)").c_str())
+      == -1) {
     cerr << "Problem measuring compression" << endl;
   }
   const MUMdex mumdex{"mumdex"};
@@ -362,23 +355,32 @@ int main(int argc, char * argv[]) try {
   vector<unsigned int> excess_counts(max_length);
   unsigned int max_seen{0};
   Progress spurious_progress(n_spurious, 0.01, "Spurious check loop");
+  const uint64_t min_size{10};
+  const uint64_t max_size{40};
+  const uint64_t n_elem_size{max_size - min_size};
+  const uint64_t min_excess{0};
+  const uint64_t max_excess{20};
+  const uint64_t n_elem_excess{max_excess - min_excess};
+  vector<vector<uint64_t>> combined_counts(n_elem_size,
+                                           vector<uint64_t>(n_elem_excess));
   for (uint64_t m{0}; m != mumdex.n_mums(); ++m) {
     if (expected_mums.count(m)) continue;
     spurious_progress();
     const MUM mum{mumdex.mum(m)};
     ++length_counts[mum.length()];
-#if 0
-    const unsigned int min_map{min(
-        map.low(ref.abspos(mum.chromosome(), mum.position0())),
-        map.high(ref.abspos(mum.chromosome(),
-                            mum.position0() + mum.length() - 1)))};
-#endif
     const unsigned int min_map{map.min(ref.abspos(mum.chromosome(),
                                                   mum.position0()),
                                        mum.length())};
     const unsigned int excess{mum.length() - min_map};
     ++excess_counts[excess];
     max_seen = max(max_seen, max(excess, mum.length()));
+    for (uint64_t s{min_size}; s != max_size; ++s) {
+      for (uint64_t e{min_excess}; e != max_excess; ++e) {
+        if (mum.length() < s || excess < e) {
+          ++combined_counts[s - min_size][e - min_excess];
+        }
+      }
+    }
   }
 
   cout << setw(5) << "size"
@@ -397,6 +399,23 @@ int main(int argc, char * argv[]) try {
          << setprecision(9) << setw(16) << 1.0 * excess_counts[l] / n_spurious
          << setprecision(9) << setw(16) << 1.0 * n_excess / n_spurious
          << endl;
+  }
+
+  cout << endl;
+  cout << "x";
+  for (uint64_t e{min_excess}; e != max_excess; ++e) {
+    cout << "\t" << e;
+  }
+  cout << endl;
+  cout.precision(4);
+  // cout.setf(std::ios::scientific, std::ios::floatfield);
+  for (uint64_t s{min_size}; s != max_size; ++s) {
+    cout << s;
+    for (uint64_t e{min_excess}; e != max_excess; ++e) {
+      cout << "\t"
+           << 1.0 * combined_counts[s - min_size][e - min_excess] / n_spurious;
+    }
+    cout << endl;
   }
 
   return 0;
