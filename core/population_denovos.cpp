@@ -495,9 +495,8 @@ int main(int argc, char* argv[])  try {
   vector<future<MergeHelper>> futures;
   for (const auto s : pop.samples()) {
     ostringstream bridges_name;
-    bridges_name << bridges_dir << "/"
-                 << pop.sample(s) << "/chrbridges."
-                 << chromosome << ".bin";
+    bridges_name << bridges_dir << "/" << pop.sample(s) << "/"
+                 << get_bridge_file_name(ref, chromosome);
     futures.push_back(pool.run([s, start, stop](const string name){
           return MergeHelper{name, s, start, stop};
         }, bridges_name.str()));

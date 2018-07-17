@@ -121,7 +121,7 @@ endif
 LDFLAGS += $(LIBFLAGS)
 
 # Compile
-CXXFLAGS =  $(STD) $(FAST) $(DEBUG) $(WARN) $(INCFLAGS)
+CXXFLAGS = $(SPECIAL) $(STD) $(FAST) $(DEBUG) $(WARN) $(INCFLAGS)
 COMPILE.cpp = $(CXX) $(CXXFLAGS) -c
 
 # Normal compilation and linking pattern rules

@@ -23,6 +23,7 @@
 #include "error.h"
 #include "files.h"
 #include "mumdex.h"
+#include "threads.h"
 
 using std::async;
 using std::cerr;
@@ -35,7 +36,6 @@ using std::make_unique;
 using std::move;
 using std::ostringstream;
 using std::priority_queue;
-using std::ref;
 using std::sort;
 using std::string;
 using std::unique_ptr;
@@ -52,6 +52,7 @@ using paa::MUMdex;
 using paa::OneBridgeInfo;
 using paa::Progress;
 using paa::Reference;
+using paa::ThreadPool;
 
 const Reference * paa::ref_ptr;
 
@@ -158,7 +159,8 @@ int main(int argc, char* argv[])  try {
   if (0) {
     cerr << paa::max_support_save_length
          << " " << sizeof(OneBridgeInfo)
-         << " " << sizeof(BridgeInfo) << endl;
+         << " " << sizeof(BridgeInfo)
+         << " " << NEW_BRIDGE_FORMAT << endl;
   }
 
   if (argc != 3 && argc != 4) {
@@ -201,7 +203,7 @@ int main(int argc, char* argv[])  try {
       bridge_futures.push_back(async(
           std::launch::async,
           bridges, std::ref(mumdex),
-          start_pair, stop_pair, thread, max_output, ref(progress)));
+          start_pair, stop_pair, thread, max_output, std::ref(progress)));
     }
 
     // collect bridge info filenames from threads
@@ -211,8 +213,8 @@ int main(int argc, char* argv[])  try {
                        thread_filenames.begin(), thread_filenames.end());
     }
   }
-  const Reference refer{fasta_name};
-  ref_ptr = &refer;
+  const Reference ref{fasta_name};
+  ref_ptr = &ref;
 
   const uint64_t max_merged{max_bytes / sizeof(BridgeInfo) /
         chromosomes.size() / 2};
@@ -229,11 +231,11 @@ int main(int argc, char* argv[])  try {
 
   vector<future<uint64_t>> mergers;
   mergers.reserve(chromosomes.size());
+  ThreadPool pool{n_threads};
   for (unsigned int chromosome{0}; chromosome != chromosomes.size();
        ++chromosome) {
-    mergers.emplace_back(async(
-        std::launch::async,
-        [&input_files, chromosome, max_merged]() {
+    mergers.emplace_back(pool.run(
+        [&input_files, &ref, chromosome, max_merged]() {
           vector<BridgeInfo> merged;
           vector<BridgeInfo> to_save;
           if (1) {
@@ -252,11 +254,11 @@ int main(int argc, char* argv[])  try {
           }
 
           // merge bridge info
-          ostringstream output_file_name;
-          output_file_name << "chrbridges." << chromosome << ".bin";
-          FILE * output_file{fopen(output_file_name.str().c_str(), "wb")};
+          const string bridge_file_name{get_bridge_file_name(ref, chromosome)};
+          FILE * output_file{fopen(bridge_file_name.c_str(), "wb")};
           if (output_file == nullptr) {
-            throw Error("Could not open output file") << output_file_name.str();
+            throw Error("Could not open output file")
+                << bridge_file_name << paa::bridges_bad_message();
           }
           if (queue.empty()) {
             fclose(output_file);
@@ -296,7 +298,7 @@ int main(int argc, char* argv[])  try {
                   (const vector<BridgeInfo> & tosave) {
                     bwritec(output_file, &tosave[0], "bridges",
                             tosave.size() * sizeof(BridgeInfo));
-                  }, ref(to_save));
+                  }, std::ref(to_save));
               if (empty) {
                 break;
               }

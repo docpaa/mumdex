@@ -22,6 +22,7 @@ using std::cout;
 using std::endl;
 using std::exception;
 using std::lower_bound;
+using std::string;
 
 using paa::ref_ptr;
 using paa::sout;
@@ -42,7 +43,14 @@ int main(int argc, char* argv[])  try {
   const Reference ref{argv[1]};
   ref_ptr = &ref;
 
-  const MappedVector<BridgeInfo> bridges{argv[2]};
+  // Check for old/new version problem
+  const string bridges_name{argv[2]};
+  if ((bridges_name.find("chrbridges") != string::npos && NEW_BRIDGE_FORMAT) ||
+      (bridges_name.find("newbridges") != string::npos && !NEW_BRIDGE_FORMAT))
+    throw Error("new/old bridges file version problem") <<
+        paa::bridges_bad_message();
+
+  const MappedVector<BridgeInfo> bridges{bridges_name};
 
   MappedVector<BridgeInfo>::const_iterator begin{bridges.begin()};
   MappedVector<BridgeInfo>::const_iterator end{bridges.end()};

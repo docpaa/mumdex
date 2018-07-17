@@ -124,8 +124,8 @@ int main(int argc, char* argv[])  try {
     n_pairs.push_back(mumdex.n_pairs());
     ++argv;
     ostringstream bridges_name;
-    bridges_name << sample_name <<  "/bridges_snp/chrbridges."
-                 << chromosome << ".bin";
+    bridges_name << sample_name <<  "/bridges_snp/"
+                 << get_bridge_file_name(ref, chromosome);
     MergeHelper helper{bridges_name.str(), Sample{si++}, start, stop};
     if (helper.valid_start()) {
       helpers.push_back(move(helper));

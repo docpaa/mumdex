@@ -32,6 +32,7 @@ using std::right;
 using std::setw;
 using std::string;
 
+using paa::readable;
 using paa::sout;
 using paa::BridgeInfo;
 using paa::ChromosomeIndexLookup;
@@ -82,10 +83,12 @@ int main(int argc, char* argv[])  try {
 
       // Open bridges file
       ostringstream bridges_name;
-      bridges_name << bridges_dir << "/"
-                   << sample_name << "/chrbridges."
-                   << chr1 << ".bin";
+      bridges_name << bridges_dir << "/" << sample_name << "/"
+                   << get_bridge_file_name(ref, chr1);
       const FileVector<BridgeInfo> bridges{bridges_name.str()};
+      if (!readable(bridges_name.str()))
+        throw Error("Could not open bridges file")
+            << bridges_name.str() << paa::bridges_bad_message();
 
       // Advance to start position
       FileVector<BridgeInfo>::const_iterator start{

@@ -30,6 +30,7 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
+using paa::readable;
 using paa::sout;
 using paa::BridgeInfo;
 using paa::ChromosomeIndexLookup;
@@ -92,9 +93,11 @@ int main(int argc, char* argv[])  try {
         b[c].reserve(sample_names.size());
         for (const string & name : sample_names) {
           ostringstream bridges_name;
-          bridges_name << bridges_dir << "/"
-                       << name << "/chrbridges."
-                       << c << ".bin";
+          bridges_name << bridges_dir << "/" << name << "/"
+                       << get_bridge_file_name(ref, c);
+          if (!readable(bridges_name.str()))
+            throw Error("Could not open bridges file")
+                << bridges_name.str() << paa::bridges_bad_message();
           b[c].emplace_back(bridges_name.str());
         }
       }

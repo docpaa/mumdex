@@ -1,5 +1,5 @@
 //
-// poptxt
+// pop2txt
 //
 // Convert the population database from text to binary and vice-versa
 //
@@ -75,9 +75,7 @@ const Reference * paa::ref_ptr = nullptr;
 
 int main(int argc, char* argv[])  try {
   --argc;
-  if (argc != 2) {
-    throw Error("usage: poptxt ref input");
-  }
+  if (argc != 2) throw Error("usage: pop2txt ref input");
 
   const Reference ref{argv[1]};
   ref_ptr = &ref;

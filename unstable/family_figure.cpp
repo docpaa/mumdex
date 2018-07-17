@@ -171,9 +171,8 @@ int main(int argc, char* argv[], char * []) try {
   unsigned int n_samples_skipped{0};
   for (const auto s : pop.samples(pop.family(family_name))) {
     ostringstream bridges_name;
-    bridges_name << bridges_dir << "/"
-                 << pop.sample(s) << "/chrbridges."
-                 << chromosome << ".bin";
+    bridges_name << bridges_dir << "/" << pop.sample(s) << "/"
+                 << get_bridge_file_name(ref, chromosome);
     MergeHelper helper{bridges_name.str(), s, start, stop};
     if (helper.valid_start()) {
       helpers.push_back(move(helper));

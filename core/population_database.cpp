@@ -86,7 +86,7 @@ int main(int argc, char* argv[])  try {
   uint64_t n_saved{0};
   for (const string & dir : sample_dirs) {
     ostringstream bridges_name;
-    bridges_name << dir << "/chrbridges." << chromosome << ".bin";
+    bridges_name << dir << "/" << get_bridge_file_name(ref, chromosome);
     MergeHelper helper{bridges_name.str(), Sample{0}, start, stop};
     if (helper.valid_start()) {
       helpers.push_back(move(helper));

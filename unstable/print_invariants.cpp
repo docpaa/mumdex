@@ -29,6 +29,7 @@ using std::lower_bound;
 using std::ostringstream;
 using std::string;
 
+using paa::readable;
 using paa::BridgeInfo;
 using paa::ChromosomeIndexLookup;
 using paa::Error;
@@ -71,8 +72,11 @@ int main(int argc, char* argv[], char * []) try {
 
   // Bridges file
   ostringstream bridges_file_name;
-  bridges_file_name << samples_dir << "/" << sample_name << "/chrbridges."
-                    << chromosome << ".bin";
+  bridges_file_name << samples_dir << "/" << sample_name << "/"
+                    << get_bridge_file_name(ref, chromosome);
+  if (!readable(bridges_file_name.str()))
+    throw Error("Could not open bridges file")
+        << bridges_file_name.str() << paa::bridges_bad_message();
   const MappedVector<Info> bridges{bridges_file_name.str()};
 
   // Bridge range limits

@@ -26,13 +26,51 @@
 
 namespace paa {
 
+#ifndef NEW_BRIDGE_FORMAT
+#define NEW_BRIDGE_FORMAT 1
+#endif
+
+std::string bridges_bad_message() {
+  return R"xxx(
+Perhaps this error was caused by a bridges file version incomatibility
+
+To select old version of bridges structure for processing old chrbridges files:
+
+make clean && make SPECIAL=-DNEW_BRIDGE_FORMAT=0
+
+The new version is the default and works for up to 256 chromosomes
+   and the file output names start with newbridges
+
+An error is also thrown if you use the old version with too many chromosomes
+
+All programs are written to never confuse the two versions
+  since the output file names are different
+
+If you encounter an error using old files, swich to old version using
+  the modified make command above
+)xxx";
+}
+
+std::string get_bridge_file_name(const Reference & ref,
+                                 const unsigned int chromosome) {
+  std::ostringstream result;
+  if (NEW_BRIDGE_FORMAT) {
+    result << "newbridges." << ref.name(chromosome) << ".bin";
+  } else {
+    if (ref.n_chromosomes() > 128)
+      throw Error("Bad reference size for bridges") << bridges_bad_message();
+    result << "chrbridges." << chromosome << ".bin";
+  }
+  return result.str();
+}
+
 // run parameters
 constexpr bool exclude_snps{false};
 constexpr unsigned int min_support_length{20};
 
 // fit in more data for shorter reads and fewer chromosomes than mumdex allows
 constexpr unsigned int fewer_chromosome_bits{7};
-constexpr unsigned int fewer_position_bits{28};
+constexpr unsigned int fewer_position_bits{31};
 constexpr unsigned int short_read_bits{9};
 constexpr unsigned int max_support_save_length{(1 << short_read_bits) - 1};
 constexpr bool longer_reads_than_fit_in_short_read_bits{false};
@@ -291,6 +329,16 @@ class OneBridgeInfo {
   }
 
  private:
+#if NEW_BRIDGE_FORMAT
+  uint64_t pos1_: fewer_position_bits;             // 31 31
+  uint64_t pos2_: fewer_position_bits;             // 31 62
+  uint64_t high1_: 1;                              // 1  63
+  uint64_t high2_: 1;                              // 1  64
+  uint64_t chr1_: chromosome_bits;                 // 8  72
+  uint64_t chr2_: chromosome_bits;                 // 8  80
+  uint64_t padding_: 1;                            // 1  81
+  int64_t offset_: read_bits + 1;                  // 11 92
+#else
   uint32_t pos1_: position_bits;                   // 32 32
   uint32_t pos2_: position_bits;                   // 32 64
   uint64_t high1_: 1;                              // 1  65
@@ -299,6 +347,7 @@ class OneBridgeInfo {
   uint64_t chr2_: fewer_chromosome_bits;           // 7  80
   uint64_t padding_: 1;                            // 1  81
   int64_t offset_: read_bits + 1;                  // 11 92
+#endif
 
  protected:
   uint64_t anchor1_length_: short_read_bits;       // 9  101
@@ -384,7 +433,8 @@ class MergeHelper {
         if ((file = fopen(file_name.c_str(), "rb")) == nullptr) {
           sleep(5);
           if ((file = fopen(file_name.c_str(), "rb")) == nullptr) {
-            throw Error("Could not open bridges file") << file_name;
+            throw Error("Could not open bridges file")
+                << file_name << bridges_bad_message();
           }
         }
       }
