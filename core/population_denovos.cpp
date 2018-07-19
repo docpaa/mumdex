@@ -142,7 +142,6 @@ using Anchors = MUMdex::Anchors;
 using Bridge = Bridges::Bridge;
 
 const bool verbose{false};
-const unsigned int n_threads{24};
 
 const bool exclude_snps{true};
 const bool allow_skips{true};
@@ -462,9 +461,9 @@ class SlowChecks {
 };
 
 int main(int argc, char* argv[])  try {
-  if (--argc != 7)
+  if (--argc != 8)
     throw Error("usage: population_denovos ref family_file bridges_dir "
-                "samples_dir chromosome start stop");
+                "samples_dir n_threads chromosome start stop");
 
   // Other command line arguments
   const string reference_file{argv[1]};
@@ -475,11 +474,12 @@ int main(int argc, char* argv[])  try {
   const Population pop{family_file};
   const string bridges_dir{argv[3]};
   const string samples_dir{argv[4]};
-  const string chromosome_name{argv[5]};
+  const unsigned int n_threads{static_cast<unsigned int>(atoi(argv[5]))};
+  const string chromosome_name{argv[6]};
   const unsigned int chromosome{chr_lookup[chromosome_name]};
   const unsigned int chromosome_offset{ref.offset(chromosome)};
-  const unsigned int start{static_cast<unsigned int>(atoi(argv[6]))};
-  const unsigned int stop{static_cast<unsigned int>(atoi(argv[7]))};
+  const unsigned int start{static_cast<unsigned int>(atoi(argv[7]))};
+  const unsigned int stop{static_cast<unsigned int>(atoi(argv[8]))};
 
   denovo_family_limit = static_cast<unsigned int>(
       std::max(1.0 * denovo_min_limit,
@@ -488,44 +488,47 @@ int main(int argc, char* argv[])  try {
   // Parallel process slow candidate checks
   SlowChecks slow_checks(pop, ref, chromosome, samples_dir);
 
-  ThreadPool pool{n_threads};
-  ThreadPool::Results<void> results;
-
   // Set up queue of bridge files, in parallel to save time
   vector<future<MergeHelper>> futures;
-  for (const auto s : pop.samples()) {
-    ostringstream bridges_name;
-    bridges_name << bridges_dir << "/" << pop.sample(s) << "/"
-                 << get_bridge_file_name(ref, chromosome);
-    futures.push_back(pool.run([s, start, stop](const string name){
-          return MergeHelper{name, s, start, stop};
-        }, bridges_name.str()));
-  }
   deque<MergeHelper> helpers;
   using PQueue = priority_queue<MergeHelper*, vector<MergeHelper *>,
       MergeHelperCompare>;
   PQueue queue{MergeHelperCompare()};
   unsigned int n_samples_skipped{0};
   unsigned int n_samples_loaded{0};
-  for (const auto s : pop.samples()) {
-    MergeHelper helper{futures[n_samples_loaded].get()};
-    if (helper.valid_start()) {
-      helpers.push_back(move(helper));
-      queue.push(&helpers.back());
-    } else {
-      ++n_samples_skipped;
+  {
+    ThreadPool pool{n_threads};
+    for (const auto s : pop.samples()) {
+      ostringstream bridges_name;
+      bridges_name << bridges_dir << "/" << pop.sample(s) << "/"
+                   << get_bridge_file_name(ref, chromosome);
+      futures.push_back(pool.run([s, start, stop](const string name){
+            return MergeHelper{name, s, start, stop};
+          }, bridges_name.str()));
     }
-    ++n_samples_loaded;
-    serr << pop.family(pop.family(s))
-         << pop.sample(s)
-         << pop.member(s)
-         << queue.size()
-         << n_samples_loaded
-         << endl;
+    for (const auto s : pop.samples()) {
+      MergeHelper helper{futures[n_samples_loaded].get()};
+      if (helper.valid_start()) {
+        helpers.push_back(move(helper));
+        queue.push(&helpers.back());
+      } else {
+        ++n_samples_skipped;
+      }
+      ++n_samples_loaded;
+      serr << pop.family(pop.family(s))
+           << pop.sample(s)
+           << pop.member(s)
+           << queue.size()
+           << n_samples_loaded
+           << endl;
+    }
   }
 
   if (!allow_skips && n_samples_skipped)
     throw Error("Samples skipped") << n_samples_skipped;
+
+  ThreadPool pool{n_threads};
+  ThreadPool::Results<void> results;
 
   // Document the run
   serr << "Run parameters:" << endl
