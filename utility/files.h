@@ -59,6 +59,15 @@ inline void unlink(const std::string & file) {
   }
 }
 
+inline uint64_t get_block_size(const std::string name) {
+  struct stat sb;
+  if (stat(name.c_str(), &sb) == -1) {
+    perror("stat");
+    throw Error("stat call failure");
+  }
+  return sb.st_blksize;
+}
+
 inline std::string get_next_file(const std::string & name,
                                  const std::string ext) {
   static std::map<std::string, unsigned int> last_indexes;

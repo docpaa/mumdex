@@ -261,8 +261,6 @@ class OneBridgeInfo {
            << mate_anchor2_length();
   }
 
-
-
   std::string description() const {
     const unsigned int hmega{100000000};
     const unsigned int tmega{10000000};
@@ -364,8 +362,7 @@ STREAM & operator<<(STREAM & out, const OneBridgeInfo & bridge) {
 
 class BridgeInfo : public OneBridgeInfo {
  public:
-  BridgeInfo() :
-      OneBridgeInfo{} { }
+  BridgeInfo() : OneBridgeInfo{} { }
   explicit BridgeInfo(const OneBridgeInfo info) :
       OneBridgeInfo{info} {
     if (mate_anchor1_length_) ++mate_anchor1_count_;
@@ -425,7 +422,8 @@ class MergeHelper {
   explicit MergeHelper(const std::string & file_name_,
                        const Sample sample_arg,
                        const unsigned int start_,
-                       const unsigned int stop_) :
+                       const unsigned int stop_,
+                       const bool initial_advance = true) :
       file_name{file_name_}, sample_{sample_arg},
     start{start_}, stop{stop_} {
       if ((file = fopen(file_name.c_str(), "rb")) == nullptr) {
@@ -458,7 +456,7 @@ class MergeHelper {
           throw Error("Problem seeking in file") << file_name;
         }
       }
-      if (advance()) {
+      if (!initial_advance || advance()) {
         valid_start_ = true;
       }
     }
@@ -477,6 +475,17 @@ class MergeHelper {
       fclose(file);
       file = nullptr;
     }
+  }
+
+  uint64_t read_block(const uint64_t n_desired, BridgeInfo * data) {
+    if (!file || !n_desired) return 0;
+    uint64_t n_read{fread(data, sizeof(BridgeInfo), n_desired, file)};
+    while (n_read && (data + n_read - 1)->pos1() >= stop) --n_read;
+    if (n_read < n_desired) {
+      fclose(file);
+      file = nullptr;
+    }
+    return n_read;
   }
 
   bool advance() {
@@ -503,7 +512,7 @@ class MergeHelper {
   const BridgeInfo current() const {
     return current_;
   }
-  unsigned int sample() const {
+  Sample sample() const {
     return sample_;
   }
   bool valid_start() const {

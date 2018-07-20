@@ -17,3 +17,4 @@ mummer : files.o
 mview : mview.x11o
 population_bridges : utility.o
 population_denovos : utility.o
+population_denovos2 : utility.o

@@ -66,13 +66,10 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <deque>
 #include <exception>
 #include <future>
 #include <iostream>
-#include <list>
 #include <mutex>
-#include <queue>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -88,26 +85,23 @@
 #include "utility.h"
 
 using std::array;
-using std::async;
 using std::cerr;
 using std::cout;
 using std::defer_lock;
-using std::deque;
 using std::endl;
 using std::exception;
 using std::future;
-using std::list;
 using std::lock_guard;
 using std::lower_bound;
-using std::move;
 using std::mutex;
 using std::ostream;
 using std::ostringstream;
-using std::priority_queue;
+using std::pair;
 using std::string;
 using std::unique_lock;
 using std::vector;
 
+using paa::get_block_size;
 using paa::serr;
 using paa::sout;
 using paa::BridgeInfo;
@@ -118,7 +112,6 @@ using paa::Family;
 using paa::FileVector;
 using paa::Mappability;
 using paa::MergeHelper;
-using paa::MergeHelperCompare;
 using paa::MUM;
 using paa::MUMindex;
 using paa::Pair;
@@ -145,7 +138,6 @@ using Bridge = Bridges::Bridge;
 const bool verbose{false};
 
 const bool exclude_snps{true};
-const bool allow_skips{true};
 
 const double denovo_family_fraction{0.02};
 const unsigned int denovo_min_limit{5};
@@ -461,6 +453,120 @@ class SlowChecks {
   uint64_t n_denovo{0};
 };
 
+class BlockMerger {
+ public:
+  using Item = pair<BridgeInfo, Sample>;
+  using Bridges = vector<Item>;
+
+  BlockMerger(ThreadPool & pool_,
+              const uint64_t block_size_,
+              vector<MergeHelper> & helpers_) :
+      pool{pool_},
+    block_size{block_size_},
+    helpers{helpers_},
+    highest{helpers.size()},
+    buffers(helpers.size(), vector<BridgeInfo>(one_load_size)) {
+      bridges.reserve(2 * all_load_size);
+      cerr << "BlockMerger size is "
+           << 1.0 * bridges.capacity() * sizeof(Item) / 1024 / 1024 / 1024
+           << " GB" << endl;
+    }
+
+  bool available() {
+    // Reload if necessary
+    if (current_ == last) {
+      current_ = 0;
+
+      // Move unused bridges to start of vector
+      if (last != bridges.size()) {
+        copy(bridges.begin() + last, bridges.end(), bridges.begin());
+      }
+      bridges.resize(bridges.size() - last);
+
+      // Count remaining bridges
+      static vector<unsigned int> counts;
+      counts.clear();
+      counts.resize(helpers.size());
+      for (const Item & item : bridges) ++counts[item.second];
+
+      // Load blocks in parallel
+      static vector<future<void>> futures;
+      futures.clear();
+      for (uint64_t h{0}; h != helpers.size(); ++h)
+        futures.push_back(pool.run(std::ref(*this), h,
+                                   counts[h] < one_load_size));
+      uint64_t total_loaded{0};
+      const BridgeInfo zero_bridge{};
+      for (uint64_t h{0}; h != helpers.size(); ++h) {
+        futures[h].get();
+        const vector<BridgeInfo> & result{buffers[h]};
+        for (const BridgeInfo & bridge : result)
+          bridges.emplace_back(bridge, helpers[h].sample());
+        if (result.size()) {
+          total_loaded += result.size();
+          counts[h] += result.size();
+          highest[h] = result.back();
+        }
+      }
+
+      if (!total_loaded) {
+        sort(bridges.begin(), bridges.end());
+        last = bridges.size();
+        return current_ != last;
+      }
+
+      // Determine last good bridge index
+      BridgeInfo lowest{};
+      bool lowest_unset{true};
+      for (uint64_t h{0}; h != helpers.size(); ++h) {
+        if (counts[h] && (lowest_unset || highest[h] < lowest)) {
+          lowest = highest[h];
+          lowest_unset = false;
+        }
+      }
+      // Sort bridges
+      sort(bridges.begin(), bridges.end());
+      if (lowest_unset) {
+        cerr << "lowest unset" << endl;
+        if (bridges.size()) throw Error("Expected empty bridges");
+        last = bridges.size();
+      } else {
+        const Item lowest_item{lowest, Sample{0}};
+        last = lower_bound(bridges.begin(), bridges.end(), lowest_item) -
+            bridges.begin();
+      }
+    }
+    return current_ != last;
+  }
+
+  // Load a block
+  void operator()(const uint64_t helper, const bool load) {
+    vector<BridgeInfo> & buffer{buffers[helper]};
+    buffer.clear();
+    if (!load) return;
+    buffer.resize(one_load_size);
+    const uint64_t n_read{
+      helpers[helper].read_block(one_load_size, &buffer[0])};
+    buffer.resize(n_read);
+  }
+
+  Item & current() { return bridges[current_]; }
+
+  void advance() { ++current_; }
+
+ private:
+  ThreadPool & pool;
+  const uint64_t block_size;
+  const uint64_t one_load_size{block_size};
+  vector<MergeHelper> & helpers;
+  vector<BridgeInfo> highest;
+  vector<vector<BridgeInfo>> buffers;
+  const uint64_t all_load_size{helpers.size() * one_load_size};
+  Bridges bridges{};
+  uint64_t current_{0};
+  uint64_t last{0};
+};
+
 void bridge_out(ostream & out, const BridgeInfo & bridge) {
   out << " " << bridge.chr1()
       << " " << bridge.pos1()
@@ -501,47 +607,39 @@ int main(int argc, char* argv[])  try {
   // Parallel process slow candidate checks
   SlowChecks slow_checks(pop, ref, chromosome, samples_dir);
 
-  // Set up queue of bridge files, in parallel to save time
-  vector<future<MergeHelper>> futures;
-  deque<MergeHelper> helpers;
-  using PQueue = priority_queue<MergeHelper*, vector<MergeHelper *>,
-      MergeHelperCompare>;
-  PQueue queue{MergeHelperCompare()};
-  unsigned int n_samples_skipped{0};
-  unsigned int n_samples_loaded{0};
-  {
-    ThreadPool pool{n_threads};
-    for (const auto s : pop.samples()) {
-      ostringstream bridges_name;
-      bridges_name << bridges_dir << "/" << pop.sample(s) << "/"
-                   << get_bridge_file_name(ref, chromosome);
-      futures.push_back(pool.run([s, start, stop](const string name){
-            return MergeHelper{name, s, start, stop};
-          }, bridges_name.str()));
-    }
-    for (const auto s : pop.samples()) {
-      MergeHelper helper{futures[n_samples_loaded].get()};
-      if (helper.valid_start()) {
-        helpers.push_back(move(helper));
-        queue.push(&helpers.back());
-      } else {
-        ++n_samples_skipped;
-      }
-      ++n_samples_loaded;
-      serr << pop.family(pop.family(s))
-           << pop.sample(s)
-           << pop.member(s)
-           << queue.size()
-           << n_samples_loaded
-           << endl;
-    }
-  }
-
-  if (!allow_skips && n_samples_skipped)
-    throw Error("Samples skipped") << n_samples_skipped;
-
   ThreadPool pool{n_threads};
   ThreadPool::Results<void> results;
+
+  // Set up bridge files to start position, in parallel to save time
+  vector<future<MergeHelper>> futures;
+  futures.reserve(pop.n_samples());
+  uint64_t block_size{4096};
+  for (const auto s : pop.samples()) {
+    ostringstream bridges_name;
+    bridges_name << bridges_dir << "/" << pop.sample(s) << "/"
+                 << get_bridge_file_name(ref, chromosome);
+    if (!s) {
+      block_size = std::max(block_size, get_block_size(bridges_name.str()));
+      cerr << "Block size is " << block_size << endl;
+    }
+    futures.push_back(pool.run([s, start, stop](const string name){
+          return MergeHelper{name, s, start, stop, false};
+        }, bridges_name.str()));
+  }
+  vector<MergeHelper> helpers;
+  // helpers.reserve(pop.n_samples());
+  unsigned int n_samples_loaded{0};
+  for (const auto s : pop.samples()) {
+    helpers.push_back(futures[n_samples_loaded].get());
+    serr << pop.family(pop.family(s))
+         << pop.sample(s)
+         << pop.member(s)
+         << ++n_samples_loaded
+         << endl;
+  }
+
+  ThreadPool load_pool{n_threads};
+  BlockMerger merger{load_pool, block_size, helpers};
 
   // Document the run
   serr << "Run parameters:" << endl
@@ -553,7 +651,6 @@ int main(int argc, char* argv[])  try {
        << "  stop" << stop << endl
        << "  n_families" << pop.n_families() << endl
        << "  n_samples" << pop.n_samples() << endl
-       << "  n_samples_skipped" << n_samples_skipped << endl
        << "  denovo_family_limit" << denovo_family_limit << endl
        << "  exclude_snps" << exclude_snps << endl
        << "  min_support_length" << min_support_length << endl
@@ -597,6 +694,7 @@ int main(int argc, char* argv[])  try {
     if (reset) {
       all_bridges.clear();
       all_samples.clear();
+      parent_counts.clear();
       total_bridge_count = 0;
       normal_bridge_count = 0;
       normal_seen = 0;
@@ -605,26 +703,27 @@ int main(int argc, char* argv[])  try {
 
     // Add a bridge to the list if the same event
     bool bridge_done{true};
-    if (queue.size()) {
-      MergeHelper * top{queue.top()};
-      const BridgeInfo current{top->current()};
+    if (merger.available()) {
+      const BlockMerger::Item & item{merger.current()};
+      const BridgeInfo current{item.first};
+      if (all_bridges.size() && current < all_bridges.back()) {
+        cerr << "Bridge misordering" << endl;
+        bridge_out(cout, current);
+        exit(1);
+      }
       if (all_bridges.empty() || !(all_bridges.back() < current)) {
         ++n_no_cut;
         bridge_done = false;
         all_bridges.push_back(current);
         total_bridge_count += current.bridge_count();
-        const Sample sample{top->sample()};
-        if (pop.is_parent(sample) || pop.is_normal(sample) ||
-            pop.is_matched(sample)) {
+        const Sample sample{item.second};
+        all_samples.emplace_back(sample);
+        if (pop.is_parent(sample)) {
           normal_bridge_count += current.bridge_count();
           ++normal_seen;
         }
-        all_samples.emplace_back(sample);
-        queue.pop();
-        if (top->advance()) queue.push(top);
+        merger.advance();
       }
-      if (queue.empty()) bridge_done = true;
-      if (bridge_done) reset = true;
     } else {
       if (all_samples.empty()) {
         if (verbose) cerr << "bridge queue empty" << endl;
@@ -634,6 +733,8 @@ int main(int argc, char* argv[])  try {
 
     // No new bridges added, so bridge list is ready to process
     if (bridge_done) {
+      reset = true;
+
       // The first bridge, the exemplar since all are the same signature
       const BridgeInfo & bridge{all_bridges[0]};
 
@@ -680,7 +781,6 @@ int main(int argc, char* argv[])  try {
       const unsigned int mum1_map{map.low_high(bridge.high1(), mum1_abspos)};
       const unsigned int mum2_map{map.low_high(bridge.high2(), mum2_abspos)};
 
-      parent_counts.clear();
       for (unsigned int s{0}; s != all_samples.size(); ++s)
         if (pop.is_parent(all_samples[s]))
           parent_counts.push_back(all_bridges[s].bridge_count());
@@ -762,7 +862,10 @@ int main(int argc, char* argv[])  try {
         ++n_good_mate_support;
 
         // Short excess mappability cut
-        if (max_anchor1_support < mum1_map) throw Error("Mappability");
+        if (max_anchor1_support < mum1_map) {
+          cerr << "Mappability error" << endl;
+          exit(1);
+        }
         if (max_anchor1_support < min_excess_mappability + mum1_map)
           continue;
         if (max_anchor2_support < min_excess_mappability +  mum2_map)
