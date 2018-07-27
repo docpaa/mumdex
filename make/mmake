@@ -1,0 +1,6 @@
+#! /bin/bash
+
+(cd ~/mumdex ; make -j $(nproc --all) > /dev/null) 2>&1
+
+
+

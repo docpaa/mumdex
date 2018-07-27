@@ -189,11 +189,9 @@ count : ; @ cat */*.{cpp,h} | sed 's/[ \t]+/ /g' | sort | uniq | wc -l
 
 # setup binary directory
 bin : all
-	mkdir -p ~/bin
-	make fbin
+	@mkdir -p ~/bin
+	@make fbin
 
 fbin :
-	rsync $(shell find . -perm -u=x -type f) ~/bin/
-
-
-
+	@rsync --exclude $(shell find $(shell pwd) -perm -u=x -type f | fgrep -v .git) ~/bin/
+	@echo bin transfer done

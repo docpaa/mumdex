@@ -646,7 +646,8 @@ class BlockMerger {
   uint64_t last{0};
 };
 
-void bridge_out(ostream & out, const BridgeInfo & bridge, const bool end_line = false) {
+void bridge_out(ostream & out, const BridgeInfo & bridge,
+                const bool end_line = false) {
   out << " " << bridge.chr1()
       << " " << bridge.pos1()
       << " " << bridge.high1()
