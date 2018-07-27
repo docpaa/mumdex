@@ -1,0 +1,5 @@
+#! /bin/bash
+
+command="$@"
+perl -e "print 0 + (${command// /}) . "'"\n"'
+

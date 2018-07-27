@@ -187,7 +187,13 @@ zip :  spotless
 # Count code
 count : ; @ cat */*.{cpp,h} | sed 's/[ \t]+/ /g' | sort | uniq | wc -l
 
+# setup binary directory
+bin : all
+	mkdir -p ~/bin
+	make fbin
 
+fbin :
+	rsync $(shell find . -perm -u=x -type f) ~/bin/
 
 
 

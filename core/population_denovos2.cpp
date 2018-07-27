@@ -90,6 +90,7 @@ using std::cout;
 using std::defer_lock;
 using std::endl;
 using std::exception;
+using std::flush;
 using std::future;
 using std::lock_guard;
 using std::lower_bound;
@@ -101,6 +102,7 @@ using std::string;
 using std::unique_lock;
 using std::vector;
 
+using paa::file_size;
 using paa::get_block_size;
 using paa::serr;
 using paa::sout;
@@ -111,7 +113,6 @@ using paa::Error;
 using paa::Family;
 using paa::FileVector;
 using paa::Mappability;
-using paa::MergeHelper;
 using paa::MUM;
 using paa::MUMindex;
 using paa::Pair;
@@ -453,6 +454,72 @@ class SlowChecks {
   uint64_t n_denovo{0};
 };
 
+class BlockReader {
+ public:
+  explicit BlockReader(const std::string & file_name_,
+                       const unsigned int start,
+                       const unsigned int stop_) :
+      file_name{file_name_},
+    stop{stop_} {
+      if (start != 0) {
+        // find starting position
+        const FileVector<BridgeInfo> mapped{file_name};
+        const FileVector<BridgeInfo>::const_iterator found{
+          std::lower_bound(mapped.begin(), mapped.end(), start,
+                           [](const BridgeInfo & bridge,
+                              const unsigned int val) {
+                             return bridge.pos1() < val;
+                           })};
+        current = found - mapped.begin();
+        size = mapped.size();
+      } else {
+        size = file_size(file_name) / sizeof(BridgeInfo);
+      }
+    }
+
+  BlockReader(const BlockReader &) = delete;
+  BlockReader & operator=(const BlockReader &) = delete;
+  BlockReader(BlockReader && rhs) = default;
+
+  uint64_t read_block(const uint64_t n_desired, BridgeInfo * data) {
+    if (!n_desired || current >= size) return 0;
+
+    // Open file, trying hard to do so
+    FILE * file;
+    if ((file = fopen(file_name.c_str(), "rb")) == nullptr) {
+      sleep(2);
+      if ((file = fopen(file_name.c_str(), "rb")) == nullptr) {
+        sleep(5);
+        if ((file = fopen(file_name.c_str(), "rb")) == nullptr) {
+          throw Error("Could not open bridges file")
+              << file_name << paa::bridges_bad_message();
+        }
+      }
+    }
+
+    // Seek to current position
+    if (fseek(file, current * sizeof(BridgeInfo), SEEK_SET))
+      throw Error("Problem seeking in file") << file_name;
+
+    // Read block and close file
+    uint64_t n_read{fread(data, sizeof(BridgeInfo), n_desired, file)};
+    fclose(file);
+
+    // Ignore data that is too high, adjust position and size
+    while (n_read && (data + n_read - 1)->pos1() >= stop) --n_read;
+    current += n_read;
+    if (n_read < n_desired) size = current;
+
+    return n_read;
+  }
+
+ private:
+  std::string file_name;
+  unsigned int stop{0};
+  uint64_t current{0};
+  uint64_t size{0};
+};
+
 class BlockMerger {
  public:
   using Item = pair<BridgeInfo, Sample>;
@@ -460,21 +527,20 @@ class BlockMerger {
 
   BlockMerger(ThreadPool & pool_,
               const uint64_t block_size_,
-              vector<MergeHelper> & helpers_) :
+              vector<BlockReader> & readers_) :
       pool{pool_},
     block_size{block_size_},
-    helpers{helpers_},
-    highest{helpers.size()},
-    buffers(helpers.size(), vector<BridgeInfo>(one_load_size)) {
+    readers{readers_},
+    highest{readers.size()},
+    buffers(readers.size(), vector<BridgeInfo>(one_load_size)) {
       bridges.reserve(2 * all_load_size);
-      cerr << "BlockMerger size is "
-           << 1.0 * bridges.capacity() * sizeof(Item) / 1024 / 1024 / 1024
-           << " GB" << endl;
     }
 
   bool available() {
+    constexpr bool load_update{false};
     // Reload if necessary
     if (current_ == last) {
+      if (load_update) cerr << "load" << flush;
       current_ = 0;
 
       // Move unused bridges to start of vector
@@ -483,25 +549,27 @@ class BlockMerger {
       }
       bridges.resize(bridges.size() - last);
 
+      if (load_update) cerr << " " << bridges.size() << flush;
+
       // Count remaining bridges
       static vector<unsigned int> counts;
       counts.clear();
-      counts.resize(helpers.size());
+      counts.resize(readers.size());
       for (const Item & item : bridges) ++counts[item.second];
 
       // Load blocks in parallel
       static vector<future<void>> futures;
       futures.clear();
-      for (uint64_t h{0}; h != helpers.size(); ++h)
+      for (uint64_t h{0}; h != readers.size(); ++h)
         futures.push_back(pool.run(std::ref(*this), h,
                                    counts[h] < one_load_size));
       uint64_t total_loaded{0};
       const BridgeInfo zero_bridge{};
-      for (uint64_t h{0}; h != helpers.size(); ++h) {
+      for (uint64_t h{0}; h != readers.size(); ++h) {
         futures[h].get();
         const vector<BridgeInfo> & result{buffers[h]};
         for (const BridgeInfo & bridge : result)
-          bridges.emplace_back(bridge, helpers[h].sample());
+          bridges.emplace_back(bridge, Sample{h});
         if (result.size()) {
           total_loaded += result.size();
           counts[h] += result.size();
@@ -512,13 +580,14 @@ class BlockMerger {
       if (!total_loaded) {
         sort(bridges.begin(), bridges.end());
         last = bridges.size();
+        if (load_update) cerr << " done! " << bridges.size() << endl;
         return current_ != last;
       }
 
       // Determine last good bridge index
       BridgeInfo lowest{};
       bool lowest_unset{true};
-      for (uint64_t h{0}; h != helpers.size(); ++h) {
+      for (uint64_t h{0}; h != readers.size(); ++h) {
         if (counts[h] && (lowest_unset || highest[h] < lowest)) {
           lowest = highest[h];
           lowest_unset = false;
@@ -535,18 +604,19 @@ class BlockMerger {
         last = lower_bound(bridges.begin(), bridges.end(), lowest_item) -
             bridges.begin();
       }
+      if (load_update) cerr << " done " << bridges.size() << endl;
     }
     return current_ != last;
   }
 
   // Load a block
-  void operator()(const uint64_t helper, const bool load) {
-    vector<BridgeInfo> & buffer{buffers[helper]};
+  void operator()(const uint64_t reader, const bool load) {
+    vector<BridgeInfo> & buffer{buffers[reader]};
     buffer.clear();
     if (!load) return;
     buffer.resize(one_load_size);
     const uint64_t n_read{
-      helpers[helper].read_block(one_load_size, &buffer[0])};
+      readers[reader].read_block(one_load_size, &buffer[0])};
     buffer.resize(n_read);
   }
 
@@ -554,20 +624,29 @@ class BlockMerger {
 
   void advance() { ++current_; }
 
+  uint64_t get_total_mem() const {
+    const uint64_t result{
+      all_load_size * (2 * sizeof(Item) + sizeof(BridgeInfo))};
+    cerr << "Expected total memory to allocate is "
+         << 1.0 * result / 1024 / 1024 / 1024 << " GB" << endl;
+    return result;
+  }
+
  private:
   ThreadPool & pool;
   const uint64_t block_size;
   const uint64_t one_load_size{block_size};
-  vector<MergeHelper> & helpers;
+  vector<BlockReader> & readers;
   vector<BridgeInfo> highest;
+  const uint64_t all_load_size{readers.size() * one_load_size};
+  uint64_t total_mem{get_total_mem()};
   vector<vector<BridgeInfo>> buffers;
-  const uint64_t all_load_size{helpers.size() * one_load_size};
   Bridges bridges{};
   uint64_t current_{0};
   uint64_t last{0};
 };
 
-void bridge_out(ostream & out, const BridgeInfo & bridge) {
+void bridge_out(ostream & out, const BridgeInfo & bridge, const bool end_line = false) {
   out << " " << bridge.chr1()
       << " " << bridge.pos1()
       << " " << bridge.high1()
@@ -577,6 +656,7 @@ void bridge_out(ostream & out, const BridgeInfo & bridge) {
       << " " << bridge.invariant()
       << " " << bridge.offset()
       << " " << bridge.bridge_count();
+  if (end_line) out << endl;
 }
 
 int main(int argc, char* argv[])  try {
@@ -611,7 +691,7 @@ int main(int argc, char* argv[])  try {
   ThreadPool::Results<void> results;
 
   // Set up bridge files to start position, in parallel to save time
-  vector<future<MergeHelper>> futures;
+  vector<future<BlockReader>> futures;
   futures.reserve(pop.n_samples());
   uint64_t block_size{4096};
   for (const auto s : pop.samples()) {
@@ -623,14 +703,14 @@ int main(int argc, char* argv[])  try {
       cerr << "Block size is " << block_size << endl;
     }
     futures.push_back(pool.run([s, start, stop](const string name){
-          return MergeHelper{name, s, start, stop, false};
+          return BlockReader{name, start, stop};
         }, bridges_name.str()));
   }
-  vector<MergeHelper> helpers;
-  // helpers.reserve(pop.n_samples());
+  vector<BlockReader> readers;
+  // readers.reserve(pop.n_samples());
   unsigned int n_samples_loaded{0};
   for (const auto s : pop.samples()) {
-    helpers.push_back(futures[n_samples_loaded].get());
+    readers.push_back(futures[n_samples_loaded].get());
     serr << pop.family(pop.family(s))
          << pop.sample(s)
          << pop.member(s)
@@ -639,7 +719,7 @@ int main(int argc, char* argv[])  try {
   }
 
   ThreadPool load_pool{n_threads};
-  BlockMerger merger{load_pool, block_size, helpers};
+  BlockMerger merger{load_pool, block_size = 32768, readers};
 
   // Document the run
   serr << "Run parameters:" << endl
@@ -688,6 +768,8 @@ int main(int argc, char* argv[])  try {
   unsigned int total_bridge_count{0};
   unsigned int normal_bridge_count{0};
   unsigned int normal_seen{0};
+  uint64_t n_bridges{0};
+  const uint64_t notify_interval{10000000};
   bool reset{true};
   while (true) {
     // New bridge expected - start fresh
@@ -708,7 +790,7 @@ int main(int argc, char* argv[])  try {
       const BridgeInfo current{item.first};
       if (all_bridges.size() && current < all_bridges.back()) {
         cerr << "Bridge misordering" << endl;
-        bridge_out(cout, current);
+        bridge_out(cerr, current, true);
         exit(1);
       }
       if (all_bridges.empty() || !(all_bridges.back() < current)) {
@@ -737,6 +819,10 @@ int main(int argc, char* argv[])  try {
 
       // The first bridge, the exemplar since all are the same signature
       const BridgeInfo & bridge{all_bridges[0]};
+
+      if ((++n_bridges % notify_interval) == 0)
+        cerr << n_bridges << " " << bridge.pos1() << " "
+             << 1.0 * (bridge.pos1() - start) / (stop - start) << endl;
 
       if (false) {
         bridge_out(cerr, bridge);
