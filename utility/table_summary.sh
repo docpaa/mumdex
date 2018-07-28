@@ -11,9 +11,9 @@ if [ "$tables" = "" ] ; then
     cat
 else
     cat $tables
-fi > temp_table.$$.txt
-tables=temp_table.$$.txt
-minmax=temp_table_minmax.$$.txt
+fi > temp-table-$$.txt
+tables=temp-table-$$.txt
+minmax=temp-table-minmax-$$.txt
 
 cat $tables | minmax.pl > $minmax
 
@@ -54,15 +54,15 @@ for field in $fields ; do
         cat $tables | head -n 1 | awk '{print "count", $'$field', "|"}'
         cat $tables | grep -v $filters | awk '{print $'$field', "|"}' |
         count.sh -r ; yes - - '|'
-    ) | head -n $tlength > temp-table-$$-$field.txt
+    ) | head -n $tlength > temp-table-$field-$$.txt
 done
 
 # add row counts
 maxn=0
 for field in $fields ; do
-    n=$(tail -n +$((nsummary+2)) temp-table-$$-$field.txt |
+    n=$(tail -n +$((nsummary+2)) temp-table-$field-$$.txt |
         perl -ne 'print if /^\s*\d+\s+\S+\s*\|/' | wc -l)
-    perl -pi -e 's/NNNNN/'$n'/' temp-table-$$-$field.txt
+    perl -pi -e 's/NNNNN/'$n'/' temp-table-$field-$$.txt
     if [ $n -gt $maxn ] ; then maxn=$n ; fi
 done
 
@@ -70,11 +70,11 @@ done
 paste <(yes '|' | head -n $tlength) \
     <(yes - | head -n $nsummary; echo rank ; seq 1 $((length-1))) \
     <(yes '|' | head -n $tlength) \
-    $(for field in $fields ; do echo temp-table-$$-$field.txt; done) |
-perl -pe 's/^\s+//;s/[ \t]+/\t/g' | even_columns > temp-table-$$-outfile.txt
+    $(for field in $fields ; do echo temp-table-$field-$$.txt; done) |
+perl -pe 's/^\s+//;s/[ \t]+/\t/g' | even_columns > temp-table-outfile-$$.txt
 
 # add horizontal lines and remove empty rows
-line="$(head -n 1 temp-table-$$-outfile.txt | perl -pe 's/[^|\n]/=/g')"
+line="$(head -n 1 temp-table-outfile-$$.txt | perl -pe 's/[^|\n]/=/g')"
 (   echo Original table size is $length rows and \
     $(echo $fields | perl -pe 's/ /\n/g' | wc -l) columns \
     and this summary table has $maxn rows \
@@ -84,21 +84,21 @@ line="$(head -n 1 temp-table-$$-outfile.txt | perl -pe 's/[^|\n]/=/g')"
         fi)
 
     echo "$line"    
-    head -n 1 temp-table-$$-outfile.txt 
+    head -n 1 temp-table-outfile-$$.txt 
 
     echo "$line"
-    tail -n +2 temp-table-$$-outfile.txt | head -n $((nsummary - 1))
+    tail -n +2 temp-table-outfile-$$.txt | head -n $((nsummary - 1))
 
     echo "$line"
-    tail -n +$((nsummary + 1)) temp-table-$$-outfile.txt | head -n 1
+    tail -n +$((nsummary + 1)) temp-table-outfile-$$.txt | head -n 1
 
     echo "$line"
-    tail -n +$((nsummary + 2)) temp-table-$$-outfile.txt
+    tail -n +$((nsummary + 2)) temp-table-outfile-$$.txt
     echo "$line"
 ) |
 perl -ne 'print unless /^\| \d+ +(\| -\s+-\s+)+\|$/' |
 perl -pe 's/ - /   /g' | less -S
 
 # clean up
-rm temp-table-$$-*.txt
+rm temp-table*$$.txt
 
