@@ -43,6 +43,7 @@ int main(int argc, char**)  try {
   vector<vector<double>> data(header.size());
   vector<unsigned int> has_zero(header.size());
   vector<unsigned int> has_neg(header.size());
+  // vector<unsigned int> is_numeric(header.size());
 
   while (getline(cin, line)) {
     istringstream line_stream{line.c_str()};

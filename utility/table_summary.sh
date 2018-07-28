@@ -37,7 +37,7 @@ fields=$(cat $tables | head -n 1 | perl -pe 's/ /\n/g' |
     cat -n | awk '{print $1}')
 
 # extract and summarize columns
-nsummary=5
+nsummary=6
 tlength=$((length+nsummary))
 for field in $fields ; do
     (
@@ -47,11 +47,13 @@ for field in $fields ; do
         awk '{if ($'$field' == "-") {print "- - |"} else {print "min", $'$field', "|"}}'
         cat $minmax | head -n 2 | tail -n 1 |
         awk '{if ($'$field' == "-") {print "- - |"} else {print "max", $'$field', "|"}}'
-        cat $minmax | tail -n 1 |
+        cat $minmax | head -n 3 | tail -n 1 |
         awk '{if ($'$field' == "-") {print "- - |"} else {print "avg", $'$field', "|"}}'
+        cat $minmax | head -n 4 | tail -n 1 |
+        awk '{if ($'$field' == "-") {print "- - |"} else {print "med", $'$field', "|"}}'
         cat $tables | head -n 1 | awk '{print "count", $'$field', "|"}'
         cat $tables | grep -v $filters | awk '{print $'$field', "|"}' |
-        sort | uniq -c | sort -k1nr ; yes - - '|'
+        count.sh -r ; yes - - '|'
     ) | head -n $tlength > temp-table-$$-$field.txt
 done
 
@@ -88,12 +90,11 @@ line="$(head -n 1 temp-table-$$-outfile.txt | perl -pe 's/[^|\n]/=/g')"
     tail -n +2 temp-table-$$-outfile.txt | head -n $((nsummary - 1))
 
     echo "$line"
-    tail -n +6 temp-table-$$-outfile.txt | head -n 1
+    tail -n +$((nsummary + 1)) temp-table-$$-outfile.txt | head -n 1
 
     echo "$line"
-    tail -n +7 temp-table-$$-outfile.txt
-
-    echo "$line"    
+    tail -n +$((nsummary + 2)) temp-table-$$-outfile.txt
+    echo "$line"
 ) |
 perl -ne 'print unless /^\| \d+ +(\| -\s+-\s+)+\|$/' |
 perl -pe 's/ - /   /g' | less -S
