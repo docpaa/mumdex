@@ -191,7 +191,7 @@ count : ; @ cat */*.{cpp,h} | sed 's/[ \t]+/ /g' | sort | uniq | wc -l
 bin : all
 	@mkdir -p ~/bin
 	@make fbin
-
 fbin :
-	@rsync --exclude $(shell find $(shell pwd) -perm -u=x -type f | fgrep -v .git) ~/bin/
+	@rsync $(shell find . -perm -u=x -type f | \
+		grep -v -e \.git -e /python/ -e '\'~$\'') ~/bin/
 	@echo bin transfer done

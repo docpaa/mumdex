@@ -1,8 +1,11 @@
 #! /bin/bash
 
+ref="$1"
+shift
+
 while [ "$#" -gt 0 ] ; do
    file=$1
-   ~/mumdex/bridges2txt ~/analysis/mums/hg19/chrAll.fa $file
+   bridges2txt $ref $file
    shift
 done | perl -ne '
 BEGIN {

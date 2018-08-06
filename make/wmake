@@ -1,8 +1,6 @@
 #! /bin/bash
 
-cd ~/mumdex
 while true ; do
-    make -j 24 2>&1 > /dev/null |
-    bash -c 'trap "exit 1" int; less -S -K' ||
+    lmake ||
     break
 done

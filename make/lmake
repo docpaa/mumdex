@@ -1,6 +1,6 @@
 #! /bin/bash
 
-(cd ~/mumdex ; make -j 24 > /dev/null) 2>&1 | less
+trap "exit 1" int
 
-
-
+mmake "$@" |
+less -S -K
