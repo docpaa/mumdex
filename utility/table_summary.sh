@@ -1,5 +1,11 @@
 #! /bin/bash
 
+if [ "$1" = "-t" ] ; then
+    title="$2"
+    shift
+    shift
+fi
+
 # filter to apply to table
 filter="$1"
 
@@ -75,7 +81,11 @@ perl -pe 's/^\s+//;s/[ \t]+/\t/g' | even_columns > temp-table-outfile-$$.txt
 
 # add horizontal lines and remove empty rows
 line="$(head -n 1 temp-table-outfile-$$.txt | perl -pe 's/[^|\n]/=/g')"
-(   echo Original table size is $length rows and \
+(
+    if [ "$title" != "" ] ; then
+        echo $title
+    fi
+    echo Original table size is $length rows and \
     $(echo $fields | perl -pe 's/ /\n/g' | wc -l) columns \
     and this summary table has $maxn rows \
     $(if [ "$filter" != "" ] ; then

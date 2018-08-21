@@ -1,5 +1,7 @@
 #! /bin/bash
 
+exit 0
+
 #
 # run population_database program for all candidates
 #

@@ -1,5 +1,7 @@
 #! /bin/bash
 
+exit 0
+
 if [ "$outdir" = "" ] ; then
     echo no outdir passed | tee -a status.txt | tee >(cat 1>&2)
     exit 1

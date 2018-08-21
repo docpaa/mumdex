@@ -1,5 +1,7 @@
 #! /bin/bash
 
+exit 0
+
 ref="$1"
 shift
 

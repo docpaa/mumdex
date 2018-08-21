@@ -1668,7 +1668,8 @@ class TMUMdex_base {
   template <class MUMDEX>
   void emplace_back(const MUMDEX & mumdex, const uint64_t p,
                     const uint64_t mum_offset, const uint64_t extra_offset,
-                    const MUMDEX * & last_mumdex, uint64_t & last_p) {
+                    const MUMDEX * & last_mumdex, uint64_t & last_p,
+                    const bool mark_dupes) {
     using OrderedMums = std::array<const MUM * const, 2>;
     const OrderedMums last_ordered_mums = last_mumdex ?
         last_mumdex->pair(last_p).ordered_first_mums(
@@ -1696,7 +1697,7 @@ class TMUMdex_base {
                 last_pair.length(last_mum_2->read_2())) &&
             mum_1->chromosome() == last_mum_1->chromosome() &&
             mum_2->chromosome() == last_mum_2->chromosome()) {
-          pair_.dupe(true);
+          if (mark_dupes) pair_.dupe(true);
         }
       }
     }

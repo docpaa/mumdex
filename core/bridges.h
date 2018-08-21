@@ -395,6 +395,30 @@ class BridgeInfo : public OneBridgeInfo {
       }
     }
   }
+  void combine(const BridgeInfo & info) {
+    bridge_count_ += info.bridge_count_;
+    if (anchor1_length() < info.anchor1_length()) {
+      anchor1_length_ = info.anchor1_length();
+    }
+    if (anchor2_length() < info.anchor2_length()) {
+      anchor2_length_ = info.anchor2_length();
+    }
+    if (info.mate_anchor1_length()) {
+      ++mate_anchor1_count_;
+      if (mate_anchor1_length() < info.mate_anchor1_length()) {
+        mate_anchor1_length_ = info.mate_anchor1_length();
+      }
+    }
+    if (info.mate_anchor2_length()) {
+      ++mate_anchor2_count_;
+      if (mate_anchor2_length() < info.mate_anchor2_length()) {
+        mate_anchor2_length_ = info.mate_anchor2_length();
+      }
+    }
+  }
+  void multiply(const uint64_t count) {
+    bridge_count_ *= count;
+  }
 
   template <class STREAM>
   void output(STREAM & stream) const {
@@ -603,10 +627,11 @@ class MUMsupport {
 
 void pair_bridges(const MUMdex & mumdex,
                   const uint64_t pair_index,
-                  std::vector<OneBridgeInfo> & output) {
+                  std::vector<OneBridgeInfo> & output,
+                  const bool skip_dupes = true) {
   // the pair
   const Pair pair{mumdex.pair(pair_index)};
-  if (pair.dupe()) return;
+  if (skip_dupes && pair.dupe()) return;
 
   // mum boundaries for pair
   const uint64_t mums_start{mumdex.mums_start(pair_index)};

@@ -1,5 +1,7 @@
 #! /bin/bash
 
+exit 0
+
 #
 # run check_bridges script for all candidates
 #

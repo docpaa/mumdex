@@ -1,4 +1,5 @@
 #! /bin/bash
+exit 0
 
 for n in {1..5} ; do echo ; done
 

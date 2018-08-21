@@ -1,5 +1,7 @@
 #! /bin/bash
 
+exit 0
+
 cd /home/paa/analysis/mums/nygc_out
 
 cand=candidates_microsatellite.txt

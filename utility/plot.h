@@ -360,16 +360,23 @@ class Axis {
     const double tint{float_round(range / target_ticks, 1)};
     const double nint{range / tint};
     if (log_) {
+#if 0
       if (nint >= 10 * target_ticks) {
+        std::cerr << "a" << std::endl;
         major = tint * 10;
         minor = major / 5;
       } else if (nint * 10 <= target_ticks) {
+        std::cerr << "b" << std::endl;
         major = tint / 10;
         minor = major / 5;
       } else {
         major = tint;
         minor = major / 5;
+        std::cerr << "c " << major << " " << minor << std::endl;
       }
+#endif
+      major = 1;
+      minor = major / 10;
     } else {
       if (nint >= 20 * target_ticks) {
         major = tint * 20;
@@ -418,10 +425,13 @@ class Axis {
         const double cpos{fabs(pos) < (h - l) / 1000000000000.0 ?
               0.0 : pos};
         const double rnd{round(cpos / major) * major};
+        if (0) std::cerr << l << " " << h << " " << cl << " " << major
+                         << " " << pos << " " << cpos << " " << rnd
+                         << std::endl;
         if (cpos > l && cpos < h) {
           result.emplace_back(cpos, true);
         }
-        if (h - l < 8) {
+        if (h - l < 15) {
           for (unsigned int i{2}; i != 10; ++i) {
             const double val{rnd + log10(i)};
             // std::cout << val << std::endl;

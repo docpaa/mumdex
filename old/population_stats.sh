@@ -1,5 +1,7 @@
 #! /bin/bash
 
+exit 0
+
 min_bridge_count=5
 min_ref=10
 max_families=1

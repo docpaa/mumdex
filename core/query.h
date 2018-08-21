@@ -258,6 +258,7 @@ class ReadPair : public ReadPairArgs {
         std::string & line = second ? line2 : line1;
 
         if (readers.sam_in) {
+          input.clear();
           input.str(line);
           input >> name >> flag >> ref >> pos >> mapq >> cigar
                 >> mref >> mpos >> tlen >> read.query;

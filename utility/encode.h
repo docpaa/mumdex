@@ -418,7 +418,9 @@ class OptionalSaver {
   OptionalSaver(const std::string & name_arg,
                 const std::string & alphabet,
                 const uint64_t field_length_) :
-      name_{name_arg}, data{alphabet, field_length_} { }
+      name_{name_arg},
+    short_name_{name_.substr(name_.find('.') + 1)},
+    data{alphabet, field_length_} { }
   virtual void extract(const std::string & optional, const bool) = 0;
   virtual ~OptionalSaver() { }
   void push_back(const std::string & value) {
@@ -426,6 +428,12 @@ class OptionalSaver {
   }
   std::string operator[](const uint64_t index) const {
     return data[index];
+  }
+  unsigned int to_u64(const uint64_t index) const {
+    return strtoul(data[index].c_str(), nullptr, 10);
+  }
+  unsigned int to_u32(const uint64_t index) const {
+    return static_cast<unsigned int>(strtoul(data[index].c_str(), nullptr, 10));
   }
   std::string clip(const uint64_t index, const char clipped = ' ') const {
     std::string value = data[index];
@@ -458,9 +466,13 @@ class OptionalSaver {
   std::string name() const {
     return name_;
   }
+  std::string short_name() const {
+    return short_name_;
+  }
 
  private:
   std::string name_;
+  std::string short_name_;
   FixedLengthStrings data;
 };
 
@@ -555,16 +567,16 @@ class OptionalSavers {
         std::string key;
         getline(format, key, '|');
         if (!format) throw Error("Problem reading KEY in OptionalSavers");
-        std::string id = key.substr(0, 2);
+        std::string sid = key.substr(0, 2);
         if (type == "FIX" || type == "VAR") {
           std::string alpha;
           getline(format, alpha);
           if (type == "FIX") {
             savers.push_back(std::make_unique<FixedLengthOptionalSaver>(
-                std::string("fix.") + id, key, alpha, n));
+                std::string("fix.") + sid, key, alpha, n));
           } else {
             savers.push_back(std::make_unique<VariableLengthOptionalSaver>(
-                std::string("var.") + id, key, alpha, n));
+                std::string("var.") + sid, key, alpha, n));
           }
         } else if (type == "TAG") {
           uint64_t s;
@@ -575,7 +587,7 @@ class OptionalSavers {
           if (!format)
             throw Error("Problem reading S and O in OptionalSavers");
           savers.push_back(std::make_unique<ReadTagOptionalSaver>(
-              std::string("tag.") + id, key, "ACGTN", n, s, o));
+              std::string("tag.") + sid, key, "ACGTN", n, s, o));
         } else if (type == "INT") {
           throw Error("INT format unimplemented in OptionalSavers");
         } else {
@@ -584,6 +596,13 @@ class OptionalSavers {
         }
       }
     }
+  }
+  uint64_t id(const std::string & name) const {
+    for (uint64_t s{0}; s != savers.size(); ++s) {
+      const OptionalSaver & saver{*savers[s]};
+      if (saver.short_name() == name) return s;
+    }
+    throw Error("Saver") << name << "not found";
   }
   uint64_t size() const {
     return savers.size();

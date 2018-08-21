@@ -68,6 +68,7 @@ fastqs2sam
 find_bridge
 find_indel
 find_microsatellite
+find_repeats
 finebin_cn
 gene_view
 ggraph
@@ -78,6 +79,7 @@ jackpot
 karyotype
 local_similarity
 lookup_bridge
+luria
 make_reference
 male_cn_stats
 map2txt
@@ -130,6 +132,7 @@ repeatness
 repeats
 sam2fastq
 sam2fastqs
+sd_errors
 show_all_counts
 show_counts
 show_counts_special

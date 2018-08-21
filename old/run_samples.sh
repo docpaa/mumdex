@@ -1,5 +1,7 @@
 #! /bin/bash
 
+exit 0
+
 testing=0
 
 # User modifiable configuration

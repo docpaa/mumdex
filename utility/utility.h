@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <deque>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -26,6 +27,25 @@
 #include <vector>
 
 namespace paa {
+
+inline std::string commas(uint64_t number) {
+  if (!number) return "0";
+  std::deque<uint64_t> parts;
+  while (number) {
+    parts.push_front(number % 1000);
+    number /= 1000;
+  }
+  std::ostringstream result;
+  for (uint64_t p{0}; p != parts.size(); ++p) {
+    if (p) {
+      result << ',';
+      result.width(3);
+      result.fill('0');
+    }
+    result << parts[p];
+  }
+  return result.str();
+}
 
 inline bool dne(const double lhs, const double rhs) {
   return lhs < rhs || lhs > rhs;
@@ -339,6 +359,15 @@ template <class Int>
 class NoOverflowInt {
  public:
   explicit NoOverflowInt(const Int initial = 0) : value{initial} {}
+  NoOverflowInt & operator*=(const uint64_t count) {
+    const uint64_t newval{value * count};
+    if (value < std::numeric_limits<Int>::max()) {
+      value = newval;
+    } else {
+      value = std::numeric_limits<Int>::max();
+    }
+    return *this;
+  }
   NoOverflowInt & operator++() {
     if (value < std::numeric_limits<Int>::max()) {
       ++value;

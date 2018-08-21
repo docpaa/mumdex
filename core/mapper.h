@@ -107,7 +107,8 @@ std::pair<int, void *> mmap_create_file(const std::string & file_name,
 class MUMdexMerger {
  public:
   explicit MUMdexMerger(const std::string & mumdex_name,
-                     const unsigned int n_threads) {
+                        const unsigned int n_threads,
+                        const bool mark_dupes) {
     // Get mumdex part names
     const std::vector<std::string> part_names{[&mumdex_name]() {
         redi::ipstream part_names_process{
@@ -224,7 +225,7 @@ class MUMdexMerger {
         const uint64_t n{top.n()};
         const unsigned int id{top.id()};
         all.emplace_back(mumdex, n, mums_offset, extra_bases_offset,
-                         last_mumdex, last_p);
+                         last_mumdex, last_p, mark_dupes);
         saver.copy(savers[id], 2 * n);
         saver.copy(savers[id], 2 * n + 1);
         for (unsigned int m{0}; m != mumdex.n_mums(n); ++m) {
@@ -343,7 +344,8 @@ class MUMdexMergerNew {
  public:
   explicit MUMdexMergerNew(const std::string & mumdex_name,
                            const unsigned int n_gb,
-                           const unsigned int n_threads) {
+                           const unsigned int n_threads,
+                           const bool mark_dupes) {
     // Get mumdex part names
     const std::vector<std::string> part_names{[&mumdex_name]() {
         redi::ipstream part_names_process{
@@ -459,7 +461,7 @@ class MUMdexMergerNew {
         const uint64_t n{top.n()};
         const unsigned int id{top.id()};
         all.emplace_back(mumdex, n, mums_offset, extra_bases_offset,
-                         last_mumdex, last_p);
+                         last_mumdex, last_p, mark_dupes);
         saver.copy(savers[id], 2 * n);
         saver.copy(savers[id], 2 * n + 1);
         merge_helpers.pop();
@@ -669,7 +671,7 @@ class Mapper {
       longReadPairs pairs(args, sa_, readers);
     }
     // Merge mumdex and output
-    const MUMdexMerger merger{"mumdex", n_threads};
+    const MUMdexMerger merger{"mumdex", n_threads, true};
 
     // std::cerr << "Done" << std::endl;
 

@@ -182,6 +182,7 @@ class ExactRepeat {
   std::string motif{};
 };
 
+// first generate input data file with generate_genome_repeats.sh
 class ExactRepeats {
  public:
   ExactRepeats(const std::string & input_file,

@@ -1,5 +1,7 @@
 #! /bin/bash
 
+exit 0
+
 sample=$1
 mumdex=~/analysis/mums/wg-output/samples/$sample/mumdex
 node=$(hostname -s)

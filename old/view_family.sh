@@ -1,4 +1,5 @@
 #! /bin/bash
+exit 0
 
 defwidth=2560
 defheight=1600

@@ -3,7 +3,7 @@
 # either in your environment with export or here in a special section for you
 SGE_ROOT ?= NOT
 SGE_CLUSTER_NAME ?= NOT
-ifeq ($(SGE_CLUSTER_NAME), wigclust)
+ifeq ($(shell hostname -s | perl -pe 's/\d+//'), wigclust)
 
   # Test code on various compiler versions for warnings and errors
   test_compilers :

@@ -32,15 +32,15 @@ using paa::read_optional_formats;
 int main(int argc, char * argv[]) try {
   paa::exit_on_pipe_close();
 
-  if (--argc != 1) throw Error("usage: mumdex_sequences mumdex_name");
+  if (--argc != 1) throw Error("usage: optional_test mumdex_name");
   const string mumdex_name{argv[1]};
 
   const MUMdex mumdex{mumdex_name};
   const vector<string> optional_formats{read_optional_formats(mumdex_name)};
   OptionalSavers saver{optional_formats};
-  saver.load("mumdex", mumdex.n_pairs() * 2);
+  saver.load(mumdex_name, mumdex.n_pairs() * 2);
 
-  for (unsigned int i = 0; i != mumdex.n_pairs(); ++i) {
+  for (uint64_t i = 0; i != mumdex.n_pairs(); ++i) {
     const array<string, 2> sequences(mumdex.sequences(i));
     for (const bool r : {false, true}) {
       const auto & sequence = sequences[r];

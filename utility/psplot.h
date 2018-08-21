@@ -982,11 +982,19 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
 
         // Ticks and labels
         if (tick.second) {
+#if 1
           ticks_out << pname << " tm" << (y ? "y" : "x") << " "
                     << pname << " (" << std::setprecision(10)
                     << ((y && this->log_y_) || (!y && this->log_x_) ?
                         pow(10, tick.first) : tick.first)
                     << ") " << std::setprecision(default_precision);
+#else
+          ticks_out << pname << " tm" << (y ? "y" : "x") << " "
+                    << pname << " (" << std::setprecision(10)
+                    << ((y && this->log_y_) || (!y && this->log_x_) ?
+                        pow(10, tick.first) : tick.first)
+                    << ") " << std::setprecision(default_precision);
+#endif
           if (y) {
             ticks_out << "jrx " << 0.4 * tick_size__
                       << " sub " << 0.35 * tick_size__;

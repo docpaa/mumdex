@@ -43,8 +43,9 @@ using paa::Reference;
 
 int main(int argc, char* argv[])  try {
   --argc;
-  if (argc != 3 && argc != 5)
-    throw Error("mismatches [n_mismatch|lookup] ref_fasta chr [start stop]");
+  if (argc != 4 && argc != 6)
+    throw Error("mismatches [n_mismatch|lookup] ref_fasta "
+                "index chr [start stop]");
 
   const string first_arg{argv[1]};
 
@@ -52,14 +53,15 @@ int main(int argc, char* argv[])  try {
   const Reference ref{ref_fasta};
   const Mappability mappability{ref};
   const ChromosomeIndexLookup chr_lookup{ref};
+  const string index{argv[3]};
 
-  const string chr_name{argv[3]};
+  const string chr_name{argv[4]};
   const unsigned int chr{chr_lookup[chr_name]};
 
-  const unsigned int start{argc == 3 ? 0 :
-        static_cast<unsigned int>(atoi(argv[4]))};
-  const unsigned int stop{argc == 3 ? ref.size(chr) :
+  const unsigned int start{argc == 4 ? 0 :
         static_cast<unsigned int>(atoi(argv[5]))};
+  const unsigned int stop{argc == 4 ? ref.size(chr) :
+        static_cast<unsigned int>(atoi(argv[6]))};
 
 
   const unsigned int n_mismatch{static_cast<unsigned int>(atoi(argv[1]))};
@@ -118,7 +120,8 @@ int main(int argc, char* argv[])  try {
             "/data/software/bowtie/bowtie-0.12.8/bowtie "
                 "--quiet --mm -a -v " + to_string(n_mismatch) +
                 " --suppress 1,3,4,6,7 "
-                "/data/software/bowtie/bowtie-1.2.2/indexes/g1k -c "};
+                "/data/software/bowtie/bowtie-1.2.2/indexes/" +
+                index + " -c "};
           const std::string filter{"| perl -pe 's/,/ /g'"};
 
           // Run bowtie command and get output
@@ -159,6 +162,7 @@ int main(int argc, char* argv[])  try {
       }
     }
   }
+
   cerr << "done" << endl;
   return 0;
 } catch (Error & e) {

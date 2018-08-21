@@ -22,15 +22,17 @@ using paa::MUMdexMergerNew;
 
 int main(int argc, char * argv[]) try {
   --argc;
-  if (argc != 2 && argc != 3)
-    throw Error("usage: merge_mumdex mumdex_name max_gb [n_threads]");
+  if (argc != 2 && argc != 3 && argc != 4)
+    throw Error("usage: merge_mumdex mumdex_name max_gb "
+                "[n_threads] [mark_dupes]");
 
   const string mumdex_name{argv[1]};
   const unsigned int n_gb = atoi(argv[2]);
   if (n_gb == 0) throw Error("max GB not set properly");
   const unsigned int n_threads = argc == 3 ? atoi(argv[3]) : 1;
   if (n_threads == 0) throw Error("N threads not set properly");
-  const MUMdexMergerNew merger{mumdex_name, n_gb, n_threads};
+  const bool mark_dupes{static_cast<bool>(argc == 4 ? atoi(argv[4]) : 1)};
+  const MUMdexMergerNew merger{mumdex_name, n_gb, n_threads, mark_dupes};
 
   return 0;
 } catch (Error & e) {

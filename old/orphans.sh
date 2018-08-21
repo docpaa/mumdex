@@ -1,4 +1,6 @@
 
+exit 0
+
 # Identify orphans
 for type in samples jobs ; do
     for dir in /mnt/wigclust*/data/unsafe/paa/mums-new/$type ; do

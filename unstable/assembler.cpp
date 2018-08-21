@@ -666,7 +666,9 @@ class BaseAssembler {
 
   using Seen = std::unordered_set<Sequence>;
   void output_run(const Sequence & sequence, Seen & seen,
-                  const uint64_t run_size = 0) const {
+                  const uint64_t run_size = 0,
+                  uint64_t total_count = 0,
+                  Count min_count = 0) const {
     // First see if sequence is good
     if (seen.count(sequence)) return;
     const StoredSequence stored_result{get_canonical(sequence)};
@@ -674,6 +676,9 @@ class BaseAssembler {
     const ConstNodeIter node{nodes.find(canonical_sequence)};
     const Count count{node->second.count()};
     if (count <= clip) return;
+    if (min_count == 0) min_count = count;
+    min_count = count < min_count ? count : min_count;
+    total_count += count;
 
     const Sequence prefix{sequence.substr(0, km1)};
     const EdgeCounts in_edges{up_to_two_in(prefix)};
@@ -693,9 +698,12 @@ class BaseAssembler {
     const bool is_out_single{out_edges.size() == 1 &&
           out_return_edges.size() == 1};
     if (is_out_single) {
-      output_run(suffix + out_edges.front().second, seen, run_size + 1);
+      output_run(suffix + out_edges.front().second, seen, run_size + 1,
+                 total_count, min_count);
     } else {
-      std::cout << suffix << " " << run_size  << std::endl;
+      std::cout << suffix << " " << run_size + suffix.size()
+                << " " << total_count
+                << " " << min_count << std::endl;
     }
   }
 
@@ -845,32 +853,36 @@ int main(int argc, char* argv[]) try {
     paa::LinksCounts::test();
     return 0;
   }
-  if (--argc < 4) throw Error("usage: debruijn sequences_file n kmer clip ...");
+  if (--argc < 5)
+    throw Error("usage: debruijn out_name sequences_file n kmer clip ...");
+
+  // Output name
+  std::string out_name{argv[1]};
 
   // Input sequence file
-  std::string sequences_file{argv[1]};
+  std::string sequences_file{argv[2]};
 
   // Max lines to read from file (0 unlimited)
-  const uint64_t max_lines{static_cast<uint64_t>(atol(argv[2]))};
+  const uint64_t max_lines{static_cast<uint64_t>(atol(argv[3]))};
 
   // Kmer choice
-  const unsigned int kmer{static_cast<unsigned int>(atoi(argv[3]))};
+  const unsigned int kmer{static_cast<unsigned int>(atoi(argv[4]))};
 
   // Clipping
-  const unsigned int clip{static_cast<unsigned int>(atoi(argv[4]))};
+  const unsigned int clip{static_cast<unsigned int>(atoi(argv[5]))};
 
   // Assemble
   paa::BaseAssembler<true> assembler{sequences_file, max_lines, kmer, clip};
 
   // Output
-  argc -= 3;
-  argv += 3;
+  argc -= 4;
+  argv += 4;
   while (argc--) {
     const unsigned int output_clip{static_cast<unsigned int>(atoi(argv++[1]))};
     assembler.clip = output_clip;
     assembler.do_clip();
     assembler.output_runs();
-    assembler.create_graph(sequences_file.substr(0, 2));
+    assembler.create_graph(out_name);
   }
 
   return 0;

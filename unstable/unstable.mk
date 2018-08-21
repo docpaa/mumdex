@@ -12,7 +12,6 @@ DEVELOPMENT_PROGRAMS := \
 	averages \
 	bam_genotyper \
 	bin_events \
-	bin_p \
 	bridge_counts \
 	bridge_effect \
 	bridge_gene2 \
@@ -52,6 +51,7 @@ DEVELOPMENT_PROGRAMS := \
 	find_bridge \
 	find_indel \
 	find_microsatellite \
+	find_repeats \
 	gene_view \
 	haha \
 	hist_compare \
@@ -59,6 +59,7 @@ DEVELOPMENT_PROGRAMS := \
 	karyotype \
 	local_similarity \
 	lookup_bridge \
+	luria \
 	make_reference \
 	male_cn_stats \
 	mapper \
@@ -92,6 +93,7 @@ DEVELOPMENT_PROGRAMS := \
 	rare \
 	repeatness \
 	repeats \
+	sd_errors \
 	show_all_counts \
 	show_counts \
 	show_counts_special \
@@ -105,7 +107,6 @@ DEVELOPMENT_PROGRAMS := \
 	skbr3_in_skn1 \
 	smooth_data \
 	snp_report \
-	sssa \
 	subsample \
 	table_stats \
 	test_hmm \
@@ -167,6 +168,7 @@ primers : files.o
 print_invariants : utility.o
 rare : genes.o utility.o
 repeatness : files.o
+sd_errors : files.o
 show_all_counts : files.o utility.o
 show_counts : files.o utility.o
 show_counts_special : files.o utility.o

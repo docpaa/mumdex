@@ -192,6 +192,6 @@ bin : all
 	@mkdir -p ~/bin
 	@make fbin
 fbin :
-	@rsync $(shell find . -perm -u=x -type f | \
+	@rsync $(shell find $(shell pwd) -perm -u=x -type f | \
 		grep -v -e \.git -e /python/ -e '\'~$\'') ~/bin/
 	@echo bin transfer done
