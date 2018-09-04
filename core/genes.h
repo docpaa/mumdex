@@ -256,6 +256,45 @@ class KnownGenes {
     return result;
   }
 
+  using GeneOverlap = std::pair<unsigned int, unsigned int>;
+  using GeneOverlaps = std::vector<GeneOverlap>;
+  GeneOverlaps find_genes(const unsigned int chr_arg,
+                          const unsigned int low_pos,
+                          const unsigned int high_pos) const {
+    using ChrPos = std::pair<unsigned int, unsigned int>;
+    std::vector<KnownGene>::const_iterator match_end{lower_bound(
+        genes.begin(), genes.end(), ChrPos{chr_arg, high_pos},
+        [] (const KnownGene & gene, const ChrPos chrpos) {
+          if (gene.chr == chrpos.first) {
+            return gene.t_start < chrpos.second + 1;
+          }
+          return gene.chr < chrpos.first;
+        })};
+    GeneOverlaps result;
+    if (match_end == genes.end()) {
+      --match_end;
+    }
+    while (true) {
+      const KnownGene & gene{*match_end};
+      if (gene.chr <= chr_arg) {
+        if (gene.chr < chr_arg) break;
+        if (gene.t_stop + 100000 < low_pos) break;
+        if (gene.t_start < high_pos && low_pos < gene.t_stop) {
+          GeneOverlap overlap{match_end - genes.begin(), 0};
+          for (unsigned int e{0}; e != gene.n_exons; ++e) {
+            if (gene.exon_starts[e] < high_pos &&
+                gene.exon_stops[e] > low_pos) {
+              ++overlap.second;
+            }
+          }
+          result.push_back(overlap);
+        }
+      }
+      if (match_end-- == genes.begin()) break;
+    }
+    return result;
+  }
+
  private:
   std::vector<KnownGene> genes{};
 

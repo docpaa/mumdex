@@ -6,12 +6,15 @@
 // Copyright 2016 Peter Andrews CSHL
 //
 
+#include <algorithm>
 #include <array>
 #include <exception>
 #include <iostream>
+#include <map>
 #include <set>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "bridges.h"
@@ -30,7 +33,9 @@ using std::cin;
 using std::cout;
 using std::endl;
 using std::exception;
+using std::map;
 using std::ostringstream;
+using std::pair;
 using std::right;
 using std::set;
 using std::string;
@@ -92,18 +97,26 @@ int main(int argc, char* argv[])  try {
     const array<unsigned int, 2> chr{{chr1, chr2}};
     const array<unsigned int, 2> pos{{pos1, pos2}};
 
+    if (chr1 == chr2 && high1 != high2 && ((invariant % 3) == 0) &&
+        abs(invariant) < 100) {
+      sout << "1";
+    } else {
+      sout << "0";
+    }
+
+    // anchor genes
     for (const bool anchor2 : {false, true}) {
       const vector<unsigned int> pos_genes{
         genes.find_genes(chr[anchor2], pos[anchor2])};
-      bool in_exon{false};
       set<string> gene_names;
       for (const unsigned int gene : pos_genes) {
-        gene_names.insert(xref[genes[gene].name].geneSymbol);
+        const string symbol{xref[genes[gene].name].geneSymbol};
         if (genes[gene].in_exon(chr[anchor2], pos[anchor2])) {
-          in_exon = true;
+          gene_names.insert("exon-" + symbol);
+        } else {
+          gene_names.insert(symbol);
         }
       }
-      if (in_exon) sout << "exon";
       unsigned int n{0};
       for (const string & name : gene_names) {
         if (n++) {
@@ -117,9 +130,47 @@ int main(int argc, char* argv[])  try {
       }
     }
 
-    if (chr1 == chr2 && high1 != high2 && ((invariant % 3) == 0) &&
-        abs(invariant) < 100) {
-      sout << "short multiple of 3";
+    // genes in range
+    if (chr1 == chr2) {
+      const unsigned int low_pos{std::min(pos1, pos2)};
+      const unsigned int high_pos{std::max(pos1, pos2)};
+      const KnownGenes::GeneOverlaps gene_overlaps{genes.find_genes(
+          chr1, low_pos, high_pos)};
+      map<string, unsigned int> named_overlaps;
+      for (const KnownGenes::GeneOverlap & overlap : gene_overlaps) {
+        const string symbol{xref[genes[overlap.first].name].geneSymbol};
+        const unsigned int old_value{named_overlaps[symbol]};
+        if (old_value < overlap.second) {
+          named_overlaps[symbol] = overlap.second;
+        }
+      }
+      using Overlap = pair<string, unsigned int>;
+      vector<Overlap> overlaps(named_overlaps.begin(), named_overlaps.end());
+      sort(overlaps.begin(), overlaps.end(),
+           [](const Overlap & lhs, const Overlap & rhs) {
+             if (lhs.second == rhs.second) {
+               return lhs.first < rhs.first;
+             } else {
+               return lhs.second > rhs.second;
+             }
+           });
+      unsigned int total_exons{0};
+      for (unsigned int o{0}; o != overlaps.size(); ++o)
+        total_exons += overlaps[o].second;
+      cout << " " << overlaps.size() << " " << total_exons << " ";
+      for (unsigned int o{0}; o != overlaps.size(); ++o) {
+        const Overlap & overlap{overlaps[o]};
+        if (o) cout << ",";
+        if (overlap.second)
+          cout << overlap.second << "-exon"
+               << (overlap.second > 1 ? "s" : "") << "-";
+        cout << overlap.first;
+      }
+      if (overlaps.empty()) {
+        cout << "intergenic";
+      }
+    } else {
+      sout << "0 0 intergenic";
     }
     sout << endl;
   }

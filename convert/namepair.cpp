@@ -68,13 +68,16 @@ int main(int argc, char ** argv) try {
   string bases;
   string errors;
   string optional;
+  uint64_t n_pairs{0};
   while (samFile >> name >> flag >> chr >> pos
          >> mapq >> cigar >> mchr >> mpos >> tlen >> bases >> errors) {
     if (minimal) {
-      samFile.ignore(10000, '\n');
+      samFile.ignore(10000000, '\n');
     } else {
       getline(samFile, optional);
     }
+    if (!samFile) throw Error("sam file parse error in namepair");
+
     // Filter bad / inappropriate reads
     if ((flag & 0x100) ||  // secondary alignment
         // (flag & 0x200) ||  // bad vendor quality
@@ -121,6 +124,7 @@ int main(int argc, char ** argv) try {
         tout << endl;
       }
       reads.erase(other_iter.first);
+      ++n_pairs;
       if (!cout) break;
     }
   }
@@ -141,6 +145,9 @@ int main(int argc, char ** argv) try {
       terr << endl;
     }
   }
+
+  cerr << "namepair finished successfully after outputting "
+       << n_pairs << " pairs" << endl;
 
   return 0;
 } catch (Error & e) {

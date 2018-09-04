@@ -4,6 +4,7 @@ DEVELOPMENT_PROGRAMS := \
 	anchor_reads \
 	anchor_mismatches \
 	anchor_repeatness \
+	annotate_candidates \
 	annotate_repeats \
 	assembler \
 	assembly_index \

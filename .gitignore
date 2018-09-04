@@ -11,6 +11,7 @@ analyze_transmission
 anchor_mismatches
 anchor_reads
 anchor_repeatness
+annotate_candidates
 annotate_repeats
 assembler
 assembly_index

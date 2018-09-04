@@ -63,7 +63,7 @@ inline uint64_t get_block_size(const std::string name) {
   struct stat sb;
   if (stat(name.c_str(), &sb) == -1) {
     perror("stat");
-    throw Error("stat call failure");
+    throw Error("stat call failure for") << name;
   }
   return sb.st_blksize;
 }

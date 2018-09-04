@@ -440,6 +440,79 @@ class Mismatches {
   MappedVector<unsigned int> data{"/dev/null", false};
 };
 
+struct Repeat {
+ public:
+  uint64_t chromosome: 8;     // 8
+  uint64_t position: 28;      // 36
+  uint64_t total_length: 25;  // 61
+  uint64_t start_base: 28;    // 28
+  uint64_t n_copies: 28;      // 56
+  uint64_t stop_base: 28;     // 28
+  std::string motif;
+  bool operator<(const Repeat & rhs) const {
+    if (chromosome == rhs.chromosome) {
+      return position < rhs.position;
+    } else {
+      return chromosome < rhs.chromosome;
+    }
+  }
+};
+
+class Repeats {
+ public:
+  explicit Repeats(const Reference & ref_) :
+      ref{ref_} {
+    const ChromosomeIndexLookup chr_lookup{ref};
+    const std::string repeats_file_name{ref.fasta_file() + ".bin/repeats.txt"};
+    std::ifstream repeats_file{repeats_file_name.c_str()};
+    if (!repeats_file)
+      throw Error("Problem opening repeats file") << repeats_file_name;
+    std::string chromosome_name;
+    unsigned int position;
+    unsigned int total_length;
+    unsigned int motif_length;
+    unsigned int start_base;
+    unsigned int n_copies;
+    unsigned int stop_base;
+    std::string motif;
+    repeats.reserve(670000000);
+    while (repeats_file >> chromosome_name >> position >>  total_length
+           >> motif_length >> start_base >> n_copies >> stop_base >> motif) {
+      repeats.push_back(Repeat{
+          chr_lookup[chromosome_name], position, total_length,
+              start_base, n_copies, stop_base, motif});
+    }
+    std::cerr << "Loaded " << repeats.size() << " repeat lines" << std::endl;
+  }
+
+  const Repeat * operator()(const unsigned int chromosome_,
+                            const unsigned int position_) const {
+    const Repeat to_look_up{chromosome_, position_, 0, 0, 0, 0, ""};
+    auto found = upper_bound(repeats.begin(), repeats.end(), to_look_up);
+    unsigned int best_length{0};
+    auto best = found;
+    while (found-- != repeats.begin() &&
+           found->chromosome == chromosome_ &&
+           found->position <= position_ &&
+           position_ <
+           static_cast<unsigned int>(found->position + found->total_length)) {
+      if (best_length < found->total_length) {
+        best_length = found->total_length;
+        best = found;
+      }
+    }
+    if (best_length) {
+      return &*best;
+    } else {
+      return nullptr;
+    }
+  }
+
+ private:
+  const Reference & ref;
+  std::vector<Repeat> repeats{};
+};
+
 }  // namespace paa
 
 #endif  // PAA_SEQUENCE_H

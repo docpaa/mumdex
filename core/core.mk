@@ -6,8 +6,7 @@ CORE_PROGRAMS := \
 	mview \
 	population_bridges \
 	population_database \
-	population_denovos \
-	population_denovos2
+	population_denovos
 
 PROGRAMS += $(CORE_PROGRAMS)
 all : $(CORE_PROGRAMS)
@@ -18,4 +17,3 @@ mummer : files.o
 mview : mview.x11o
 population_bridges : utility.o
 population_denovos : utility.o
-population_denovos2 : utility.o
