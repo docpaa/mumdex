@@ -32,7 +32,7 @@ STD := -std=c++11
 
 # debug = 1
 ifdef debug
-  FAST := -Ofast # -Ofast -DNDEBUG
+  FAST := # -Ofast # -Ofast -DNDEBUG
   DEBUG := -g -ggdb
 else
   FAST := -Ofast -DNDEBUG 

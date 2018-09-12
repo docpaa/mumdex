@@ -414,7 +414,9 @@ inline bool operator<(const unsigned int pos, const Bin & bin) {
 }
 
 std::vector<Bin> load_bins(const std::string & bins_name,
-                           const Reference & ref, const bool cut = false) {
+                           const Reference & ref,
+                           const bool cut = false,
+                           const bool mask = true) {
   std::ifstream bins_file{bins_name.c_str()};
   if (!bins_file) throw Error("Could not open bins file") << bins_name;
   const CN_abspos cn_abspos{ref};
@@ -509,8 +511,9 @@ std::vector<Bin> load_bins(const std::string & bins_name,
     throw Error("Code designed for hg19 only - need to change");
 
   const std::vector<unsigned char> masked_bins{
-    [&ref, &bins_, &bad_zones, &lookup]() {
+    [&ref, &bins_, &bad_zones, &lookup, mask]() {
       std::vector<unsigned char> result(bins_.size());
+      if (!mask) return result;
       unsigned int b{0};
       unsigned int n{0};
       for (unsigned int c{0}; c != ref.n_chromosomes(); ++c) {
@@ -1555,6 +1558,10 @@ class CN_Bin {
 
 class CN_Bins {
  public:
+  CN_Bins(const CN_Bins &) = delete;
+  CN_Bins(CN_Bins &&) = default;
+  CN_Bins & operator=(const CN_Bins &) = delete;
+  CN_Bins & operator=(CN_Bins &&) = default;
   explicit CN_Bins(const std::string & file_name) {
     // Open file
     std::ifstream input{file_name.c_str()};

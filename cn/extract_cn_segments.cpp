@@ -93,16 +93,13 @@ int main(int argc, char* argv[])  try {
   const GeneHitFinder gene_finder{genes};
 
   const string bins_name{argv[2]};
-  const vector<Bin> all_bins{load_bins(bins_name, ref)};
+  const vector<Bin> all_bins{load_bins(bins_name, ref, false, false)};
 
   // List of previously determined good bins
   const vector<Bin> bins{[&all_bins]() {
       vector<Bin> result;
-      for (const Bin & bin : all_bins) {
-        if (!bin.bad()) {
-          result.push_back(bin);
-        }
-      }
+      for (const Bin & bin : all_bins)
+        if (!bin.bad()) result.push_back(bin);
       return result;
     }()};
 
@@ -134,7 +131,8 @@ int main(int argc, char* argv[])  try {
   const CNStateCaller caller{ref, bins, profile};
 
   cout << "chr\tchrpos_start\tchrpos_stop\tn_bins\tbin_start\tbin_stop\t"
-       << "norm_count\tseg_cn\tnorm_cn\tcn_call\tcall\tscore\tgenes" << endl;
+       << "norm_count\tseg_cn\tnorm_cn\tcn_call\tcall\t"
+       << "prob_event\tprob_not_loss\tprob_not_gain\tcall_score\tgenes" << endl;
   for (const Segment & segment : segments) {
     const unsigned int chr{bins[segment.start()].chromosome()};
 
@@ -153,6 +151,9 @@ int main(int argc, char* argv[])  try {
          << call.expected_state << "\t"
          << call.best_call << "\t"
          << call.type << "\t"
+         << call.prob_not_expected << "\t"
+         << call.prob_not_loss << "\t"
+         << call.prob_not_gain << "\t"
          << call.score << "\t";
 
     // Annotate calls with genes hit

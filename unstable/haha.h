@@ -1343,7 +1343,11 @@ class HaHaHMM {
     std::function<uint64_t()> gen{std::bind(
         std::uniform_int_distribution<uint64_t>(
             0, well_covered_loci.size() - 1), mersenne)};
-    for (unsigned int i{0}; i != 1; ++i) p_mom_as[gen()] = log(0.9999999999999);
+    for (unsigned int i{0}; i != 1; ++i) {
+      const uint64_t het{gen()};
+      const double push{1 - 2 * std::numeric_limits<double>::epsilon()};
+      p_mom_as[het] = hets.flip(het) ? log(1 - push) : log(push);
+    }
   }
   void update_model() {
     initial_haplo.assign(calculate_initial_haplo());

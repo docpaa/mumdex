@@ -405,7 +405,8 @@ int main(int argc, char * argv[]) try {
         }
         unique_ptr<AllBins> result{make_unique<AllBins>(bins_names.size())};
         for (unsigned int n{0}; n != bins_names.size(); ++n) {
-          (*result)[n] = load_bins(bins_names[n], ref);
+          // changed behavior - no masking!
+          (*result)[n] = load_bins(bins_names[n], ref, false, false);
         }
         return result;
       } else {

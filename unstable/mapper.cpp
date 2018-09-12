@@ -38,7 +38,7 @@ int main(int argc, char* argv[])  try {
   if (--argc != 1) throw Error("usage: mapper ref_fasta");
 
   const string ref_fasta{argv[1]};
-  const longSA sa{ref_fasta.c_str(), true, true, false};
+  const longSA sa{ref_fasta, true, true, false};
   const Reference ref{ref_fasta};
 
   string read;

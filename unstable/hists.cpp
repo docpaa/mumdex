@@ -1,7 +1,7 @@
 //
-// hist_compare
+// hists
 //
-// read in table, plot hists split by first column
+// make histograms for input columns
 //
 // Copyright 2018 Peter Andrews @ CSHL
 //
@@ -33,9 +33,10 @@ using paa::PSPage;
 
 int main(int argc, char* argv[])  try {
   --argc;
-  if (argc != 1) throw Error("data_file | hist_compare out_name");
+  if (argc != 2) throw Error("data_file | hists n_bins out_name");
 
-  const string out_name{argv[1]};
+  const unsigned int n_bins{static_cast<unsigned int>(atoi(argv[1]))};
+  const string out_name{argv[2]};
 
   string line;
   getline(cin, line);
@@ -54,32 +55,29 @@ int main(int argc, char* argv[])  try {
       vals.push_back(input);
     }
     if (!line_stream) throw Error("Parse Error");
+    line_stream.get();
+    if (line_stream) throw Error("unexpected character");
   }
 
   PSDoc plots{out_name};
   plots.pdf(true);
 
-  using Hist = PSHSeries<int, unsigned int>;
-  for (uint64_t c{1}; c != data.size(); ++c) {
-    const bool suppress_zeros{header[c] == "num_echos"};
+  using Hist = PSHSeries<double, uint64_t>;
+  for (uint64_t c{0}; c != data.size(); ++c) {
     vector<double> & values{data[c]};
     auto minmax = minmax_element(values.begin(), values.end());
     const double min{*minmax.first};
     const double max{*minmax.second};
-    PSPage * page{new PSPage{plots, header[c] +
-            (suppress_zeros ? " (zeros suppressed)" : ""), "1 2"}};
+    PSPage * page{new PSPage{plots}};
     ownp(page);
-    const unsigned int n_bins{static_cast<unsigned int>(max - min + 1.5)};
-    Hist * hist0{new Hist{*page, header[0] + " = false;" + header[c] + ";N",
-            Bounds{min, max + 1}, n_bins}};
-    ownp(hist0);
-    Hist * hist1{new Hist{*page, header[0] + " = true;" + header[c] + ";N",
-            Bounds{min, max + 1}, n_bins}};
-    ownp(hist1);
-    vector<Hist *> hists{hist0, hist1};
+    // const unsigned int n_bins{)};
+    const unsigned int used_n_bins{n_bins ? n_bins :
+          static_cast<unsigned int>(sqrt(values.size()))};
+    const double edge{(max - min) / 20};
+    Hist * hist{new Hist{*page, header[c] + ";" + header[c] + ";N",
+            Bounds{min - edge, max + edge}, used_n_bins}};
     for (unsigned int v{0}; v != values.size(); ++v)
-      if (fabs(values[v]) > 0.001 || !suppress_zeros)
-        hists[data[0][v]]->add_point(values[v]);
+        hist->add_point(values[v]);
   }
 
   return 0;

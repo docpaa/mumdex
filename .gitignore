@@ -75,6 +75,8 @@ gene_view
 ggraph
 haha
 hist_compare
+hists
+ihists
 incidental
 jackpot
 karyotype
@@ -120,6 +122,7 @@ population_bridges
 population_database
 population_denovos
 population_denovos2
+pop_cn
 position_coverage
 primers
 print_invariants

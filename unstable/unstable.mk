@@ -55,7 +55,9 @@ DEVELOPMENT_PROGRAMS := \
 	find_repeats \
 	gene_view \
 	haha \
+	hists \
 	hist_compare \
+	ihists \
 	jackpot \
 	karyotype \
 	local_similarity \

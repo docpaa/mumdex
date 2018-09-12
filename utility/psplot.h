@@ -59,6 +59,11 @@ class DocSettings {
     pdf_ = pdf__;
     return *this;
   }
+  bool png() const { return png_; }
+  DocSettings & png(const bool png__) {
+    png_ = png__;
+    return *this;
+  }
   bool ticks() const { return ticks_; }
   bool & ticks() { return ticks_; }
   DocSettings & ticks(const bool ticks__) {
@@ -88,6 +93,7 @@ class DocSettings {
   bool eps_{false};
   bool ps_{true};
   bool pdf_{false};
+  bool png_{false};
   bool ticks_{true};
   unsigned int width_{default_doc_width};
   unsigned int height_{default_doc_height};
@@ -397,10 +403,15 @@ class PSDocT : public DocSettings,
          const unsigned int width__ = doc_defaults.width(),
          const unsigned int height__ = doc_defaults.height(),
          const double padding__ = doc_defaults.padding()) :
-      DocSettings{width__, height__, padding__},
-      Multi{this},
+      // DocSettings{width__, height__, padding__},
+      DocSettings{doc_defaults},
+    Multi{this},
     file_name{filename},
-    title{title_.size() ? title_ : file_name} { }
+    title{title_.size() ? title_ : file_name} {
+      width(width__);
+      height(height__);
+      padding(padding__);
+    }
 
   // Destroy
   ~PSDocT() {
@@ -500,7 +511,7 @@ class PSDocT : public DocSettings,
     if (system(mv.str().c_str()) == -1) {
       std::cerr << "Problem moving ps file" << std::endl;
     }
-    if (pdf()) {
+    if (pdf() || png()) {
       std::ostringstream ps2pdf;
       ps2pdf << "ps2pdf -dDEVICEWIDTHPOINTS=" << width()
              << " -dDEVICEHEIGHTPOINTS=" << height()
@@ -508,8 +519,16 @@ class PSDocT : public DocSettings,
       if (system(ps2pdf.str().c_str()) == -1) {
         std::cerr << "Problem creating pdf file" << std::endl;
       }
+      if (png()) {
+        std::ostringstream pdf2png;
+        pdf2png << "convert " << file_name << ".pdf " << file_name << ".png";
+        if (system(pdf2png.str().c_str()) == -1) {
+          std::cerr << "Problem creating png file" << std::endl;
+        }
+      }
     }
     if (!ps()) unlink(file_name + ext());
+    if (!pdf() && png()) unlink(file_name + ".pdf");
   } catch (Error & e) {
     std::cerr << "paa::Error:\n";
     std::cerr << e.what() << std::endl;

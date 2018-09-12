@@ -21,6 +21,7 @@
 #include "bridges.h"
 #include "encode.h"
 #include "error.h"
+#include "longSA.h"
 #include "mumdex.h"
 #include "threads.h"
 #include "utility.h"
@@ -37,12 +38,14 @@ using std::ofstream;
 using std::ostream;
 using std::ostringstream;
 using std::pair;
+using std::ref;
 using std::setprecision;
 using std::string;
 using std::to_string;
 using std::vector;
 
 using paa::commas;
+using paa::longSA;
 using paa::read_optional_formats;
 using paa::BridgeInfo;
 using paa::Error;
@@ -51,6 +54,8 @@ using paa::MUMdex;
 using paa::OneBridgeInfo;
 using paa::OptionalSavers;
 using paa::Pair;
+using paa::Reference;
+using paa::SimpleHit;
 using paa::ThreadPool;
 
 // Matrix with two compile-time dimensions
@@ -204,13 +209,15 @@ struct TagInfo {
   }
   unsigned int out(ostream & stream, const uint64_t seq_id,
                    const int64_t invariant, const int64_t offset,
-                   const vector<unsigned int> & pos_counts) const {
+                   const vector<unsigned int> & pos_counts,
+                   vector<unsigned int> & loci_hit) const {
     unsigned int result{0};
     for (unsigned int b{0}; b != combined_bridges.size(); ++b) {
       const CombinedBridgeInfo & cbridge{combined_bridges[b]};
       const BridgeInfo & bridge{cbridge.bridge};
       if (bridge.invariant() == invariant &&
           bridge.offset() == offset) {
+        ++loci_hit[bridge.pos1()];
         result += bridge.bridge_count();
         stream << seq_id
                << " " << bridge.pos1()
@@ -291,10 +298,15 @@ int main(int argc, char * argv[]) try {
   using TagInfosResult = pair<uint64_t, TagInfos>;
   using TagInfosFuture = future<TagInfosResult>;
   vector<TagInfosFuture> tag_infos_futures;
-  vector<vector<unsigned int>> all_pos_counts(argc);
-  auto process_mumdex = [min_mum_length]
-      (const string & mumdex_name, vector<unsigned int> & pos_counts) {
+  const vector<int64_t> invariants_of_interest{
+    -5, -4, -3, -2, -1};
+  auto process_mumdex = [min_mum_length, invariants_of_interest]
+      (const string & mumdex_name, vector<unsigned int> & pos_counts,
+       vector<unsigned int> & n_possible_indels, uint64_t & n_pairs,
+       uint64_t & average_read_length, uint64_t & ref_length) {
     const MUMdex mumdex{mumdex_name};
+    const Reference & ref{mumdex.reference()};
+    ref_length = ref.size(0);
     const vector<string> optional_formats{read_optional_formats(mumdex_name)};
     OptionalSavers saver{optional_formats};
     saver.load(mumdex_name, mumdex.n_pairs() * 2);
@@ -304,13 +316,15 @@ int main(int argc, char * argv[]) try {
     SeqInfos seq_infos;
     seq_infos.reserve(mumdex.n_pairs());
     uint64_t n_bases{0};
-    pos_counts.resize(mumdex.reference().size(0));
+    pos_counts.resize(ref.size(0));
+    n_pairs = mumdex.n_pairs();
     for (uint64_t p = 0; p != mumdex.n_pairs(); ++p) {
       const string tag{saver[tag_id][p * 2]};
       const unsigned int count{saver[count_id].to_u32(p*2)};
       const Pair & pair{mumdex.pair(p)};
       for (bool read2 : {0, 1}) {
         n_bases += count * (pair.length(read2) - 2 * min_mum_length);
+        average_read_length += pair.length(read2);
       }
       seq_infos.emplace_back(mumdex, p, tag, count);
       if (true) {
@@ -322,6 +336,9 @@ int main(int argc, char * argv[]) try {
         }
       }
     }
+    average_read_length /= 2.0 * mumdex.n_pairs();
+    if (false && average_read_length > ref.size(0))
+      throw Error("unexpected average read length") << average_read_length;
 
     // sort pairs by tag
     sort(seq_infos.begin(), seq_infos.end(),
@@ -353,13 +370,59 @@ int main(int argc, char * argv[]) try {
     for (uint64_t t{0}; t != tag_infos.size(); ++t)
       tag_infos[t].finalize();
 
-    // Get base coverage counts
-    if (false) {
-      for (uint64_t m{0}; m != mumdex.n_mums(); ++m) {
-        const MUM mum{mumdex.mum(m)};
-        if (mum.length() < 20) continue;
-        for (unsigned int b{0}; b != mum.length(); ++b)
-          ++pos_counts[mum.position0() + b];
+    // determine where it is possible to have particular indels
+    const longSA sa{ref.fasta_file(), true, true, false};
+    n_possible_indels.back() = ref.size(0);
+    for (uint64_t i{0}; i != invariants_of_interest.size(); ++i) {
+      const int64_t invariant{invariants_of_interest[i]};
+      const int64_t deletion_length{-invariant};
+      if (invariant >= 0) throw Error("expect negative invariant");
+      for (unsigned int b{0}; b != ref.size(0); ++b) {
+        unsigned int start_base{0};
+        unsigned int stop_base{0};
+        const unsigned int sequence_length{static_cast<unsigned int>(
+            average_read_length + deletion_length)};
+        if (b < ref.size(0) / 2) {
+          start_base = b > sequence_length / 2 ?
+              b - sequence_length / 2 : 0;
+          stop_base = start_base + sequence_length;
+        } else {
+          stop_base = b + sequence_length / 2 <= ref.size(0) ?
+              b + sequence_length / 2 : ref.size(0);
+          start_base = stop_base - sequence_length;
+        }
+        if (b < min_mum_length ||
+            b + min_mum_length + deletion_length > ref.size(0)) continue;
+        string sequence;
+        for (unsigned int s{0}; s != ref.size(0); ++s) {
+          if (s >= start_base && s < stop_base &&
+              !(s >= b && s < b + deletion_length))
+            sequence += ref[0][s];
+        }
+        if (sequence.size() != average_read_length)
+          throw Error("Sequence construction problem");
+        const uint64_t high_anchor_pos{b - 1};
+        const uint64_t low_anchor_pos{static_cast<uint64_t>(
+            b + deletion_length)};
+        const std::vector<SimpleHit> mams{
+          sa.find_mams(sequence, min_mum_length)};
+        if (false) {
+          cerr << "map of " << sequence << " found " << mams.size() << " mums"
+               << endl;
+          cerr << "anchors " << high_anchor_pos << " " << low_anchor_pos
+               << endl;
+          for (const SimpleHit & mam : mams) {
+            cerr << mam.dir << " " << mam.chr << " " << mam.pos
+                 << " " << mam.len << " " << mam.off << endl;
+          }
+        }
+        bool has_high{false};
+        bool has_low{false};
+        for (const SimpleHit & mam : mams) {
+          if (mam.pos + mam.len - 1 == high_anchor_pos) has_high = true;
+          if (mam.pos == low_anchor_pos) has_low = true;
+        }
+        if (has_high && has_low) ++n_possible_indels[i];
       }
     }
 
@@ -367,9 +430,19 @@ int main(int argc, char * argv[]) try {
   };
 
   // process mumdex inputs in parallel
+  vector<vector<unsigned int>> all_pos_counts(argc);
+  vector<vector<unsigned int>> all_n_possible_indels(
+      argc, vector<unsigned int>(invariants_of_interest.size() + 1));
+  vector<uint64_t> all_n_pairs(argc);
+  vector<uint64_t> all_read_lengths(argc);
+  vector<uint64_t> all_ref_lengths(argc);
   for (int arg{0}; arg != argc; ++arg)
     tag_infos_futures.push_back(pool.run(process_mumdex, argv[arg + 1],
-                                         all_pos_counts[arg]));
+                                         ref(all_pos_counts[arg]),
+                                         ref(all_n_possible_indels[arg]),
+                                         ref(all_n_pairs[arg]),
+                                         ref(all_read_lengths[arg]),
+                                         ref(all_ref_lengths[arg])));
 
   // get future results, group by tags
   uint64_t n_bases{0};
@@ -380,6 +453,24 @@ int main(int argc, char * argv[]) try {
     all_tag_infos.push_back(move(result.second));
   }
   cerr << "events detectable in a total of " << commas(n_bases) << " bases\n\n";
+
+  uint64_t average_read_length{0};
+  uint64_t total_reference_length{0};
+  for (int a{0}; a != argc; ++a) {
+    average_read_length += all_read_lengths[a];
+    total_reference_length += all_ref_lengths[a];
+  }
+  average_read_length /= argc;
+
+  vector<unsigned int> total_possible_indels(invariants_of_interest.size());
+  for (const vector<unsigned int> & n_possible_indels : all_n_possible_indels) {
+    for (unsigned int i{0}; i != n_possible_indels.size(); ++i) {
+      if (i + 1 != n_possible_indels.size())
+        total_possible_indels[i] += n_possible_indels[i];
+      cerr << (i ? " " : "") << n_possible_indels[i];
+    }
+    cerr << endl;
+  }
 
   // output detailed tag info
   if (true) {
@@ -393,7 +484,7 @@ int main(int argc, char * argv[]) try {
     }
   }
 
-  if (true) {
+  if (false) {
     cout << "all_pos_counts " << all_pos_counts.size() << endl;
     for (unsigned int s{0}; s != all_pos_counts.size(); ++s) {
       const vector<unsigned int> & pc{all_pos_counts[s]};
@@ -406,18 +497,47 @@ int main(int argc, char * argv[]) try {
 
   // Output info for -N 1 events
   if (true) {
+    uint64_t n_pairs{0};
+    for (const uint64_t pairs : all_n_pairs) n_pairs += pairs;
     cerr << "Progress: output event_info files" << endl;
-    int64_t offset{1};
-    for (const int64_t invariant : {-5, -4, -3, -2, -1}) {
+    for (unsigned int inv{0}; inv != invariants_of_interest.size(); ++inv) {
+      const int64_t invariant{invariants_of_interest[inv]};
+      const int64_t offset_of_interest{invariant ?
+            (invariant > 0 ? invariant + 1 : 1) : 2};
+      vector<unsigned int> loci_hit(500);
       for (uint64_t i{0}; i != all_tag_infos.size(); ++i) {
         ofstream tag_file{"event_info." + to_string(i) + "." +
-              to_string(invariant) + "." + to_string(offset) + ".txt"};
-        tag_file << "seq pos inv off tag tag_count tag_seqs "
+              to_string(invariant) + "." + to_string(offset_of_interest) +
+              ".txt"};
+        tag_file << "seq pos inv off coverage tag tag_count tag_seqs "
                  << "tag_events event_seqs event_tag_count" << endl;
         for (uint64_t t{0}; t != all_tag_infos[i].size(); ++t)
-          all_tag_infos[i][t].out(tag_file, i, invariant, offset,
-                                  all_pos_counts[i]);
+          all_tag_infos[i][t].out(tag_file, i, invariant, offset_of_interest,
+                                  all_pos_counts[i], loci_hit);
       }
+      unsigned int n_hits{0};
+      unsigned int n_loci{0};
+      for (const unsigned int hits : loci_hit) {
+        if (hits) {
+          ++n_loci;
+          n_hits += hits;
+        }
+      }
+
+      const uint64_t average_coverage{
+        n_pairs * 2 * average_read_length / total_reference_length};
+      const double ppse{1.0 * average_coverage * total_possible_indels[inv] /
+            (n_hits ? n_hits : 1)};
+
+      cerr << "inv " << invariant
+           << " off " << offset_of_interest
+           << " hits " << commas(n_hits)
+           << " hit_loci " << n_loci
+           << " possible_loci " << commas(total_possible_indels[inv])
+           << " coverage " << commas(average_coverage)
+           << " pairs_per_event "
+           << commas(ppse)
+           << endl;
     }
   }
 

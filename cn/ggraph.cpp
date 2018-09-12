@@ -1064,6 +1064,9 @@ int main(int argc, char * argv[]) try {
   uint64_t n_rows{471000};  // size of trial data, to minimize extra memory
   bool x_jitter{false};
   double percent{100.0};
+  bool output{false};
+  bool log_y{false};
+  vector<double> ratio_lines{};
   std::string display_name{X11Graph::default_title};
   --argc;
   while (argc) {
@@ -1128,6 +1131,27 @@ int main(int argc, char * argv[]) try {
                                         "if first is --setup");
         const Reference ref{argv[2]};
         return 0;
+      } else if (matches("--output")) {
+        output = true;
+        --argc;
+        ++argv;
+      } else if (matches("--log")) {
+        log_y = true;
+        --argc;
+        ++argv;
+      } else if (matches("--linear")) {
+        log_y = false;
+        --argc;
+        ++argv;
+      } else if (matches("--lines")) {
+        istringstream lines{argv[2]};
+        double value;
+        while (lines && lines >> value) {
+          ratio_lines.push_back(value);
+          lines.get();
+        }
+        argc -= 2;
+        argv += 2;
       } else {
         throw UsageError("Unrecognized command line option") << option;
       }
@@ -1213,7 +1237,7 @@ int main(int argc, char * argv[]) try {
         Info{short_names, input_data.front().info()}};
 
   auto add_special_features =
-      [do_genome, do_cn, &input_data, n_sets, n_y, &ref_ptr]
+      [do_genome, do_cn, &input_data, n_sets, n_y, &ref_ptr, &ratio_lines]
       (X11Graph & graph) {
     if (do_genome) {
       // Chromosomes and ratio lines
@@ -1245,15 +1269,19 @@ int main(int argc, char * argv[]) try {
 
     if (do_cn) {
       // Are some Ys ratios?  Then change scale for ratio lines
-      const vector<double> cn_lines{[&input_data]() {
-          bool some_ratios{false};
-          for (unsigned int c{1}; c != input_data.front().n_cols(); ++c)
-            if (input_data.front().name(c).find("ratio") != string::npos ||
-                input_data.front().name(c).find("seg.mean") != string::npos)
-              some_ratios = true;
-          vector<double> result{0.0, 1.0, 2.0, 3.0, 4.0, 5.0};
-          if (some_ratios) for (double & line : result) line /= 2;
-          return result;
+      const vector<double> cn_lines{[&input_data, &ratio_lines]() {
+          if (ratio_lines.size()) {
+            return ratio_lines;
+          } else {
+            bool some_ratios{false};
+            for (unsigned int c{1}; c != input_data.front().n_cols(); ++c)
+              if (input_data.front().name(c).find("ratio") != string::npos ||
+                  input_data.front().name(c).find("seg.mean") != string::npos)
+                some_ratios = true;
+            vector<double> result{0.0, 1.0, 2.0, 3.0, 4.0, 5.0};
+            if (some_ratios) for (double & line : result) line /= 2;
+            return result;
+          }
         }()};
 
       graph.add_call_back("Toggle ratio lines", X11Graph::CallBack{std::bind(
@@ -1275,12 +1303,19 @@ int main(int argc, char * argv[]) try {
           add_genes, std::cref(*ref_ptr), std::ref(graph), Event());
 
   // Process initial view command line arguments
+  if (log_y) {
+    graph.log_radios[1].toggled = true;
+    graph.prepare_log();
+  }
   if (initial) {
     graph.get_range();
     graph.set_range(0, atof(initial[0]), atof(initial[1]));
     graph.set_range(1, atof(initial[2]), atof(initial[3]));
-    graph.prepare();
   }
+  if (initial || log_y) graph.prepare();
+
+  // Just print the initial view and quit
+  graph.output(output);
 
   // Run the app
   app.run();
@@ -1311,6 +1346,10 @@ Optional leading arguments (CAPS for numeric):
   -s | --setup ref_fasta
   -j | --jitter
   -p | --percent NN
+  -l | --log
+       --linear
+       --lines Y1,Y2,Y3...
+  -o | --output
   -h | --help
 
 Use optional leading argument --help to display additional usage information
@@ -1348,14 +1387,22 @@ or visit http://mumdex.com/ggraph/ to view the G-Graph tutorial)xxx"};
   7. For the optional argument '--geometry', a '+' before 'XOFF' or 'YOFF'
      attempts window placement relative to the upper left of screen,
      while a '-' attempts placement relative to the bottom right screen corner
-  8. The '--threads' option uses up to that number for file load and display
-  9. The --rows option reserves space for input files of that dimension
-  10. The --fullscreen option only tries to make a maximum window size 
-  11. The --setup option allows binary reference cache pre-generation, but
+  8. The --initial option specifies the initial view to show
+  9. The --threads option uses up to that number for file load and display
+  10. The --name option specifies a plot title for viewing and saving
+  11. The --rows option reserves space for input files of that dimension
+  12. The --fullscreen option only tries to make a maximum window size 
+  13. The --setup option allows binary reference cache pre-generation, but
       that would happen anyway on first loading. This option was added only to
       reduce first load wait time when using the G-Graph install script
-  12. The --jitter option adds a little randomness to loaded X coordinates
-  13. The --percent option only loads a fraction of the data, randomly)xxx"
+  14. The --jitter option adds a little randomness to loaded X coordinates
+  15. The --percent option only loads a fraction of the data, randomly
+  16. The --log option sets log mode initially, overriding any config file
+  17. The --linear option sets log mode initially, overriding any config file
+  18. The --lines option specifies alternative ratio lines for cn mode only
+  19. The --output option saves the initial view and then exits
+  20. The --help option displays this text and then exits
+)xxx"
             << std::endl;
 
   return 0;

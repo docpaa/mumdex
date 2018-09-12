@@ -67,7 +67,10 @@ class CNStateCall {
                        (best_call > expected_state ? not_gain_prob :
                         not_expected_prob),
                        min_prob));
-  }
+    prob_not_expected = max(not_expected_prob, min_prob);
+    prob_not_loss = max(not_loss_prob, min_prob);
+    prob_not_gain = max(not_gain_prob, min_prob);
+    }
 
   std::vector<double> state_probs;
   std::vector<double> not_state_probs;
@@ -76,6 +79,9 @@ class CNStateCall {
   double segment_count{0.0};
   std::string type{""};
   double score{0.0};
+  double prob_not_expected{0.0};
+  double prob_not_loss{0.0};
+  double prob_not_gain{0.0};
 };
 
 class CNStateCaller {

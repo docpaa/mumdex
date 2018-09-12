@@ -1554,6 +1554,7 @@ class X11Graph : public X11Win, public SavedConfig {
   static Geometry default_geometry();
   virtual bool slow() const;
   void movie(const bool right);
+  void output(const bool output__);
   void save_image(const std::string & base_name);
   bool show_help(const Point point);
   void open_url(const std::string & url) const;
@@ -1595,6 +1596,7 @@ class X11Graph : public X11Win, public SavedConfig {
   uint64_t shrink{1};
   std::vector<int> steps{};
   bool help_shown{false};
+  bool output_{false};
 
   //
   // Radio controls
@@ -2754,6 +2756,10 @@ void X11Graph::draw() {
     redraw();
   }
   drawn = true;
+  if (output_) {
+    save_image(plot_name);
+    app.close_window(window);
+  }
 }
 
 //
@@ -3016,6 +3022,10 @@ void X11Graph::movie(bool right) {
   }
 }
 
+void X11Graph::output(const bool output__) {
+  output_ = output__;
+}
+
 void X11Graph::save_image(const std::string & base_name) {
   void_fun call_back = [this]() {
     status = "Saving Image";
@@ -3220,8 +3230,10 @@ void X11Graph::open_url(const std::string & url) const {
 // Colors
 std::vector<std::string> X11Graph::make_colors() const {
   std::vector<std::string> names{
-    "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
-        "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
+    // "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00",
+    "rgb:00/b7/00", "rgb:e5/00/00", "rgb:25/00/9e", "rgb:e5/be/00",
+        // "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95",
+        "rgb:e5/83/00", "rgb:06/56/93", "rgb:b7/dd/00", "rgb:95/00/95",
         "rgb:fc/7c/fc", "rgb:00/18/00", "rgb:00/fc/84", "rgb:fc/fc/a0",
         "rgb:90/a0/8c", "rgb:00/a8/fc", "rgb:74/54/fc", "rgb:fc/08/fc",
         "rgb:78/4c/30", "rgb:fc/40/78", "rgb:80/fc/68", "rgb:00/2c/fc",
