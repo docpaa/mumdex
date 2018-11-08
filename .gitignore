@@ -66,6 +66,7 @@ fastq_kmer_counter
 fastq_mapper
 fastq_vt_mapper
 fastqs2sam
+filter_bridges
 find_bridge
 find_indel
 find_microsatellite

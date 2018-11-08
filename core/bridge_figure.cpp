@@ -740,11 +740,11 @@ int main(int argc, char* argv[])  try {
   if (--argc != 13) {
     throw Error("usage: bridge_figure samples_dir pop_file "
                 "chr1 pos1 high1 chr2 pos2 high2 "
-                "inv family member offset type");
+                "inv offset type family member");
   }
 
   // Process command line arguments and setup
-  const string family_name{argv[10]};
+  const string family_name{argv[12]};
   const string samples_dir{argv[1]};
   const Population pop{argv[2]};
   const string first_sample_name{pop.sample(pop.samples(family_name).front())};
@@ -760,11 +760,11 @@ int main(int argc, char* argv[])  try {
   const bool high[2]{static_cast<bool>(atoi(argv[5])),
         static_cast<bool>(atoi(argv[8]))};
   const int64_t invariant{atol(argv[9])};
+  const string offset{argv[10]};
+  const string extra{argv[11]};
   const vector<Sample> family_samples{pop.samples(family_name)};
   const Family family{pop.family(family_samples.front())};
-  const string member{argv[11]};
-  const string offset{argv[12]};
-  const string extra{argv[13]};
+  const string member{argv[13]};
   const vector<Sample> & event_samples{
     member == "proband" ? pop.proband(family) :
         (member == "sibling" ? pop.sibling(family) : pop.child(family))};
@@ -1294,7 +1294,7 @@ int main(int argc, char* argv[])  try {
   }
 
   const bool best_page_only{false};
-  const bool best_bridge_only{false};
+  const bool best_bridge_only{true};
   const bool main_pages_only{false};
 
   unsigned int n_pages_pre{0};
@@ -1310,7 +1310,7 @@ int main(int argc, char* argv[])  try {
       if (best_page_only) break;
     }
     if (best_page_only) break;
-    if (best_bridge_only) break;
+    if (best_bridge_only && n_pages > 1) break;
   }
 
   ps << "%%Trailer" << endl;

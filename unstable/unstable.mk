@@ -49,6 +49,7 @@ DEVELOPMENT_PROGRAMS := \
 	fastq_kmer_counter \
 	fastq_mapper \
 	fastq_vt_mapper \
+	filter_bridges \
 	find_bridge \
 	find_indel \
 	find_microsatellite \
@@ -119,6 +120,7 @@ DEVELOPMENT_PROGRAMS := \
 	test_threads \
 	test_x11 \
 	transmission \
+	transmission_old \
 	unequal_bridges \
 	validate_leukemia \
 	validate_mumdex \
@@ -183,6 +185,7 @@ similar_bridge : utility.o
 sssa : files.o
 test_x11 : test_x11.x11o
 transmission : genes.o utility.o
+transmission_old : genes.o utility.o
 x11plot : x11plot.x11o
 
 

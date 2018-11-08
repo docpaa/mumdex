@@ -1,86 +1,78 @@
 //
 // transmission
 //
-// study transmission
+// get some counts for transmission study
 //
-// Copyright 2017 Peter Andrews CSHL
+// Copyright 2018 Peter Andrews CSHL
 //
 
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <deque>
 #include <exception>
-#include <iostream>
-#include <list>
+#include <functional>
 #include <future>
+#include <iostream>
 #include <mutex>
-#include <queue>
-#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "block_reader.h"
 #include "bridges.h"
 #include "error.h"
 #include "files.h"
-#include "genes.h"
 #include "mumdex.h"
 #include "population.h"
 #include "sequence.h"
+#include "threads.h"
 #include "utility.h"
 
 using std::array;
-using std::async;
 using std::cerr;
-using std::condition_variable;
 using std::cout;
-using std::deque;
+using std::defer_lock;
 using std::endl;
 using std::exception;
+using std::flush;
 using std::future;
-using std::list;
 using std::lock_guard;
 using std::lower_bound;
-using std::move;
 using std::mutex;
+using std::ostream;
 using std::ostringstream;
-using std::priority_queue;
-using std::set;
+using std::pair;
 using std::string;
 using std::unique_lock;
 using std::vector;
 
+using paa::file_size;
+using paa::get_block_size;
 using paa::serr;
 using paa::sout;
-using paa::tout;
 using paa::BridgeInfo;
+using BlockMerger = paa::BlockMerger<BridgeInfo>;
+using BlockReader = paa::BlockReader<BridgeInfo>;
 using paa::ChromosomeIndexLookup;
 using paa::ConsensusSequence;
 using paa::Error;
 using paa::Family;
 using paa::FileVector;
-using paa::GeneHitFinder;
-using paa::GeneInfoInterval;
-using paa::GeneXrefs;
-using paa::HitType;
-using paa::KnownGene;
-using paa::KnownGenes;
 using paa::Mappability;
-using paa::MergeHelper;
-using paa::MergeHelperCompare;
 using paa::MUM;
 using paa::MUMindex;
 using paa::Pair;
-using paa::PopBridgeInfo;
 using paa::Population;
 using paa::Reference;
 using paa::Sample;
 using paa::Similarity;
 using paa::SpaceOut;
+using paa::ThreadPool;
 
-#if 0
+#define USE_FILES 1
+
+#if USE_FILES
 using MUMdex = paa::FileMUMdex;
 using Bridges = paa::FileBridges;
 #else
@@ -94,62 +86,47 @@ using Bridge = Bridges::Bridge;
 const bool verbose{false};
 
 const bool exclude_snps{true};
-const bool exclude_indels{false};
-const bool exclude_trans{true};
-const bool exclude_inversions{true};
-const bool allow_skips{true};
-
 const unsigned int min_support_length{20};
-const unsigned int min_bridge_count{5};
 const unsigned int min_mate_count{1};
-const unsigned int min_mate_support{10};
-const unsigned int min_excess_mappability{5};
-const unsigned int max_abs_invariant{1000000};
-const int max_offset{10};
-const int min_offset{-10};
-const unsigned int max_n_families{10};
+const unsigned int min_mate_support{20};
+const unsigned int min_excess_mappability{0};
+
+const unsigned int t1{10};
+const unsigned int t2{2};
+const unsigned int t3{1};
+const unsigned int T2{50};
+const unsigned int T3{0};
 
 uint64_t n_no_cut{0};
 uint64_t n_not_snp{0};
-uint64_t n_two_or_less{0};
 uint64_t n_one_family{0};
 uint64_t n_children{0};
 uint64_t n_children_one_family{0};
-uint64_t n_no_rare_inherited{0};
-uint64_t n_one_parent{0};
 uint64_t n_big_count{0};
 uint64_t n_good_support{0};
 uint64_t n_good_mate_support{0};
 uint64_t n_good_excess{0};
-uint64_t n_good_pop{0};
 uint64_t n_adjacent_cut{0};
 uint64_t n_parent_coverage_cut{0};
 
-char hit_char(const HitType info) {
-  switch (info) {
-    case HitType::none:
-      return 'n';
-      break;
-    case HitType::gene:
-      return 'g';
-      break;
-    case HitType::exon:
-      return 'e';
-      break;
-    case HitType::intron:
-      return 'i';
-      break;
-    default:
-      throw Error("unexpected HitType");
-  }
+void bridge_out(ostream & out, const BridgeInfo & bridge,
+                const bool end_line = false) {
+  out << " " << bridge.chr1()
+      << " " << bridge.pos1()
+      << " " << bridge.high1()
+      << " " << bridge.chr2()
+      << " " << bridge.pos2()
+      << " " << bridge.high2()
+      << " " << bridge.invariant()
+      << " " << bridge.offset()
+      << " " << bridge.bridge_count();
+  if (end_line) out << endl;
 }
 
 int main(int argc, char* argv[])  try {
-  --argc;
-  if (argc != 7) {
-    throw Error("usage: transmission ref family_file samples_dir bridges_dir "
-                "chromosome start stop");
-  }
+  if (--argc != 7)
+    throw Error("usage: transmission ref family_file bridges_dir "
+                "n_threads chromosome start stop");
 
   // Other command line arguments
   const string reference_file{argv[1]};
@@ -158,132 +135,162 @@ int main(int argc, char* argv[])  try {
   const Mappability map{reference_file, true};
   const string family_file{argv[2]};
   const Population pop{family_file};
-  const string samples_dir{argv[3]};
-  const string bridges_dir{argv[4]};
+  const string bridges_dir{argv[3]};
+  const unsigned int n_threads{static_cast<unsigned int>(atoi(argv[4]))};
   const string chromosome_name{argv[5]};
   const unsigned int chromosome{chr_lookup[chromosome_name]};
   const unsigned int chromosome_offset{ref.offset(chromosome)};
   const unsigned int start{static_cast<unsigned int>(atoi(argv[6]))};
   const unsigned int stop{static_cast<unsigned int>(atoi(argv[7]))};
 
-  // Load gene info
-  cerr << "Load Gene info" << endl;
-  const string genes_name{reference_file + ".bin/knownGene.txt"};
-  const string isoforms_name{reference_file + ".bin/knownIsoforms.txt"};
-  const string kgXrefs_name{reference_file + ".bin/kgXref.txt"};
-  const KnownGenes genes{genes_name, isoforms_name, chr_lookup, ref};
-  const GeneXrefs xref{kgXrefs_name};
-  const GeneHitFinder gene_finder{genes};
-  cerr << "Done load Gene info" << endl;
+  ThreadPool pool{n_threads};
 
-  if (0) {
-    for (unsigned int c{0}; c != ref.n_chromosomes(); ++c) {
-      const vector<GeneInfoInterval> & intervals{gene_finder.intervals.at(c)};
-      for (const GeneInfoInterval & interval : intervals) {
-        cerr << ref.name(c) << " "
-             << interval.start_pos << " "
-             << interval.stop_pos << " "
-             << interval.info.size();
-        for (const auto & info : interval.info) {
-          cerr << " "
-               << info.first << ":"
-               << hit_char(info.second.hit) << ":"
-               << info.second.exon;
-        }
-        cerr << endl;
-      }
-    }
-  }
-
-  // Set up queue of bridge files
-  deque<MergeHelper> helpers;
-  using PQueue = priority_queue<MergeHelper*, vector<MergeHelper *>,
-      MergeHelperCompare>;
-  PQueue queue{MergeHelperCompare()};
-  unsigned int n_samples_skipped{0};
+  // Set up bridge files to start position, in parallel to save time
+  vector<future<BlockReader>> futures;
+  futures.reserve(pop.n_samples());
+  uint64_t block_size{4096};
   for (const auto s : pop.samples()) {
     ostringstream bridges_name;
     bridges_name << bridges_dir << "/" << pop.sample(s) << "/"
                  << get_bridge_file_name(ref, chromosome);
-    MergeHelper helper{bridges_name.str(), s, start, stop};
-    if (helper.valid_start()) {
-      helpers.push_back(move(helper));
-      queue.push(&helpers.back());
-    } else {
-      ++n_samples_skipped;
+    if (!s) {
+      block_size = std::max(block_size, get_block_size(bridges_name.str()));
+      cerr << "Block size is " << block_size << endl;
     }
+    futures.push_back(pool.run([s, start, stop](const string name){
+          return BlockReader{name, start, stop};
+        }, bridges_name.str()));
+  }
+  vector<BlockReader> readers;
+  unsigned int n_samples_loaded{0};
+  for (const auto s : pop.samples()) {
+    if (s != n_samples_loaded) throw Error("Sample sanity check");
+    readers.push_back(futures[n_samples_loaded].get());
     serr << pop.family(pop.family(s))
          << pop.sample(s)
          << pop.member(s)
-         << bridges_name.str()
-         << queue.size() << endl;
+         << ++n_samples_loaded
+         << endl;
   }
 
-  if (!allow_skips && n_samples_skipped)
-    throw Error("Samples skipped") << n_samples_skipped;
+  ThreadPool load_pool{n_threads};
+  BlockMerger merger{load_pool, block_size = 32768, readers};
 
-  if (0) sout << "family" << "parent" << "kids"
-       << "nFam" << "nSam" << "nInFam"
+  // Document the run
+  serr << "Run parameters:" << endl
+       << "  n_threads" << n_threads << endl
+       << "  family_file" << family_file << endl
+       << "  bridges_dir" << bridges_dir << endl
+       << "  chromosome" << chromosome_name << endl
+       << "  start" << start << endl
+       << "  stop" << stop << endl
+       << "  n_families" << pop.n_families() << endl
+       << "  n_samples" << pop.n_samples() << endl
+       << "  exclude_snps" << exclude_snps << endl
+       << "  min_support_length" << min_support_length << endl
+       << "  min_mate_count" << min_mate_count << endl
+       << "  min_mate_support" << min_mate_support << endl
+       << "  min_excess_mappability" << min_excess_mappability << endl;
+
+  sout << "family"
+       << "members"
+       << "samples"
+       << "sex"
+       << "n_in_family"
+
+       << "bridges"
+       << "n_t1"
+       << "n_t2"
+       << "n_t3"
+
        << "chr"
        << "chrA" << "posA" << "highA"
        << "chrB" << "posB" << "highB"
-       << "type" << "ori"
        << "invariant" << "offset"
-       << "bridge"
-       << "supA" << "supB"
-       << "mCA" << "mSA"
-       << "mCB" << "mSB"
-       << "mapA" << "mapB" << "minParCov"
-       << "bridges"
-       << "anchorsA" << "anchorsB"
-       << "coveragesA" << "coveragesB"
-       << "pNP" << "pNB" << "pMed" << "pMax" << "tBC" << "nBC" << "nS"
-       << endl;
+       << "type" << "orient"
 
-  unsigned int grand_tot_n_proband{0};
-  unsigned int grand_tot_n_sibling{0};
+       << "supA" << "supB"
+       << "emapA" << "emapB"
+       << "mapA" << "mapB"
+       << "mCA" << "mCB"
+       << "mSA" << "mSB"
+
+       << "max_bridge_count"
+
+       << "pop_n_families"
+       << "pop_n_samples"
+       << "pop_n_parents"
+       << "pop_n_children"
+       << "pop_total"
+       << "pop_parent_total"
+       << "pop_child_total"
+       << "pop_parent_counts"
+       << "pop_child_counts"
+       << "pop_info"
+       << endl;
 
   // Loop, adding one bridge at a time to all_bridges if the same event
   vector<BridgeInfo> all_bridges;
   vector<Sample> all_samples;
+  vector<unsigned int> parent_counts;
+  vector<unsigned int> children_counts;
   unsigned int total_bridge_count{0};
-  unsigned int normal_bridge_count{0};
-  unsigned int normal_seen{0};
+  unsigned int parent_bridge_count{0};
+  unsigned int parent_seen{0};
+  unsigned int child_bridge_count{0};
+  unsigned int child_seen{0};
+  uint64_t n_bridges{0};
+  const uint64_t notify_interval{10000000};
   bool reset{true};
+  BridgeInfo last_bridge{};
   while (true) {
     // New bridge expected - start fresh
     if (reset) {
       all_bridges.clear();
       all_samples.clear();
+      parent_counts.clear();
+      children_counts.clear();
       total_bridge_count = 0;
-      normal_bridge_count = 0;
-      normal_seen = 0;
+      parent_bridge_count = 0;
+      parent_seen = 0;
+      child_bridge_count = 0;
+      child_seen = 0;
       reset = false;
     }
 
     // Add a bridge to the list if the same event
     bool bridge_done{true};
-    if (queue.size()) {
-      MergeHelper * top{queue.top()};
-      const BridgeInfo current{top->current()};
+    if (merger.available()) {
+      const BlockMerger::Item & item{merger.next()};
+      const BridgeInfo current{item.first};
+      // if (all_bridges.size() && current < all_bridges.back()) {
+      if (current < last_bridge) {
+        cerr << "Bridge misordering" << endl;
+        bridge_out(cerr, last_bridge);
+        cerr << endl;
+        bridge_out(cerr, current);
+        const Sample sample{item.second};
+        cerr << " " << pop.sample(sample);
+        cerr << endl;
+        exit(1);
+      }
+      last_bridge = current;
       if (all_bridges.empty() || !(all_bridges.back() < current)) {
         ++n_no_cut;
         bridge_done = false;
         all_bridges.push_back(current);
         total_bridge_count += current.bridge_count();
-        const Sample sample{top->sample()};
-        if (pop.is_parent(sample)) {
-          normal_bridge_count += current.bridge_count();
-          ++normal_seen;
-        }
+        const Sample sample{item.second};
         all_samples.emplace_back(sample);
-        queue.pop();
-        if (top->advance()) {
-          queue.push(top);
+        if (pop.is_parent(sample)) {
+          parent_bridge_count += current.bridge_count();
+          ++parent_seen;
+        } else {
+          child_bridge_count += current.bridge_count();
+          ++child_seen;
         }
+        merger.advance();
       }
-      if (queue.empty()) bridge_done = true;
-      if (bridge_done) reset = true;
     } else {
       if (all_samples.empty()) {
         if (verbose) cerr << "bridge queue empty" << endl;
@@ -293,37 +300,21 @@ int main(int argc, char* argv[])  try {
 
     // No new bridges added, so bridge list is ready to process
     if (bridge_done) {
-      // The first bridge, the exemplar since all are the same
+      reset = true;
+
+      // The first bridge, the exemplar since all are the same signature
       const BridgeInfo & bridge{all_bridges[0]};
+
+      if ((++n_bridges % notify_interval) == 0)
+        cerr << "progress: " << n_bridges << " " << bridge.pos1() << " "
+             << 1.0 * (bridge.pos1() - start) / (stop - start) << endl;
 
       // SNP cut
       const bool is_snp{bridge.chr1() == bridge.chr2() &&
             bridge.invariant() == 0 && bridge.high1() != bridge.high2()};
       if (is_snp) {
         if (exclude_snps) continue;
-      } else {
-        ++n_not_snp;
-      }
-
-      // Indel cut
-      if (exclude_indels && bridge.chr1() == bridge.chr2() &&
-          bridge.high1() != bridge.high2()) continue;
-
-      // Translocation cut
-      if (exclude_trans && bridge.chr1() != bridge.chr2()) continue;
-
-      // Inversion cut
-      if (exclude_inversions && bridge.chr1() == bridge.chr2() &&
-          bridge.high1() == bridge.high2()) continue;
-
-      // Invariant cut
-      if (labs(bridge.invariant()) > max_abs_invariant) {
-        continue;
-      }
-
-      // Offset cut
-      if (bridge.offset() < min_offset || bridge.offset() > max_offset) {
-        continue;
+        throw Error("Cannot deal with snps here");
       }
 
       // Count families seen
@@ -340,63 +331,42 @@ int main(int argc, char* argv[])  try {
           return n;
         }()};
 
-      // Single family count
-      if (n_families == 1) {
-        ++n_one_family;
-      }
+      // Seen at big counts in parents
+      const unsigned int n_parents_t1{[&all_samples, &all_bridges, &pop] {
+          unsigned int n{0};
+          for (unsigned int b{0}; b != all_bridges.size(); ++b)
+            if (pop.is_parent(all_samples[b]) &&
+                all_bridges[b].bridge_count() >= t1) ++n;
+          return n;
+        }()};
 
-      if (n_families > max_n_families) continue;
+      // Initial T1 cut
+      if (n_parents_t1 == 0) continue;
 
-      // Gather max support counts and lengths
-      unsigned int max_bridge_count{0};
-      unsigned int max_anchor1_support{0};
-      unsigned int max_anchor2_support{0};
-      unsigned int max_mate_anchor1_count{0};
-      unsigned int max_mate_anchor1_support{0};
-      unsigned int max_mate_anchor2_count{0};
-      unsigned int max_mate_anchor2_support{0};
-      unsigned int max_sample_id{0};
-      for (unsigned int b{0}; b != all_bridges.size(); ++b) {
-        const BridgeInfo & sample_bridge{all_bridges[b]};
-        if (max_bridge_count < sample_bridge.bridge_count()) {
-          max_sample_id = b;
-          max_bridge_count = sample_bridge.bridge_count();
-        }
-        if (max_anchor1_support < sample_bridge.anchor1_length()) {
-          max_anchor1_support = sample_bridge.anchor1_length();
-        }
-        if (max_anchor2_support < sample_bridge.anchor2_length()) {
-          max_anchor2_support = sample_bridge.anchor2_length();
-        }
-        if (max_mate_anchor1_count < sample_bridge.mate_anchor1_count()) {
-          max_mate_anchor1_count = sample_bridge.mate_anchor1_count();
-        }
-        if (max_mate_anchor2_count < sample_bridge.mate_anchor2_count()) {
-          max_mate_anchor2_count = sample_bridge.mate_anchor2_count();
-        }
-        if (max_mate_anchor1_support < sample_bridge.mate_anchor1_length()) {
-          max_mate_anchor1_support = sample_bridge.mate_anchor1_length();
-        }
-        if (max_mate_anchor2_support < sample_bridge.mate_anchor2_length()) {
-          max_mate_anchor2_support = sample_bridge.mate_anchor2_length();
-        }
-      }
+      // Count parents seen at over t2
+      const unsigned int n_parents_t2{[&all_samples, &all_bridges, &pop] {
+          unsigned int n{0};
+          for (unsigned int b{0}; b != all_bridges.size(); ++b)
+            if (pop.is_parent(all_samples[b]) &&
+                all_bridges[b].bridge_count() > t2) ++n;
+          return n;
+        }()};
 
-      // Low bridge count cut
-      if (max_bridge_count < min_bridge_count) continue;
-      ++n_big_count;
+      // Initial T2 cut
+      if (n_parents_t2 > T2 + 1) continue;
 
-      // Short anchor support cut
-      if (max_anchor1_support < min_support_length ||
-          max_anchor2_support < min_support_length) continue;
-      ++n_good_support;
+      // Seen at small counts in parents
+      const unsigned int n_parents_t3{[&all_samples, &all_bridges, &pop] {
+          unsigned int n{0};
+          for (unsigned int b{0}; b != all_bridges.size(); ++b)
+            if (pop.is_parent(all_samples[b]) &&
+                all_bridges[b].bridge_count() > 0 &&
+                all_bridges[b].bridge_count() <= t3) ++n;
+          return n;
+        }()};
 
-      // Short mate support cut
-      if (max_mate_anchor1_count < min_mate_count ||
-          max_mate_anchor2_count < min_mate_count ||
-          max_mate_anchor1_support < min_mate_support ||
-          max_mate_anchor2_support < min_mate_support) continue;
-      ++n_good_mate_support;
+      // Initial T3 cut - plus one for one family with surprise
+      if (n_parents_t3 > T3 + 1) continue;
 
       // Get mappability information
       const unsigned int mum1_abspos{chromosome_offset + bridge.pos1()};
@@ -404,33 +374,29 @@ int main(int argc, char* argv[])  try {
       const unsigned int mum1_map{map.low_high(bridge.high1(), mum1_abspos)};
       const unsigned int mum2_map{map.low_high(bridge.high2(), mum2_abspos)};
 
-      // Short excess mappability cut
-      if (max_anchor1_support < mum1_map) throw Error("Mappability");
-      if (max_anchor1_support < min_excess_mappability + mum1_map) {
-        continue;
-      } else {
-        if (max_anchor2_support < min_excess_mappability +  mum2_map) {
-          continue;
+      for (unsigned int s{0}; s != all_samples.size(); ++s)
+        if (pop.is_parent(all_samples[s])) {
+          parent_counts.push_back(all_bridges[s].bridge_count());
+        } else {
+          children_counts.push_back(all_bridges[s].bridge_count());
         }
+
+      ostringstream pop_info;
+      Family last_family{100000000};
+      for (unsigned int s{0}; s != all_samples.size(); ++s) {
+        if (s) pop_info << ",";
+        const Sample sample{all_samples[s]};
+        const Family family{pop.family(sample)};
+        if (family != last_family) {
+          pop_info << pop.family(family) << ":";
+          last_family = family;
+        }
+        pop_info << pop.member(sample)[0] << all_bridges[s].bridge_count();
       }
-      ++n_good_excess;
-
-      const unsigned int n_samples{static_cast<unsigned int>(
-          all_samples.size())};
-
-      unsigned int tot_n_proband{0};
-      unsigned int tot_n_sibling{0};
-      unsigned int n_non_trans{0};
-      unsigned int n_proband_trans{0};
-      unsigned int n_sibling_trans{0};
-      unsigned int n_both_trans{0};
-      unsigned int n_proband_denovo{0};
-      unsigned int n_sibling_denovo{0};
-      unsigned int n_both_denovo{0};
 
       // Look at each family separately
-      ostringstream mstr;
-      ostringstream cstr;
+      const unsigned int n_samples{static_cast<unsigned int>(
+          all_samples.size())};
       while (all_samples.size()) {
         // Gather samples and bridges for family
         static vector<Sample> samples;
@@ -447,156 +413,164 @@ int main(int argc, char* argv[])  try {
           all_bridges.pop_back();
         }
 
-        mstr << " " << pop.family(pop.family(samples.front())) << ":";
+        vector<unsigned int> family_parent_counts;
+        for (unsigned int b{0}; b != bridges.size(); ++b) {
+          const Sample sample{samples[b]};
+          if (pop.is_parent(sample))
+            family_parent_counts.push_back(bridges[b].bridge_count());
+        }
+        sort(family_parent_counts.begin(), family_parent_counts.end());
 
-        // Parent sample cuts
-        // bool just_kids{true};
-        unsigned int n_parents{0};
-        unsigned int n_proband{0};
-        unsigned int n_sibling{0};
-        for (const Sample sample : samples) {
-          if (pop.is_parent(sample)) {
-            if (pop.is_mother(sample)) {
-              mstr << 'm';
-            } else {
-              mstr << 'f';
-            }
-            // just_kids = false;
-            ++n_parents;
-          } else {
-            if (pop.is_proband(sample)) {
-              mstr << 'p';
-              ++n_proband;
-            } else {
-              mstr << 's';
-              ++n_sibling;
-            }
-          }
-        }
-        for (const BridgeInfo & info : bridges) {
-          cstr << " " << info.bridge_count();
-        }
-        if (n_parents) {
-          if (n_sibling + n_proband == 0) {
-            ++n_non_trans;
-          } else {
-            if (n_proband) {
-              ++n_proband_trans;
-              if (n_sibling) {
-                ++n_both_trans;
-              }
-            }
-            if (n_sibling) {
-              ++n_sibling_trans;
-            }
-          }
+        if (family_parent_counts.empty()) continue;
+        if (family_parent_counts.back() < t1) continue;
+        if (family_parent_counts.size() == 2) {
+          if (family_parent_counts.front() > t2) continue;
         } else {
-            if (n_proband) {
-              ++n_proband_denovo;
-              if (n_sibling) {
-                ++n_both_denovo;
-              }
-            } else {
-              ++n_sibling_denovo;
-            }
+          if (n_parents_t3 > T3) continue;
         }
-        if (n_parents && (n_proband + n_sibling) == 1) {
-          tot_n_proband += n_proband;
-          tot_n_sibling += n_sibling;
-        }
-      }
-      // if (tot_n_proband + tot_n_sibling == 0) continue;
-      tout << ref.name(bridge.chr1()) << bridge.pos1() << bridge.high1()
-           << ref.name(bridge.chr2()) << bridge.pos2() << bridge.high2()
-           << bridge.invariant() << bridge.offset()
-           << max_anchor1_support << max_anchor2_support
-           << mum1_map << mum2_map
-           << max_bridge_count << total_bridge_count
-           << n_families << n_samples
-          // << tot_n_proband << tot_n_sibling
-           << n_non_trans << n_both_trans
-           << n_proband_trans << n_sibling_trans
-           << n_both_denovo << n_proband_denovo << n_sibling_denovo;
 
-      if (0) {
-        cout << " ~/mumdex/mview "
-             << ref.name(bridge.chr1()) << " " << bridge.pos1()
-             << " ~/analysis/mums/wg-output/samples/"
-             << pop.sample(all_samples[max_sample_id])
-             << "/mumdex";
-        if (bridge.chr1() != bridge.chr2() ||
-            bridge.pos1() + 100 < bridge.pos2() ||
-            bridge.pos2() + 100 < bridge.pos1()) {
-          cout << " && ~/mumdex/mview "
-               << ref.name(bridge.chr2()) << " " << bridge.pos2()
-               << " ~/analysis/mums/wg-output/samples/"
-               << pop.sample(all_samples[max_sample_id])
-               << "/mumdex";
+        // Gather max support counts and lengths
+        unsigned int max_bridge_count{0};
+        unsigned int max_anchor1_support{0};
+        unsigned int max_anchor2_support{0};
+        unsigned int max_mate_anchor1_count{0};
+        unsigned int max_mate_anchor1_support{0};
+        unsigned int max_mate_anchor2_count{0};
+        unsigned int max_mate_anchor2_support{0};
+        for (const BridgeInfo & sample_bridge : bridges) {
+          if (max_bridge_count < sample_bridge.bridge_count())
+            max_bridge_count = sample_bridge.bridge_count();
+          if (max_anchor1_support < sample_bridge.anchor1_length())
+            max_anchor1_support = sample_bridge.anchor1_length();
+          if (max_anchor2_support < sample_bridge.anchor2_length())
+            max_anchor2_support = sample_bridge.anchor2_length();
+          if (max_mate_anchor1_count < sample_bridge.mate_anchor1_count())
+            max_mate_anchor1_count = sample_bridge.mate_anchor1_count();
+          if (max_mate_anchor2_count < sample_bridge.mate_anchor2_count())
+            max_mate_anchor2_count = sample_bridge.mate_anchor2_count();
+          if (max_mate_anchor1_support < sample_bridge.mate_anchor1_length())
+            max_mate_anchor1_support = sample_bridge.mate_anchor1_length();
+          if (max_mate_anchor2_support < sample_bridge.mate_anchor2_length())
+            max_mate_anchor2_support = sample_bridge.mate_anchor2_length();
         }
-      }
 
-      set<string> gene_strings;
-      if (bridge.chr1() == bridge.chr2() &&
-          bridge.high1() != bridge.high2() &&
-          bridge.invariant() < 0 &&
-          bridge.invariant() > -100000 &&
-          bridge.pos1() < bridge.pos2()) {
-        auto intervals = gene_finder.lookup(
-            bridge.chr1(), bridge.pos1(), bridge.pos2());
-        for (const GeneInfoInterval * i : intervals) {
-          const GeneInfoInterval & interval{*i};
-          for (const auto & item : interval.info) {
-            const unsigned int gene{item.first};
-            const string name{xref[genes[gene].name].geneSymbol};
-            const char hitchar{hit_char(item.second.hit)};
-            string gene_string = name + "." + hitchar;
-            if (hitchar == 'e') {
-              gene_string += ".";
-              gene_string += std::to_string(item.second.exon);
-            }
-            gene_strings.insert(gene_string);
-          }
+        // Low bridge count cut
+        if (max_bridge_count < t1) continue;
+        ++n_big_count;
+
+        // Short anchor support cut
+        if (max_anchor1_support < min_support_length ||
+            max_anchor2_support < min_support_length) continue;
+        ++n_good_support;
+
+        // Short mate support cut
+        if (max_mate_anchor1_count < min_mate_count ||
+            max_mate_anchor2_count < min_mate_count ||
+            max_mate_anchor1_support < min_mate_support ||
+            max_mate_anchor2_support < min_mate_support) continue;
+        ++n_good_mate_support;
+
+        // Short excess mappability cut
+        if (max_anchor1_support < mum1_map) {
+          cerr << "Mappability error" << endl;
+          exit(1);
         }
-      } else {
-        for (const bool a : {false, true}) {
-          const GeneInfoInterval & interval{gene_finder.lookup(
-              a ? bridge.chr2() : bridge.chr1(),
-              a ? bridge.pos2() : bridge.pos1())};
-          for (const auto & item : interval.info) {
-            const unsigned int gene{item.first};
-            const string name{xref[genes[gene].name].geneSymbol};
-            const char hitchar{hit_char(item.second.hit)};
-            string gene_string = name + "." + hitchar;
-            if (hitchar == 'e') {
-              gene_string += ".";
-              gene_string += std::to_string(item.second.exon);
-            }
-            gene_strings.insert(gene_string);
-          }
-        }
-      }
-      bool first{true};
-      if (gene_strings.empty()) {
-        tout << "-";
-      } else {
-        for (const string & text : gene_strings) {
-          if (first) {
-            tout << text;
-            first = false;
+        if (max_anchor1_support < min_excess_mappability + mum1_map)
+          continue;
+        if (max_anchor2_support < min_excess_mappability +  mum2_map)
+          continue;
+        ++n_good_excess;
+
+        ostringstream out;
+
+        // individuals info
+        const Family family{pop.family(samples.front())};
+        const vector<Sample> & family_members{pop.samples(family)};
+        out << pop.family(family);
+        for (unsigned int s{0}; s != samples.size(); ++s)
+          out << (s ? "," : " ") << pop.member(samples[s]);
+        for (unsigned int s{0}; s != samples.size(); ++s)
+          out << (s ? "," : " ") << pop.sample(samples[s]);
+        for (unsigned int s{0}; s != samples.size(); ++s)
+          out << (s ? "," : " ") << pop.sex(samples[s]);
+        out << " " << samples.size();
+
+        for (unsigned int m{0}; m != family_members.size(); ++m) {
+          out << (m ? "," : " ");
+          const Sample sample{family_members[m]};
+          const vector<Sample>::const_iterator found{
+            find(samples.begin(), samples.end(), sample)};
+          if (found == samples.end()) {
+            out << 0;
           } else {
-            cout << "," << text;
+            const unsigned int count{
+              bridges[found - samples.begin()].bridge_count()};
+            out << count;
           }
         }
-      }
+        out << " " << n_parents_t1
+            << " " << n_parents_t2
+            << " " << n_parents_t3;
 
-      tout << mstr.str().substr(1) << cstr.str().substr(1) << endl;
-      grand_tot_n_proband += tot_n_proband;
-      grand_tot_n_sibling += tot_n_sibling;
+        out << " " << bridge.chr1()
+            << " " << ref.name(bridge.chr1())
+            << " " << bridge.pos1()
+            << " " << bridge.high1()
+            << " " << ref.name(bridge.chr2())
+            << " " << bridge.pos2()
+            << " " << bridge.high2()
+            << " " << bridge.invariant()
+            << " " << bridge.offset()
+            << " " << bridge.description()
+            << " " << bridge.orientation_char();
+
+        // anchor info
+        out << " " << max_anchor1_support
+            << " " << max_anchor2_support
+            << " " << max_anchor1_support - mum1_map
+            << " " << max_anchor2_support - mum2_map
+            << " " << mum1_map
+            << " " << mum2_map
+            << " " << max_mate_anchor1_count
+            << " " << max_mate_anchor2_count
+            << " " << max_mate_anchor1_support
+            << " " << max_mate_anchor2_support;
+
+        // bridge counts
+        out << " " << max_bridge_count;
+
+        // population bridge counts
+        out << " " << n_families
+            << " " << n_samples
+            << " " << parent_seen
+            << " " << child_seen
+            << " " << total_bridge_count
+            << " " << parent_bridge_count
+            << " " << child_bridge_count;
+
+        // parent counts
+        if (parent_counts.size()) {
+          for (unsigned int p{0}; p != parent_counts.size(); ++p)
+            out << (p ? ',' : ' ') << parent_counts[p];
+        } else {
+          out << " 0";
+        }
+        // children counts
+        if (children_counts.size()) {
+          for (unsigned int c{0}; c != children_counts.size(); ++c)
+            out << (c ? ',' : ' ') << children_counts[c];
+        } else {
+          out << " 0";
+        }
+
+        // detailed population info
+        out << " " << pop_info.str();
+
+        cout << out.str() << endl;
+      }
     }
   }
 
-  cerr << "totals "
-       << grand_tot_n_proband << " " << grand_tot_n_sibling << endl;
   cerr << "finished bridge loop" << endl;
 
   return 0;

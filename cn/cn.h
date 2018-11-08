@@ -416,7 +416,7 @@ inline bool operator<(const unsigned int pos, const Bin & bin) {
 std::vector<Bin> load_bins(const std::string & bins_name,
                            const Reference & ref,
                            const bool cut = false,
-                           const bool mask = true) {
+                           const bool mask = false) {
   std::ifstream bins_file{bins_name.c_str()};
   if (!bins_file) throw Error("Could not open bins file") << bins_name;
   const CN_abspos cn_abspos{ref};
@@ -507,8 +507,8 @@ std::vector<Bin> load_bins(const std::string & bins_name,
     {"Y", { {9739000, 13994000}, {29340000, 59373566}}}};
 
   const unsigned int x_chr{ref.find_x_chromosome()};
-  if (ref.size(x_chr) != 155270560)
-    throw Error("Code designed for hg19 only - need to change");
+  if (mask && ref.size(x_chr) != 155270560)
+    throw Error("Code designed for hg19 only - need to change") << mask;
 
   const std::vector<unsigned char> masked_bins{
     [&ref, &bins_, &bad_zones, &lookup, mask]() {
@@ -617,9 +617,9 @@ inline void set_cn_parameters() {
             << std::endl;
 }
 
-template <class MUMDEX>
+template <class MUMDEX, class MAPPABILITY>
 inline unsigned int pair_cn_abspos(const MUMDEX & mumdex,
-                                   const Mappability & mappability,
+                                   const MAPPABILITY & mappability,
                                    const CN_abspos & cn_abspos,
                                    const uint64_t pair_index) {
   const MUM * cn_mum{mumdex.cn_MUM(pair_index, mappability,
@@ -709,10 +709,10 @@ class FinestBinsT {
         });
     }
 
-    Progress progress{results.size(), 0.01, "Binning"};
+    // Progress progress{results.size(), 0.01, "Binning"};
     while (results.size()) {
       results.get();
-      progress();
+      // progress();
     }
   }
   void add(const FinestBinsT & other) {
@@ -1116,7 +1116,8 @@ void copy_number(const Reference & ref,
                  const std::vector<Bin> bins,
                  const std::vector<unsigned int> & raw_counts,
                  const std::string & title,
-                 const bool create_pdf = false) {
+                 const bool create_pdf = false,
+                 const bool minimal = false) {
   std::cout << "Running copy number analysis with "
             << bins.size() << " bins" << std::endl;
 
@@ -1290,22 +1291,19 @@ cbs.segment(sample=sample, alpha=0.05, nperm=1000, undo.SD=1.0, min.width=3)
 )foo"};
 
   // Output R code
-  std::ofstream r_file{"cbs.r"};
-  if (!r_file) throw Error("Problem writing R code");
+  const std::string r_name{out_name + "_cbs.r"};
+  std::ofstream r_file{r_name.c_str()};
+  if (!r_file) throw Error("Problem writing R code in") << r_name;
   r_file << r_code << std::endl;
   r_file.close();
 
   try {
     // Calculate segmented results in R
     std::cout << "Performing Segmentation" << std::endl;
-    if (system((std::string(
-            "R CMD BATCH --no-restore --no-save '--args sample=\"") +
-                out_name + "\"' cbs.r").c_str()) == -1) {
+    if (system(("R CMD BATCH --slave --no-restore --no-save '--args sample=\"" +
+                out_name + "\"' " + r_name + " > /dev/null 2>&1").c_str()) ==
+        -1) {
       throw Error("Segmentation in R has failed");
-    }
-    if (system((std::string("mv cbs.r.Rout ") + out_name + "_Rout.txt").c_str())
-        == -1) {
-      std::cerr << "Problem moving R output file" << std::endl;
     }
     const std::string segmented_name{out_name + "_segmented.txt"};
     std::ifstream seg_in{segmented_name.c_str()};
@@ -1343,18 +1341,21 @@ cbs.segment(sample=sample, alpha=0.05, nperm=1000, undo.SD=1.0, min.width=3)
       seg_quantal_hist_graph, 1000};
 
     // Quantal graphs by chromosome
+    const bool do_chr_graphs{false};
     std::vector<std::unique_ptr<PSCNGraph>> chr_quantal_graphs(chrs.size());
     std::vector<std::unique_ptr<PSXYSeries>> chr_quantal_series(chrs.size());
     std::vector<std::unique_ptr<PSXYSeries>> chr_segmented_quantal_series(
         chrs.size());
-    for (const unsigned int chr : used_chrs) {
-      chr_quantal_graphs[chr] = std::make_unique<PSCNGraph>(
-          profiles_ps, ref, chr, title);
-      chr_quantal_series[chr] = std::make_unique<PSXYSeries>(
-          *chr_quantal_graphs[chr], light_circle_marker);
-      chr_segmented_quantal_series[chr] = std::make_unique<PSXYSeries>(
-          *chr_quantal_graphs[chr], dark_circle_marker);
-      chr_segmented_quantal_series[chr]->do_lines(true);
+    if (do_chr_graphs) {
+      for (const unsigned int chr : used_chrs) {
+        chr_quantal_graphs[chr] = std::make_unique<PSCNGraph>(
+            profiles_ps, ref, chr, title);
+        chr_quantal_series[chr] = std::make_unique<PSXYSeries>(
+            *chr_quantal_graphs[chr], light_circle_marker);
+        chr_segmented_quantal_series[chr] = std::make_unique<PSXYSeries>(
+            *chr_quantal_graphs[chr], dark_circle_marker);
+        chr_segmented_quantal_series[chr]->do_lines(true);
+      }
     }
 
 #define NORM 0
@@ -1370,28 +1371,33 @@ cbs.segment(sample=sample, alpha=0.05, nperm=1000, undo.SD=1.0, min.width=3)
     std::vector<std::unique_ptr<PSXYSeries>> chr_ratio_series(chrs.size());
     std::vector<std::unique_ptr<PSXYSeries>> chr_segmented_ratio_series(
         chrs.size());
-    for (const unsigned int chr : used_chrs) {
-      chr_ratio_graphs[chr] = std::move(std::make_unique<PSCNGraph>(
-          profiles_ps, ref, chr, title));
-      chr_ratio_series[chr] = std::move(std::make_unique<PSXYSeries>(
-          *chr_ratio_graphs[chr], light_circle_marker));
-      chr_segmented_ratio_series[chr] = std::move(std::make_unique<PSXYSeries>(
-          *chr_ratio_graphs[chr], dark_circle_marker));
-      chr_segmented_ratio_series[chr]->do_lines(true);
+    if (do_chr_graphs) {
+      for (const unsigned int chr : used_chrs) {
+        chr_ratio_graphs[chr] = std::move(std::make_unique<PSCNGraph>(
+            profiles_ps, ref, chr, title));
+        chr_ratio_series[chr] = std::move(std::make_unique<PSXYSeries>(
+            *chr_ratio_graphs[chr], light_circle_marker));
+        chr_segmented_ratio_series[chr] =
+            std::move(std::make_unique<PSXYSeries>(
+            *chr_ratio_graphs[chr], dark_circle_marker));
+        chr_segmented_ratio_series[chr]->do_lines(true);
+      }
     }
 #endif
 
+    // PSDoc counts_ps{out_name + "_counts"};
+#if 0
     // Counts vs Position
-    PSDoc counts_ps{out_name + "_counts"};
     counts_ps.pdf(create_pdf);
     PSGraph counts_vs_pos_graph{counts_ps,
           ";Absolute Position;Normalized Bin Count"};
     counts_vs_pos_graph.log_y(true);
     PSXYSeries counts_vs_pos_series_bad{counts_vs_pos_graph, small_blue_marker};
     PSXYSeries counts_vs_pos_series{counts_vs_pos_graph, small_red_marker};
+#endif
 
     // Counts vs GC, and Lowess correction factor
-    PSGraph counts_vs_gc_graph{counts_ps,
+    PSGraph counts_vs_gc_graph{profiles_ps,
           ";GC content;Normalized Bin Count"};
     counts_vs_gc_graph.log_y(true);
     PSXYSeries counts_vs_gc_series_bad{counts_vs_gc_graph, small_blue_marker};
@@ -1399,6 +1405,7 @@ cbs.segment(sample=sample, alpha=0.05, nperm=1000, undo.SD=1.0, min.width=3)
     Marker lowess_marker{paa::circle(), 0.3, "0 1 0", 1, true};
     PSXYSeries counts_vs_gc_lowess_series{counts_vs_gc_graph, lowess_marker};
 
+#if 0
     // Counts vs mappability
     PSGraph counts_vs_map_graph{counts_ps,
           ";Average Mappability Length;Normalized Bin Count"};
@@ -1414,15 +1421,21 @@ cbs.segment(sample=sample, alpha=0.05, nperm=1000, undo.SD=1.0, min.width=3)
       counts_vs_length_graph, small_blue_marker};
     PSXYSeries counts_vs_length_series{
       counts_vs_length_graph, small_red_marker};
+#endif
 
     // Read in segmented results to plot them and output results
     std::cout << "Read segmented results and fill plots and output"
               << std::endl;
     std::ofstream results{(out_name + "_results.txt").c_str()};
     if (!results) throw Error("Problem opening CN results file");
-    results << "chr\tstart\tstop\tchrpos\tabspos\tlength\t"
-            << "norm\tcorr\tgc\tmap\tcount\tncount\t"
-            << "ratio\tseg_ratio\tquantal\tseg_quantal\n";
+    if (minimal) {
+      results << "chr\tstart\tstop\tchrpos\tabspos\t"
+              << "count\tncount\tratio\tseg_ratio\n";
+    } else {
+      results << "chr\tstart\tstop\tchrpos\tabspos\tlength\t"
+              << "norm\tcorr\tgc\tmap\tcount\tncount\t"
+              << "ratio\tseg_ratio\tquantal\tseg_quantal\n";
+    }
     for (unsigned int gb{0}; gb != good_bins.size(); ++gb) {
       const unsigned int b{good_bins[gb]};
       const Bin & bin{bins[b]};
@@ -1441,44 +1454,59 @@ cbs.segment(sample=sample, alpha=0.05, nperm=1000, undo.SD=1.0, min.width=3)
       quantal_hist.add_point(quantal_ratio);
       seg_quantal_hist.add_point(segmented_quantal_ratio);
       segmented_quantal_series.add_point(abspos, segmented_quantal_ratio);
-      chr_quantal_series[chr]->add_point(chrpos, quantal_ratio);
-      chr_segmented_quantal_series[chr]->add_point(
-          chrpos, segmented_quantal_ratio);
-
+      if (do_chr_graphs) {
+        chr_quantal_series[chr]->add_point(chrpos, quantal_ratio);
+        chr_segmented_quantal_series[chr]->add_point(
+            chrpos, segmented_quantal_ratio);
+      }
 #if NORM
       // Regular profiles
       ratio_series.add_point(abspos, ratio);
       segmented_ratio_series.add_point(abspos, segmented_ratio);
-      chr_ratio_series[chr]->add_point(chrpos, ratio);
-      chr_segmented_ratio_series[chr]->add_point(chrpos, segmented_ratio);
+      if (do_chr_graphs) {
+        chr_ratio_series[chr]->add_point(chrpos, ratio);
+        chr_segmented_ratio_series[chr]->add_point(chrpos, segmented_ratio);
+      }
 #endif
 
       // Counts, gc, mappability, length
       const double count{norm_counts[b]};
       const double clipped_count{std::max(0.5, count)};
-      counts_vs_pos_series.add_point(abspos, clipped_count);
+      // counts_vs_pos_series.add_point(abspos, clipped_count);
       counts_vs_gc_series.add_point(bin.gc(), clipped_count);
       counts_vs_gc_lowess_series.add_point(gc_gc[gb], gc_smoothed[gb]);
-      counts_vs_map_series.add_point(bin.map(), clipped_count);
-      counts_vs_length_series.add_point(bin.length(), clipped_count);
+      // counts_vs_map_series.add_point(bin.map(), clipped_count);
+      // counts_vs_length_series.add_point(bin.length(), clipped_count);
 
       // Output results
-      results << ref.name(chr) << "\t"
-              << bin.start_position() << "\t"
-              << bin.stop_position() << "\t"
-              << chrpos << "\t"
-              << abspos << "\t"
-              << bin.length() << "\t"
-              << bin.norm() << "\t"
-              << bin.corr() << "\t"
-              << bin.gc() << "\t"
-              << bin.map() << "\t"
-              << raw_counts[b] << "\t"
-              << count << "\t"
-              << ratio << "\t"
-              << segmented_ratio << "\t"
-              << quantal_ratio << "\t"
-              << segmented_quantal_ratio << "\n";
+      if (minimal) {
+        results << ref.name(chr) << "\t"
+                << bin.start_position() << "\t"
+                << bin.stop_position() << "\t"
+                << chrpos << "\t"
+                << abspos << "\t"
+                << raw_counts[b] << "\t"
+                << count << "\t"
+                << ratio << "\t"
+                << segmented_ratio << "\n";
+      } else {
+        results << ref.name(chr) << "\t"
+                << bin.start_position() << "\t"
+                << bin.stop_position() << "\t"
+                << chrpos << "\t"
+                << abspos << "\t"
+                << bin.length() << "\t"
+                << bin.norm() << "\t"
+                << bin.corr() << "\t"
+                << bin.gc() << "\t"
+                << bin.map() << "\t"
+                << raw_counts[b] << "\t"
+                << count << "\t"
+                << ratio << "\t"
+                << segmented_ratio << "\t"
+                << quantal_ratio << "\t"
+                << segmented_quantal_ratio << "\n";
+      }
     }
 
     // List of bad bins
@@ -1498,18 +1526,18 @@ cbs.segment(sample=sample, alpha=0.05, nperm=1000, undo.SD=1.0, min.width=3)
     if (bad_bins.size()) {
       for (const unsigned int b : bad_bins) {
         const Bin & bin{bins[b]};
-        const unsigned int abspos{bin.abspos()};
+        // const unsigned int abspos{bin.abspos()};
         const double count{norm_counts[b]};
         const double clipped_count{std::max(0.5, count)};
-        counts_vs_pos_series_bad.add_point(abspos, clipped_count);
+        // counts_vs_pos_series_bad.add_point(abspos, clipped_count);
         counts_vs_gc_series_bad.add_point(bin.gc(), clipped_count);
-        counts_vs_map_series_bad.add_point(bin.map(), clipped_count);
-        counts_vs_length_series_bad.add_point(bin.length(), clipped_count);
+        // counts_vs_map_series_bad.add_point(bin.map(), clipped_count);
+        // counts_vs_length_series_bad.add_point(bin.length(), clipped_count);
       }
     }
 
     // Remove R temporary files
-    if (system("rm cbs.r") == -1) {
+    if (system(("rm " + r_name).c_str()) == -1) {
       std::cerr << "Problem removing cbs.r file" << std::endl;
     }
     if (system((std::string("rm ") + out_name + ".ratios.txt").c_str()) == -1) {

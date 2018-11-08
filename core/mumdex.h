@@ -1964,8 +1964,9 @@ class TMUMdex : public TMUMdex_base<VECTOR> {
     return mums_.begin() + longest;
   }
 
+  template <class MAPPABILITY>
   const MUM * cn_MUM(const uint64_t p,
-                     const Mappability & mappability,
+                     const MAPPABILITY & mappability,
                      const unsigned int min_length,
                      const unsigned int min_excess,
                      const unsigned int max_mappability) const {
