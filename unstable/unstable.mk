@@ -1,5 +1,6 @@
 DEVELOPMENT_PROGRAMS := \
 	add_abspos \
+	afterburner \
 	analyze_transmission \
 	anchor_reads \
 	anchor_mismatches \
@@ -26,6 +27,7 @@ DEVELOPMENT_PROGRAMS := \
 	check_for_pseudogene \
 	check_mappability \
 	check_mumdex \
+	colsplit \
 	combine_finebins \
 	compare_segmentation \
 	compare_yoonha \
@@ -48,6 +50,7 @@ DEVELOPMENT_PROGRAMS := \
 	fastplot \
 	fastq_kmer_counter \
 	fastq_mapper \
+	fastq_sequences \
 	fastq_vt_mapper \
 	find_bridge \
 	find_indel \
@@ -108,10 +111,12 @@ DEVELOPMENT_PROGRAMS := \
 	simulate_events \
 	simulate_seating \
 	skbr3_in_skn1 \
+	smash_ip_fig \
 	smooth_data \
 	snp_report \
 	subsample \
 	table_stats \
+	talk2018 \
 	test_hmm \
 	test_mumdex \
 	test_numerical \
@@ -122,6 +127,7 @@ DEVELOPMENT_PROGRAMS := \
 	unequal_bridges \
 	validate_leukemia \
 	validate_mumdex \
+	venn \
 	wg_smash_comparison \
 	x11plot
 
@@ -130,6 +136,7 @@ all : $(DEVELOPMENT_PROGRAMS)
 
 # Only list programs which need extra object files, or nonstandard linking
 anchor_reads : genes.o utility.o
+afterburner: afterburner.gslo
 anchor_repeatness : files.o
 assess_known_cn_events : assess_known_cn_events.gslo
 assess_haha : assess_haha.gslo
@@ -180,6 +187,7 @@ show_pairs : utility.o
 simulate_events : utility.o
 simulate_events2 : utility.o
 similar_bridge : utility.o
+smash_ip_fig: files.o utility.o
 sssa : files.o
 test_x11 : test_x11.x11o
 transmission : genes.o utility.o
