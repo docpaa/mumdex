@@ -168,6 +168,7 @@ test_psplot
 test_threads
 test_x11
 transmission
+transmission_old
 uint2int
 unequal_bridges
 validate_leukemia
