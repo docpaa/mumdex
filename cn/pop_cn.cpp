@@ -651,7 +651,7 @@ int main(int argc, char* argv[]) try {
   using SamplePopSegments = pair<Sample, PopSegments>;
   auto pop_fun = [&all_sample_info](const Sample sample) {
     const SampleInfo & info{all_sample_info[sample]};
-    const CN_Bins & profile{info.profile};
+    // const CN_Bins & profile{info.profile};
     const Segments & segments{info.segments};
 
     PopSegments displayed;
@@ -1026,7 +1026,7 @@ h1, h2, h3, p { clear:left; }
       }
       const OutResult out_result{psegment.out(info, genes, xref)};
       const Strings & seg_info{out_result.first};
-      const GeneInfos & gene_infos{out_result.second};
+      // const GeneInfos & gene_infos{out_result.second};
       if (!s) {
         for (unsigned int n{0}; n != seg_info.size(); n += 2)
           cand_out << (n ? "\t" : "") << seg_info[n];
