@@ -87,8 +87,8 @@ class PSCNGraph : public PSGraph {
     const Axis x_axis{range().xl(), range().xh(), 7 * x_page_scale};
     const Axis y_axis{range().yl(), range().yh(), 2 * y_page_scale,
           this->log_y_};
-    const std::vector<std::pair<double, bool>> x_ticks{x_axis.ticks()};
-    const std::vector<std::pair<double, bool>> y_ticks{y_axis.ticks()};
+    const Ticks x_ticks{x_axis.ticks()};
+    const Ticks y_ticks{y_axis.ticks()};
     std::ostringstream sample;
     const double high_val{this->log_y_ ?
           pow(10, y_ticks.back().first) : y_ticks.back().first};
