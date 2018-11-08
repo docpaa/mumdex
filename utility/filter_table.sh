@@ -55,7 +55,12 @@ filter=$(echo "$@" | sed "$tosubs" | sed "$subs" | sed "$fromsubs")
 # filter table input
 echo "$header"
 if [ "$1" != "" ] ; then
-    gawk 'function abs(VALUE) {return VALUE < 0 ? -VALUE : VALUE} {if ('"$filter"') print}'
+    gawk '
+function abs(VALUE) {return VALUE < 0 ? -VALUE : VALUE}
+function max(L, R) {return L < R ? R : L}
+function min(L, R) {return L > R ? R : L}
+
+{if ('"$filter"') print}'
 else
     cat
 fi
