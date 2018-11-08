@@ -932,7 +932,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
           (this->log_x_ ? 3 : 7) * x_page_scale, this->log_x_};
     const Axis y_axis{range().yl(), range().yh(),
           (this->log_y_ ? 3 : 7) * y_page_scale, this->log_y_};
-    using Ticks = std::vector<std::pair<double, bool>>;
+    // using Ticks = std::vector<std::pair<double, bool>>;
     const Ticks x_ticks{do_ticks_ ? x_axis.ticks() : Ticks()};
     const Ticks y_ticks{do_ticks_ ? y_axis.ticks() : Ticks()};
     if (y_ticks.size()) {

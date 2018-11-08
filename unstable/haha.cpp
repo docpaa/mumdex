@@ -229,14 +229,24 @@ int main(int argc, char * argv[]) try {
 
   if (analysis_type == "copy") return 0;
 
+  // Initial phase
+  vector<double> phase{simple_push(het_tables.front())};
+
   // HaHa HMM - just for one chromosome
-  const HaHaHMM haha_hmm{
-    [&chromosome_names, &het_tables, &coverage_hmms,
-     &pool, &plots, &data_dir]() {
-      const string name{data_dir + "/" + chromosome_names.front()};
-      return HaHaHMM{name, pool, plots,
-            het_tables.front(), coverage_hmms.front()};
-    }()};
+  for (unsigned int i{0}; i != 3 ; ++i) {
+    const HaHaHMM haha_hmm{
+      [&chromosome_names, &het_tables, &coverage_hmms,
+       &pool, &plots, &data_dir, &phase]() {
+        const string name{data_dir + "/" + chromosome_names.front()};
+        return HaHaHMM{name, pool, plots,
+              het_tables.front(), coverage_hmms.front(), phase};
+      }()};
+
+    // HaHa afterburner run to fix phase at points of uncertainty
+    const double tolerance{-100};
+    phase = haha_hmm.afterburner(chromosome_names.front(), ref,
+                                 chr_lookup, tolerance);
+  }
 
   return 0;
 } catch (Error & e) {

@@ -348,11 +348,64 @@ inline double float_round(const double val, const double mul) {
   }
 }
 
+static inline constexpr double atan_cn() { return 2.5; }
+static inline constexpr double atan_frac() { return 0.75; }
+static inline constexpr double frac_atan() { return 1 - atan_frac(); }
+static inline constexpr double atan_scale() {
+  return atan2(1, 0) * atan_frac() / frac_atan() / log1p(atan_cn()) /
+      (1 + atan_cn());
+}
+static inline constexpr double atanlog_c1() {
+  return atan_frac() / log1p(atan_cn());
+}
+static inline constexpr double atanlog_c2() {
+  return frac_atan() / atan2(1, 0);
+}
+
+static inline constexpr double log1_pow(const double value, const double pow_) {
+  return log10(pow(value, 1 / pow_) + 1);
+}
+static inline constexpr double inv_log1_pow(
+    const double value, const double pow_) {
+  return pow(pow(10, value) - 1, pow_);
+}
+
+static inline constexpr double a() { return 2.5; }
+static inline constexpr double b() { return 0.5; }
+
+inline constexpr double atanlog(const double value) {
+#if 1
+  return pow(atan2(log1_pow(value, b()) / log1_pow(a(), b()), 1) / atan2(1, 0),
+             b());
+#else
+  return value <= atan_cn() ?
+      atanlog_c1() * log1p(value) :
+      atanlog_c2() * atan(log1p(atan_scale() * (value - atan_cn()))) +
+      atan_frac();
+#endif
+}
+static inline constexpr double atan_val() { return atanlog(atan_cn()); }
+inline constexpr double inv_atanlog(const double value) {
+#if 1
+  return inv_log1_pow(tan(pow(value, 1 / b()) * atan2(1, 0)) *
+                      log1_pow(a(), b()), b());
+#else
+  return value < atan_val() ?
+      exp(value / atanlog_c1()) - 1 :
+      (value > 1 ? std::numeric_limits<double>::max() :
+       (exp(tan((value - atan_frac()) / atanlog_c2())) - 1) / atan_scale() +
+       atan_cn());
+#endif
+}
+
+using Tick = std::pair<double, unsigned char>;
+using Ticks = std::vector<Tick>;
+
 class Axis {
  public:
   Axis(const double l_, const double h_, double target_ticks = 5,
-       const bool log__ = false) :
-      l{l_}, h{h_}, major{0}, minor{0}, log_{log__} {
+       const unsigned char log__ = 0, const double scale_ = 1) :
+      l{l_}, h{h_}, major{0}, minor{0}, log_{log__}, scale{scale_} {
     // Get close to the desired number of ticks
     const double min_ticks{3};
     target_ticks = std::max(min_ticks, target_ticks);
@@ -415,39 +468,41 @@ class Axis {
   }
 
   // Return tick positions
-  std::vector<std::pair<double, bool>> ticks() const {
-    using Tick = std::pair<double, bool>;
-    std::vector<Tick> result;
+  Ticks ticks() const {
+    Ticks result;
     const double cl{lower(l)};
     // const double cl{l};
     if (log_) {
-      for (double pos{cl}; pos <= h; pos += major) {
-        const double cpos{fabs(pos) < (h - l) / 1000000000000.0 ?
-              0.0 : pos};
-        const double rnd{round(cpos / major) * major};
-        if (0) std::cerr << l << " " << h << " " << cl << " " << major
-                         << " " << pos << " " << cpos << " " << rnd
-                         << std::endl;
-        if (cpos > l && cpos < h) {
-          result.emplace_back(cpos, true);
-        }
-        if (h - l < 15) {
-          for (unsigned int i{2}; i != 10; ++i) {
-            const double val{rnd + log10(i)};
-            // std::cout << val << std::endl;
-            if (val > l && val < h) {
-              result.emplace_back(val, false);
+      if (log_ == 2) {
+        for (const double value : { 1, 2, 3, 4, 5 })
+          result.emplace_back(atanlog(value / scale), 1);
+        for (const double value : { 10, 100 })
+          result.emplace_back(atanlog(value / scale), 2);
+      } else {
+        for (double pos{cl}; pos <= h; pos += major) {
+          const double cpos{fabs(pos) < (h - l) / 1000000000000.0 ?
+                0.0 : pos};
+          if (cpos > l && cpos < h) result.emplace_back(cpos - log10(scale), 1);
+          if (h - l < 15) {
+            const double rnd{round(cpos / major) * major};
+            if (0) std::cerr << l << " " << h << " " << cl << " " << major
+                             << " " << pos << " " << cpos << " " << rnd
+                             << std::endl;
+            for (unsigned int i{2}; i != 10; ++i) {
+              const double val{rnd + log10(i) - log10(scale)};
+              // std::cout << val << std::endl;
+              if (val > l && val < h) result.emplace_back(val, 0);
             }
           }
         }
       }
     } else {
-      for (double pos{cl}; pos <= h; pos += minor) {
+      for (double pos{cl}; pos <= h * scale; pos += minor) {
         // std::cerr << l << " " << cl << " " << h << std::endl;
         const double cpos{fabs(pos) < (h - l) / 1000000000000.0 ? 0.0 : pos};
-        if (cpos > l && cpos < h) {
+        if (cpos / scale > l && cpos / scale < h) {
           const double rnd{round(cpos / major) * major};
-          result.emplace_back(cpos,
+          result.emplace_back(cpos / scale,
                               cpos > rnd - minor / 2 && cpos < rnd + minor / 2);
         }
       }
@@ -478,7 +533,8 @@ class Axis {
   double h;
   double major;
   double minor;
-  bool log_;
+  unsigned char log_;
+  double scale;
 };
 
 

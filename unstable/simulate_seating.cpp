@@ -246,7 +246,8 @@ int main(int argc, char* argv[]) try {
   const uint64_t points_sampling{n_distances /
         min(static_cast<uint64_t>(10000), n_distances)};
   PSGraph truth_vs_perturbed_graph{plots,
-        "Seating Chart Added Noise;Actual Distance;Perturbed Distance"};
+        "Spatial Genomics Bead Distance Added Noise;"
+        "Actual Distance;Perturbed Distance"};
   PSXYSeries truth_vs_perturbed{truth_vs_perturbed_graph, marker};
   uint64_t point_no{0};
   for (uint64_t i{0}; i != seats.size(); ++i)
@@ -290,7 +291,8 @@ int main(int argc, char* argv[]) try {
 
   // Plot true vs reconstructed distances
   PSXYSeries truth_vs_reconstructed{plots,
-        "Seating Chart Reconstruction;Actual Distance;Reconstructed Distance",
+        "Spatial Genomics Bead Distance Reconstruction;Actual Distance;"
+        "Reconstructed Distance",
         marker};
   for (uint64_t i{0}; i != seats.size(); ++i)
     for (uint64_t j{i + 1}; j != seats.size(); ++j)
@@ -298,7 +300,7 @@ int main(int argc, char* argv[]) try {
         truth_vs_reconstructed.add_point(distances[j][i], distances[i][j]);
 
   // Plot the ground truth seating chart
-  PSGraph truth{plots, "Seating Chart Ground Truth;X;Y",
+  PSGraph truth{plots, "Spatial Genomics Bead Position Ground Truth;X;Y",
         Bounds{-0.05, 1.05, -0.05, 1.05}};
   const double seat_size{100 * sqrt(1.0 / n_seats)};
   ostringstream ps;
@@ -310,7 +312,8 @@ int main(int argc, char* argv[]) try {
   // Plot reconstructed seating chart
   auto x_mm = minmax_element(x.begin(), x.end());
   auto y_mm = minmax_element(y.begin(), y.end());
-  PSGraph reconstruct{plots, "Seating Chart Reconstruction;X;Y",
+  PSGraph reconstruct{plots,
+        "Spatial Genomics Bead Position Reconstruction;X;Y",
         Bounds{*x_mm.first - 0.05, *x_mm.second + 0.05,
           *y_mm.first - 0.05, *y_mm.second + 0.05}};
   ps.str("");
@@ -324,7 +327,8 @@ int main(int argc, char* argv[]) try {
   // Plot average between-row distances to gauge warp
   const Marker bigger_marker{paa::circle(), 1, "0 0 0", 1, true, "0 0 0"};
   PSXYSeries row_distances{plots,
-        "Seating Chart Reconstruction Warp;Row;Average Adjacent Row Distance",
+        "Spatial Genomics Bead Position Reconstruction Warp;Row;"
+        "Average Adjacent Row Distance",
         bigger_marker};
   for (uint64_t r{0}; r + 1 != grid.n_rows; ++r) {
     double total_distance{0};

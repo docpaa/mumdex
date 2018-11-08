@@ -616,7 +616,7 @@ int main(int argc, char* argv[]) try {
   const string out_dir{argv[4]};
   const unsigned int n_threads{static_cast<unsigned int>(atoi(argv[5]))};
   ThreadPool pool{n_threads};
-  const vector<Bin> bins{load_bins(bins_name, ref, false, false)};
+  const vector<Bin> bins{load_bins(bins_name, ref)};
 
   // Gene info
   const string reference_file{ref.fasta_file()};

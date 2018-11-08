@@ -28,7 +28,9 @@ function errors() {
     exit 1
 }
 
-
-
-
-
+ansi()          { [ -t 1 ] && echo -ne "\e[${1}m${*:2}\e[0m" || echo -ne "${*:2}"; }
+bold()          { ansi 1 "$@"; }
+italic()        { ansi 3 "$@"; }
+underline()     { ansi 4 "$@"; }
+strikethrough() { ansi 9 "$@"; }
+red()           { ansi 31 "$@"; }

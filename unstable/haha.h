@@ -1273,6 +1273,118 @@ class LowessCoverageLookup {
   std::vector<Lookup> lookup;
 };
 
+
+std::vector<double> simple_push(const HetTable & hets,
+                                const bool set_to_truth = false) {
+  std::vector<double> p_mom_as(hets.n_hets(), log(0.5));
+  // special code to set to truth
+  if (set_to_truth) {
+    const double push{0.999};
+    for (uint64_t h{0}; h != hets.n_hets(); ++h)
+      p_mom_as[h] = hets.flip(h) ? log(1 - push) : log(push);
+  } else {
+    std::vector<uint64_t> well_covered_loci;
+    const unsigned int min_singles{5};
+    for (uint64_t h{0}; h != hets.n_hets(); ++h) {
+      unsigned int n_singles{0};
+      for (uint64_t s{0}; s != hets.n_samples(); ++s) {
+        const unsigned char obs{hets(s, h)};
+        if (obs == HetTable::ObsA || obs == HetTable::ObsB) ++n_singles;
+      }
+      if (n_singles >= min_singles) well_covered_loci.push_back(h);
+    }
+    if (well_covered_loci.empty())
+      throw Error("Could not find well covered locus for push");
+    std::random_device rd{};
+    std::mt19937_64 mersenne{rd()};
+    std::function<uint64_t()> gen{std::bind(
+        std::uniform_int_distribution<uint64_t>(
+            0, well_covered_loci.size() - 1), mersenne)};
+    for (unsigned int i{0}; i != 1; ++i) {
+      const uint64_t het{well_covered_loci[gen()]};
+      // const double push{1 - 2 * std::numeric_limits<double>::epsilon()};
+      const double push{0.999};
+      p_mom_as[het] = hets.flip(het) ? log(1 - push) : log(push);
+    }
+  }
+  return p_mom_as;
+}
+
+const unsigned int digits_precision{14};
+const double min_confidence{1 / pow(10, digits_precision)};
+struct Call {
+  Call(const unsigned int id_,
+       const unsigned int chr_, const unsigned int pos_,
+       const double p_mom_a_) :
+      id{id_}, chr{chr_}, pos{pos_}, p_mom_a{p_mom_a_} {
+        if (p_mom_a <= 0.5 && p_mom_a >= 0.5)
+          throw Error("No 0.5 p_mom_a allowed");
+      }
+  unsigned int id : 25;
+  unsigned int chr :7;
+  unsigned int pos;
+  double p_mom_a;
+  bool mom_a() const { return p_mom_a > 0.5; }
+  bool agree(const Call & other) const { return mom_a() == other.mom_a(); }
+  double confidence() const {
+    return 0.5 - fabs(p_mom_a - 0.5) + min_confidence;
+  }
+  double confidence_score() const { return -log10(confidence()); }
+};
+
+const std::vector<std::string> colors{
+  "0.898039 0 0", "0.145098 0 0.619608",
+      "0 0.717647 0", "0.898039 0.745098 0",
+      "0.0235294 0.337255 0.576471", "0.717647 0.866667 0",
+      "0.898039 0.513725 0", "0.584314 0 0.584314",
+      "0.972549 0.470588 0.972549", "0 0.0941176 0",
+      "0 0.941176 0.533333", "0.564706 0.627451 0.533333",
+      "0.972549 0.972549 0.627451", "0 0.658824 0.972549",
+      "0.439216 0.313725 0.972549", "0.972549 0.0313725 0.972549",
+      "0.470588 0.282353 0.188235", "0.972549 0.25098 0.470588",
+      "0.470588 0.972549 0.376471", "0 0.156863 0.972549",
+      "0.439216 0.596078 0", "0.12549 0.627451 0.376471",
+      "0.972549 0.596078 0.470588", "0.627451 0.658824 0.972549",
+      "0.282353 0.972549 0", "0.0627451 0.407843 0.0941176",
+      "0.439216 0 0", "0.0313725 0.972549 0.909804",
+      "0.376471 0 0.941176", "0.596078 0.313725 0.596078",
+      "0.972549 0.784314 0.972549", "0.282353 0.784314 0.721569",
+      "0.12549 0.156863 0.313725", "0.972549 0.972549 0.219608",
+      "0.282353 0.501961 0.752941", "0.658824 0.878431 0.690196",
+      "0.815686 0.25098 0.12549", "0.784314 0.25098 0.909804",
+      "0 0.972549 0.219608", "0.878431 0 0.376471",
+      "0.690196 0.470588 0.282353", "0.784314 0.784314 0.345098",
+      "0 0.407843 0.909804", "0.345098 0.439216 0.439216",
+      "0.282353 0.219608 0.721569", "0 0.627451 0.658824",
+      "0.407843 0 0.313725", "0.376471 0.752941 0.25098",
+      "0.784314 0.533333 0.721569", "0.784314 0.972549 0.972549",
+      "0.690196 0 0.909804", "0.658824 0.156863 0.376471",
+      "0.627451 0.407843 0", "0.313725 0.658824 0.972549",
+      "0.847059 0.0941176 0.690196", "0.25098 0.25098 0",
+      "0.878431 0.752941 0.658824", "0.376471 0.219608 0.439216",
+      "0.972549 0.407843 0.25098", "0.407843 0.972549 0.658824",
+      "0.658824 0.439216 0.941176", "0.690196 0.658824 0.12549",
+      "0.658824 0 0.156863", "0.533333 0.156863 0.815686",
+      "0.0627451 0.407843 0.345098", "0.25098 0.847059 0.470588",
+      "0.188235 0.596078 0.12549", "0.188235 0 0.156863",
+      "0.721569 0.972549 0.25098", "0 0.156863 0.721569",
+      "0.972549 0.407843 0.658824", "0.470588 0.815686 0",
+      "0 0.815686 0.752941", "0.596078 0.188235 0",
+      "0.470588 0.564706 0.25098", "0.0941176 0.784314 0.219608",
+      "0 0 0.407843", "0.313725 0.627451 0.564706",
+      "0.533333 0.533333 0.752941", "0.0941176 0 0.847059",
+      "0.25098 0.847059 0.972549", "0.0313725 0.909804 0",
+      "0.784314 0.407843 0.501961", "0.25098 0.439216 0.972549",
+      "0.909804 0.627451 0.219608", "0.470588 0.784314 0.878431",
+      "0.313725 0.439216 0.0627451", "0.564706 0.815686 0.470588",
+      "0.972549 0.12549 0.188235", "0.752941 0.972549 0.501961",
+      "0.25098 0.941176 0.25098", "0.501961 0.972549 0.12549",
+      "0.972549 0.627451 0.815686", "0.376471 0.0313725 0.690196",
+      "0.25098 0.188235 0.941176", "0 0.752941 0.501961",
+      "0.156863 0.972549 0.721569", "0.596078 0.815686 0.219608",
+      "0.972549 0.847059 0.439216", "0.470588 0.972549 0.972549"
+      };
+
 class HaHaHMM {
  public:
   static constexpr double SMALL{std::numeric_limits<double>::lowest()};
@@ -1298,16 +1410,17 @@ class HaHaHMM {
           ThreadPool & pool_,
           PSDoc & plots_,
           const HetTable & hets_,
-          const CoverageHMM & coverage_hmm_) :
+          const CoverageHMM & coverage_hmm_,
+          const std::vector<double> initial_phase_ = std::vector<double>()) :
       title{title_}, pool{pool_}, plots{plots_},
-    hets{hets_}, coverage_hmm{coverage_hmm_} {
+    hets{hets_}, coverage_hmm{coverage_hmm_},
+    p_mom_as{initial_phase_.size() ? initial_phase_ : simple_push(hets)} {
       initialize();
       make_initial_plots();
       run();
     }
 
   void initialize() {
-    push_locus();
     auto fut = pool.run([this]() { calculate_transitions(); });
     calculate_mom_a_emissions();
     fut.get();
@@ -1323,31 +1436,6 @@ class HaHaHMM {
     ownp(hets_hist);
     for (uint64_t h{0}; h != nHets; ++h)
       hets_hist->add_point(hets[h].position());
-  }
-
-  void push_locus() {
-    std::vector<uint64_t> well_covered_loci;
-    const unsigned int min_singles{5};
-    for (uint64_t h{0}; h != nHets; ++h) {
-      unsigned int n_singles{0};
-      for (uint64_t s{0}; s != nSamples; ++s) {
-        const unsigned char obs{hets(s, h)};
-        if (obs == HetTable::ObsA || obs == HetTable::ObsB) ++n_singles;
-      }
-      if (n_singles >= min_singles) well_covered_loci.push_back(h);
-    }
-    if (well_covered_loci.empty())
-      throw Error("Could not find well covered locus for push");
-    std::random_device rd{};
-    std::mt19937_64 mersenne{rd()};
-    std::function<uint64_t()> gen{std::bind(
-        std::uniform_int_distribution<uint64_t>(
-            0, well_covered_loci.size() - 1), mersenne)};
-    for (unsigned int i{0}; i != 1; ++i) {
-      const uint64_t het{gen()};
-      const double push{1 - 2 * std::numeric_limits<double>::epsilon()};
-      p_mom_as[het] = hets.flip(het) ? log(1 - push) : log(push);
-    }
   }
   void update_model() {
     initial_haplo.assign(calculate_initial_haplo());
@@ -1497,10 +1585,12 @@ class HaHaHMM {
       const double p{forward_backward()};
       if (p_mom_a_diffs < p_mom_a_tol) converged = true;
       show_iteration(p);
-      if (converged) {
-        plot_iteration(25, true, 1);
-      } else {
-        plot_iteration();
+      if (false) {
+        if (converged) {
+          plot_iteration(25, true, 1);
+        } else {
+          plot_iteration();
+        }
       }
     }
     std::ofstream phase_out{title + ".phase.txt"};
@@ -1838,7 +1928,7 @@ class HaHaHMM {
   Matrix<double> p_flip{nSamples, nHets};
   std::vector<double> flip_diffs{std::vector<double>(nHets)};
   std::vector<double> sample_probs{std::vector<double>(nSamples)};
-  std::vector<double> p_mom_as{std::vector<double>(nHets, log(0.5))};
+  std::vector<double> p_mom_as{};
 
   static constexpr double p_mom_a_tol{0.001};
   double flip_threshold{log(1.001)};
@@ -1919,7 +2009,150 @@ class HaHaHMM {
     }
     return result;
   }
+
+ public:
+  std::vector<double> afterburner(const std::string & chr_name,
+                                  const Reference & ref,
+                                  const ChromosomeIndexLookup & lookup,
+                                  const double tolerance) const {
+    const unsigned int chr{lookup[chr_name]};
+    // measure plots
+    const Marker flip_marker{paa::circle(), 0.2, "0 0 0", 1, true, "0 0 0"};
+    PSPage * const measure_page{new PSPage{plots,
+            "Measure for " + chr_name, "1 3 (0.5 0.25)"}};
+    ownp(measure_page);
+    PSGraph * const measure_graph{new PSGraph{
+        *measure_page, ";Position;Measure",
+            Bounds{0.0, 1.0 * ref.size(chr), -0.5, 0.5}}};
+    ownp(measure_graph);
+    PSXYSeries * const measure_series{new PSXYSeries{
+        *measure_graph, flip_marker}};
+    ownp(measure_series);
+
+    const Marker flip_marker2{paa::circle(), 0.2, "1 0 0", 1, true, "1 0 0"};
+    PSGraph * const flip_measure_graph{new PSGraph{*measure_page,
+            ";Position;Flip Difference",
+            Bounds{0.0, 1.0 * ref.size(chr), 2 * tolerance, 10.0}}};
+    std::ostringstream tol_ps;
+    tol_ps << "0 0 1 c 2 lw np 0 xfc " << tolerance << " yc m "
+           << " 1 xfc " << tolerance << " yc l sp ";
+    flip_measure_graph->ps(tol_ps.str());
+    ownp(flip_measure_graph);
+    PSXYSeries * const flip_measure_series{new PSXYSeries{
+        *flip_measure_graph, flip_marker2}};
+    ownp(flip_measure_series);
+
+    PSGraph * const p_mom_a_graph{new PSGraph{*measure_page,
+            ";Position;Probability that Mom is Allele A",
+            Bounds{0.0, 1.0 * ref.size(chr), -0.2, 1.2}}};
+    ownp(p_mom_a_graph);
+    PSXYSeries * const p_mom_a_series{new PSXYSeries{
+        *p_mom_a_graph, flip_marker}};
+    ownp(p_mom_a_series);
+
+    std::random_device rd{};
+    std::mt19937_64 mersenne{rd()};
+    std::function<double()> gen{std::bind(
+        std::uniform_real_distribution<double>(-0.1, 0.1), mersenne)};
+
+    std::vector<std::vector<Call>> calls(1);
+
+    for (unsigned int h{0}; h != hets.n_hets(); ++h) {
+      const double prob{hets.flip(h) ? 1 - exp(p_mom_as[h]) : exp(p_mom_as[h])};
+      if (prob < 0.5 || prob > 0.5) {
+        const Call call{h, chr, hets[h].position(), prob};
+        if (call.confidence_score() >= 7) {
+          p_mom_a_series->add_point(call.pos, call.p_mom_a + gen());
+        }
+        if (flip_diffs[h] > 2 * tolerance)
+          flip_measure_series->add_point(call.pos, flip_diffs[h]);
+        if (flip_diffs[h] > tolerance) {
+          if (calls.back().size()) calls.emplace_back();
+          continue;
+        }
+        calls.back().push_back(call);
+      }
+    }
+
+    std::vector<std::vector<Call>> test_calls;
+    for (uint64_t b{0}; b != calls.size(); ++b) {
+      const std::vector<Call> & s_calls{calls[b]};
+      std::vector<Call> t_calls;
+      for (const Call & call : s_calls)
+        if (call.confidence_score() >= 7)
+          t_calls.push_back(call);
+      if (t_calls.size() > 200) {
+        test_calls.resize(test_calls.size() + 1);
+        test_calls.back().swap(t_calls);
+      }
+    }
+
+    std::ostringstream calls_ps;
+
+    uint64_t color_index{0};
+    std::vector<unsigned int> flip_points;
+    for (unsigned int b{0}; b + 1 < test_calls.size(); ++b) {
+      int64_t opp{0};
+      int64_t val{0};
+      const std::vector<Call> & left_calls{test_calls[b]};
+      const std::vector<Call> & right_calls{test_calls[b + 1]};
+      for (uint64_t s{0}; s != hets.n_samples(); ++s) {
+        for (const Call & left : left_calls) {
+          const uint64_t id1{left.id};
+          const uint64_t obs1{hets.unflipped(s, id1)};
+          if (obs1 == 0 || obs1 == 3) continue;
+          const bool mom_a1{left.p_mom_a > 0.5};
+          for (const Call & right : right_calls) {
+            const uint64_t id2{right.id};
+            const uint64_t obs2{hets.unflipped(s, id2)};
+            if (obs2 == 0 || obs2 == 3) continue;
+            const bool mom_a2{right.p_mom_a > 0.5};
+            ++opp;
+            if ((obs1 == obs2 && mom_a1 == mom_a2) ||
+                (obs1 != obs2 && mom_a1 != mom_a2)) {
+              ++val;
+            } else {
+              --val;
+            }
+          }
+        }
+      }
+      std::cout << chr_name << " " << opp << " " << val << " "
+                << 1.0 * val / opp << std::endl;
+      const double measure{1.0 * val / opp};
+      const double height_scale{1.0 / 10000 / 2};
+      const double lh{left_calls.size() * height_scale};
+      const double rh{right_calls.size() * height_scale};
+      calls_ps << colors[color_index++] << " c 2 lw np "
+          // left line
+               << left_calls.front().pos << " " << measure << " gc m "
+               << left_calls.back().pos << " " << measure << " gc l "
+          // right line
+               << right_calls.front().pos << " " << measure << " gc m "
+               << right_calls.back().pos << " " << measure << " gc l "
+          // trapezoid
+               << left_calls.back().pos << " " << measure - lh << " gc m "
+               << right_calls.front().pos << " " << measure - rh << " gc l "
+               << right_calls.front().pos << " " << measure + rh << " gc l "
+               << left_calls.back().pos << " " << measure + lh << " gc l cp "
+               << "sp\n";
+      if (measure < 0) {
+        flip_points.push_back(
+            (left_calls.back().id + right_calls.front().id) / 2);
+      }
+    }
+    measure_graph->ps(calls_ps.str());
+    std::vector<double> new_phase{p_mom_as};
+    for (const unsigned int f : flip_points)
+      for (unsigned int h{f}; h != hets.n_hets(); ++h)
+        new_phase[h] = log(1 - exp(new_phase[h]));
+    return new_phase;
+  }
 };
+
+
+// phase = afterburner(haha_hmm, tolerance);
+
 
 }  // namespace paa
 

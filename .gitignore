@@ -7,6 +7,7 @@
 python/dist
 python/build
 add_abspos
+afterburner
 analyze_transmission
 anchor_mismatches
 anchor_reads
@@ -39,6 +40,7 @@ check_cand_cn
 check_for_pseudogene
 check_mappability
 check_mumdex
+colsplit
 combine_finebins
 compare_segmentation
 compare_yoonha
@@ -64,8 +66,10 @@ family_figure
 fastplot
 fastq_kmer_counter
 fastq_mapper
+fastq_sequences
 fastq_vt_mapper
 fastqs2sam
+filter_bridges
 find_bridge
 find_indel
 find_microsatellite
@@ -149,12 +153,14 @@ simulate_events2
 simulate_seating
 skbr3_in_skn1
 smash
+smash_ip_fig
 smash_qc
 smooth_data
 snp_report
 sssa
 subsample
 table_stats
+talk2018
 test_hmm
 test_mumdex
 test_numerical
@@ -166,5 +172,6 @@ uint2int
 unequal_bridges
 validate_leukemia
 validate_mumdex
+venn
 wg_smash_comparison
 x11plot

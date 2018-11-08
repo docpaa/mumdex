@@ -56,9 +56,11 @@ int main(int argc, char* argv[])  try {
     FinestBins bins{ref, name};
     const bool is_female{bins.n_y() == 0};
     if (is_female) {
-      if ((bins.n_x() % 2) != 0) throw Error("Bad females");
+      if ((bins.n_x() % 2) != 0)
+        throw Error("Bad females") << bins.n_x()<< name;
     } else {
-      if (bins.n_y() != bins.n_x()) throw Error("Bad males");
+      if (bins.n_y() != bins.n_x())
+        throw Error("Bad males") << bins.n_x() << bins.n_y() << name;
     }
     cout << "Loaded " << name
          << " " << bins.n_samples()

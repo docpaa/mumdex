@@ -1,11 +1,19 @@
 #! /bin/bash
 
+# direct filtered lines to this file
+if [ "$1" = "-e" ] ; then
+    shift
+    filtered_out="$1"
+    shift
+fi
+
+# verbosity
 if [ "$1" = "-v" ] ; then
     shift
     if [ "$1" != "" ] ; then
-        echo column filter applied is: "$1"
+        echo filter: "$1"
     else
-        echo no column filter applied
+        echo no filter was applied
     fi
 fi 1>&2
 
@@ -53,16 +61,26 @@ filter=$(echo "$@" | sed "$tosubs" | sed "$subs" | sed "$fromsubs")
 # echo rewritten filter is "$filter" 1>&2 
 
 # filter table input
-echo "$header"
-if [ "$1" != "" ] ; then
-    gawk '
+(
+    echo "$header"
+    [ -n "$filtered_out" ] && echo "$header" 1>&2
+    if [ "$1" != "" ] ; then
+        gawk '
 function abs(VALUE) {return VALUE < 0 ? -VALUE : VALUE}
 function max(L, R) {return L < R ? R : L}
 function min(L, R) {return L > R ? R : L}
-
-{if ('"$filter"') print}'
-else
-    cat
-fi
+{
+if ('"$filter"') {
+  print
+}'"$(
+        [ -n "$filtered_out" ] && echo ' else {
+  print > "/dev/stderr"
+}'
+        )"'
+}'
+    else
+        cat
+    fi
+) 2> >([ -n "$filtered_out" ] && cat > "$filtered_out" || (cat 1>&2))
 
 exit 0

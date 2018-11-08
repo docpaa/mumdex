@@ -334,7 +334,7 @@ int main(int argc, char * argv[]) try {
     const size_t chr_idx{phase_name.find("chr")};
     const size_t period{phase_name.find(".phase")};
     const string chr_name{phase_name.substr(chr_idx + 3, period - chr_idx - 3)};
-    const unsigned int chr{chr_lookup[chr_name]};
+    const unsigned int chr{chr_lookup["chr" + chr_name]};
 
     unique_lock<mutex> plots_lock{plots_mutex};
     // Series to show flips

@@ -57,6 +57,7 @@ using std::unique_ptr;
 using std::vector;
 
 using paa::dne;
+using paa::inv_atanlog;
 using paa::rect;
 using paa::remove_substring;
 using paa::remove_including_final;
@@ -368,7 +369,9 @@ bool add_genes(const RefCN & ref,
                 const double res{graph.range[y][2] / graph.bounds[y][2]};
                 const double pres{pow(10, floor(log10(res)))};
                 const double rval{round(val / pres) * pres};
-                const double nval{graph.log_radios[y] ? pow(10, rval) : rval};
+                const double nval{(y ? graph.y_cn_scale : 1) *
+                      (graph.log_radios[y] >= 2 ? inv_atanlog(rval) :
+                       (graph.log_radios[y] ? pow(10, rval) : rval))};
                 if (y && graph.tiled_radio) {
                   coordinates << " , Y coordinate not available in tiled mode";
                 } else {
@@ -649,7 +652,7 @@ bool add_chromosomes(const RefCN & ref,
     if (fits->string_width(name) < widths[c])
       XDrawString(graph.display(), graph.pixmap, gc, fits->centered_x(
           name, pos[c]), fits->centered_y(
-              graph.bounds[1][1] - graph.border_width - avail_height / 2),
+              graph.bounds[1][1] - graph.border_width - avail_height * 3 / 8),
                   const_cast<char *>(name.c_str()),
                   static_cast<unsigned int>(name.size()));
   }
@@ -674,20 +677,23 @@ bool add_ratio_lines(const vector<double> cn_lines,  // Not a reference
 
   // Ratio lines
   for (double y : cn_lines) {
+    GC gc{(y >= 10) ? graph.major_gc :
+          (fabs(y - floor(y)) < 0.01 ? graph.gc : graph.minor_gc)};
+    y /= graph.y_cn_scale;
     if (graph.log_radios[1]) {
       if (y <= 0) continue;
-      y = log10(y);
+      y = graph.log_radios[1] >= 2 ? paa::atanlog(y) : log10(y);
     }
     if (y > graph.range[1][0] && y < graph.range[1][1]) {
       const unsigned int y_pos(graph.coord(1, y));
       if (graph.tiled_radio) {
         for (unsigned int s{0}; s != graph.n_files(); ++s) {
           const int y_tiled{graph.y_tile(s, y_pos)};
-          XDrawLine(graph.display(), graph.pixmap, graph.gc,
+          XDrawLine(graph.display(), graph.pixmap, gc,
                     graph.bounds[0][0], y_tiled, graph.bounds[0][1], y_tiled);
         }
       } else {
-        XDrawLine(graph.display(), graph.pixmap, graph.gc,
+        XDrawLine(graph.display(), graph.pixmap, gc,
                   graph.bounds[0][0], y_pos, graph.bounds[0][1], y_pos);
       }
     }
@@ -1065,7 +1071,8 @@ int main(int argc, char * argv[]) try {
   bool x_jitter{false};
   double percent{100.0};
   bool output{false};
-  bool log_y{false};
+  double scale{2};
+  unsigned char log_y{2};
   vector<double> ratio_lines{};
   std::string display_name{X11Graph::default_title};
   --argc;
@@ -1135,12 +1142,24 @@ int main(int argc, char * argv[]) try {
         output = true;
         --argc;
         ++argv;
+      } else if (matches("--scale")) {
+        scale = atof(argv[2]);
+        argc -= 2;
+        argv += 2;
+      } else if (matches("--atan")) {
+        log_y = 2;
+        --argc;
+        ++argv;
+      } else if (matches("--atanS")) {
+        log_y = 3;
+        --argc;
+        ++argv;
       } else if (matches("--log")) {
-        log_y = true;
+        log_y = 1;
         --argc;
         ++argv;
       } else if (matches("--linear")) {
-        log_y = false;
+        log_y = 0;
         --argc;
         ++argv;
       } else if (matches("--lines")) {
@@ -1237,7 +1256,8 @@ int main(int argc, char * argv[]) try {
         Info{short_names, input_data.front().info()}};
 
   auto add_special_features =
-      [do_genome, do_cn, &input_data, n_sets, n_y, &ref_ptr, &ratio_lines]
+      [do_genome, do_cn, &input_data, n_sets,
+       n_y, &ref_ptr, &ratio_lines, scale]
       (X11Graph & graph) {
     if (do_genome) {
       // Chromosomes and ratio lines
@@ -1260,26 +1280,22 @@ int main(int argc, char * argv[]) try {
                           true, false);
 
       // Other genome-specific tweaks
-      graph.grid_radios[0][0].toggled = false;
-      graph.grid_radios[1][0].toggled = false;
+      graph.grid_radios[0][0].toggled(false);
+      graph.grid_radios[1][0].toggled(false);
       graph.log_radios[0].actions.visible = [] () { return false; };
       graph.coord_radio.description +=
       " or search (enter text query while pointer is in this radio control)";
     }
 
     if (do_cn) {
-      // Are some Ys ratios?  Then change scale for ratio lines
-      const vector<double> cn_lines{[&input_data, &ratio_lines]() {
+      graph.y_cn_scale = scale;
+      const vector<double> cn_lines{[&input_data, &ratio_lines, &graph]() {
           if (ratio_lines.size()) {
             return ratio_lines;
           } else {
-            bool some_ratios{false};
-            for (unsigned int c{1}; c != input_data.front().n_cols(); ++c)
-              if (input_data.front().name(c).find("ratio") != string::npos ||
-                  input_data.front().name(c).find("seg.mean") != string::npos)
-                some_ratios = true;
-            vector<double> result{0.0, 1.0, 2.0, 3.0, 4.0, 5.0};
-            if (some_ratios) for (double & line : result) line /= 2;
+            vector<double> result{
+              0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10, 100};
+            // for (double & line : result) line /= graph.y_cn_scale;
             return result;
           }
         }()};
@@ -1288,8 +1304,9 @@ int main(int argc, char * argv[]) try {
           &add_ratio_lines, cn_lines, _1, _2)}, false, true,
         [&graph]() { return true; /* !graph.tiled_radio; */ });
 
-      graph.grid_radios[1][1].toggled = false;
-      graph.grid_radios[0][1].toggled = false;
+      graph.grid_radios[1][1].toggled(false);
+      graph.grid_radios[0][1].toggled(false);
+      graph.tick_radios[1].toggled(true);
     }
   };
 
@@ -1304,13 +1321,14 @@ int main(int argc, char * argv[]) try {
 
   // Process initial view command line arguments
   if (log_y) {
-    graph.log_radios[1].toggled = true;
+    graph.log_radios[1].state(log_y);
     graph.prepare_log();
   }
   if (initial) {
     graph.get_range();
     graph.set_range(0, atof(initial[0]), atof(initial[1]));
-    graph.set_range(1, atof(initial[2]), atof(initial[3]));
+    if (string(initial[2]) != "X")
+      graph.set_range(1, atof(initial[2]), atof(initial[3]));
   }
   if (initial || log_y) graph.prepare();
 
@@ -1332,9 +1350,7 @@ int main(int argc, char * argv[]) try {
 
   std::string usage{std::string() + R"xxx(Usage options:
 
-    ggraph genome|cn ref_fasta xn,yn1,yn2... data_file ...
-or
-    ggraph xn,yn1,yn2... data_file ...
+    ggraph [genome|cn ref_fasta] xn,yn1,yn2... data_file ...
 
 Optional leading arguments (CAPS for numeric):
   -g | --geometry WIDTHxHEIGHT+XOFF+YOFF
@@ -1346,6 +1362,7 @@ Optional leading arguments (CAPS for numeric):
   -s | --setup ref_fasta
   -j | --jitter
   -p | --percent NN
+  -a | --atan
   -l | --log
        --linear
        --lines Y1,Y2,Y3...
