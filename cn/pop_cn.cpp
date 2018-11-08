@@ -816,7 +816,8 @@ h1, h2, h3, p { clear:left; }
               << "</a></div>\n";
   html(bins_dir, "stats.html", "CHD&nbsp;statistics", main_html.str(),
        "");
-  system(("ln -sf ./stats.html " + bins_dir + "/index.html").c_str());
+  if (system(("ln -sf ./stats.html " + bins_dir + "/index.html").c_str()) != 0)
+    throw Error("Could not link stats.html");
 
   using EventInfo = pair<double, string>;
   vector<EventInfo> denovo_events;

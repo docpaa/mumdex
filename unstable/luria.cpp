@@ -128,7 +128,8 @@ int main(int argc, char * argv[]) try {
     ostringstream hist_dir;
     hist_dir << "hists." << n_generations << "." << p << "." << n_trials
              << "." << n_bins;
-    system(("mkdir -p " + hist_dir.str()).c_str());
+    if (system(("mkdir -p " + hist_dir.str()).c_str()) !=0)
+      throw Error("Could not create directory") << hist_dir.str();
 
     Result bin_data(n_bins);
 
@@ -174,7 +175,8 @@ int main(int argc, char * argv[]) try {
       // counts output
       const string hist_name{hist_dir.str() + "/hist." +
             to_string(uniform(mersenne)) + ".counts.txt"};
-      system(("touch " + hist_name).c_str());
+      if (system(("touch " + hist_name).c_str()) != 0)
+        throw Error("Could not touch hist") << hist_name;
       ofstream hist_file{hist_name.c_str()};
       if (!hist_file) throw Error("Problem opening hist file") << hist_name;
       for (uint64_t bin{0}; bin != bin_data.size(); ++bin)
