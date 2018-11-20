@@ -140,6 +140,7 @@ repeatness
 repeats
 sam2fastq
 sam2fastqs
+sam_mapper
 sd_errors
 show_all_counts
 show_counts

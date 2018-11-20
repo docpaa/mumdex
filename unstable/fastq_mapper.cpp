@@ -38,6 +38,8 @@ using paa::SimpleHit;
 
 int main(int argc, char* argv[])  try {
   read_ahead = false;
+  std::ios_base::sync_with_stdio(false);
+  cin.tie(nullptr);
 
   unsigned int min_len{1};
   if (--argc > 3) {

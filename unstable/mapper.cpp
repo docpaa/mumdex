@@ -35,6 +35,9 @@ using paa::SimpleHit;
 
 int main(int argc, char* argv[])  try {
   read_ahead = true;
+  std::ios_base::sync_with_stdio(false);
+  cin.tie(nullptr);
+
   if (--argc != 1) throw Error("usage: mapper ref_fasta");
 
   const string ref_fasta{argv[1]};
@@ -43,11 +46,11 @@ int main(int argc, char* argv[])  try {
 
   string read;
   while (cin >> read) {
-    cout << read << endl;
+    cout << read << '\n';
     const vector<SimpleHit> mums{sa.find_mams(read)};
     for (const auto mum : mums) {
       sout << ref.name(mum.chr) << mum.pos
-           << mum.off << mum.len << mum.dir << endl;
+           << mum.off << mum.len << mum.dir << '\n';
     }
   }
 

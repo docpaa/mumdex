@@ -100,6 +100,7 @@ DEVELOPMENT_PROGRAMS := \
 	rare \
 	repeatness \
 	repeats \
+	sam_mapper \
 	sd_errors \
 	show_all_counts \
 	show_counts \
@@ -180,6 +181,7 @@ primers : files.o
 print_invariants : utility.o
 rare : genes.o utility.o
 repeatness : files.o
+sam_mapper : files.o utility.o
 sd_errors : files.o
 show_all_counts : files.o utility.o
 show_counts : files.o utility.o
