@@ -142,7 +142,7 @@ int main(int argc, char * argv[]) try {
     throw Error("Problem opening phase file") << phase_name.str();
 
   PSDoc plots{"afterburner"};
-  plots.pdf(false);
+  plots.pdf(true);
 
   const Marker flip_marker{paa::circle(), 0.2, "0 0 0", 1, true, "0 0 0"};
   PSPage * const measure_page{new PSPage{plots,
