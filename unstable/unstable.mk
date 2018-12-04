@@ -119,6 +119,7 @@ DEVELOPMENT_PROGRAMS := \
 	subsample \
 	table_stats \
 	talk2018 \
+	talk2018dec \
 	test_hmm \
 	test_mumdex \
 	test_numerical \
