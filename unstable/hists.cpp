@@ -68,14 +68,13 @@ int main(int argc, char* argv[])  try {
     auto minmax = minmax_element(values.begin(), values.end());
     const double min{*minmax.first};
     const double max{*minmax.second};
-    PSPage * page{new PSPage{plots}};
-    ownp(page);
+    PSPage * page{PSPage::create(plots)};
     // const unsigned int n_bins{)};
     const unsigned int used_n_bins{n_bins ? n_bins :
           static_cast<unsigned int>(sqrt(values.size()))};
     const double edge{(max - min) / 20};
-    Hist * hist{new Hist{*page, header[c] + ";" + header[c] + ";N",
-            Bounds{min - edge, max + edge}, used_n_bins}};
+    Hist * hist{Hist::create(*page, header[c] + ";" + header[c] + ";N",
+                             Bounds{min - edge, max + edge}, used_n_bins)};
     for (unsigned int v{0}; v != values.size(); ++v)
         hist->add_point(values[v]);
   }

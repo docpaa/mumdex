@@ -145,37 +145,48 @@ int main(int argc, char * argv[]) try {
   plots.pdf(true);
 
   const Marker flip_marker{paa::circle(), 0.2, "0 0 0", 1, true, "0 0 0"};
-  PSPage * const measure_page{new PSPage{plots,
-          "Measure for " + chr_name, "1 3 (0.5 0.25)"}};
-  ownp(measure_page);
-  PSGraph * const measure_graph{new PSGraph{*measure_page,
-          ";Position;Measure",
-          Bounds{0.0, 1.0 * ref.size(chr), -0.5, 0.5}}};
-  ownp(measure_graph);
-  PSXYSeries * const measure_series{new PSXYSeries{
-      *measure_graph, flip_marker}};
-  ownp(measure_series);
+
+  PSPage * const measure_page{PSPage::create(plots, "Measure for " + chr_name,
+                                             "1 3 (0.5 0.25)")};
+  PSGraph * const measure_graph{PSGraph::create(
+      *measure_page, ";Position;Measure",
+      Bounds{0.0, 1.0 * ref.size(chr), -0.5, 0.5})};
 
   const Marker flip_marker2{paa::circle(), 0.2, "1 0 0", 1, true, "1 0 0"};
-  PSGraph * const flip_measure_graph{new PSGraph{*measure_page,
-          ";Position;Flip Difference",
-          Bounds{0.0, 1.0 * ref.size(chr), 2 * flip_tol, 10.0}}};
+  PSGraph * const flip_measure_graph{PSGraph::create(
+      *measure_page, ";Position;Flip Difference",
+      Bounds{0.0, 1.0 * ref.size(chr), 2 * flip_tol, 10.0})};
   ostringstream tol_ps;
   tol_ps << "0 0 1 c 2 lw np 0 xfc " << flip_tol << " yc m "
          << " 1 xfc " << flip_tol << " yc l sp ";
   flip_measure_graph->ps(tol_ps.str());
-  ownp(flip_measure_graph);
-  PSXYSeries * const flip_measure_series{new PSXYSeries{
-      *flip_measure_graph, flip_marker2}};
-  ownp(flip_measure_series);
 
-  PSGraph * const p_mom_a_graph{new PSGraph{*measure_page,
-          ";Position;Probability that Mom is Allele A",
-          Bounds{0.0, 1.0 * ref.size(chr), -0.2, 1.2}}};
-  ownp(p_mom_a_graph);
-  PSXYSeries * const p_mom_a_series{new PSXYSeries{
-      *p_mom_a_graph, flip_marker}};
-  ownp(p_mom_a_series);
+  PSXYSeries * const flip_measure_series{PSXYSeries::create(
+      *flip_measure_graph, flip_marker2)};
+
+  PSGraph * const p_mom_a_graph{PSGraph::create(
+      *measure_page, "HMM Output;Position;Probability that Mom is Allele A",
+      Bounds{0.0, 1.0 * ref.size(chr), -0.2, 1.2})};
+  PSXYSeries * const p_mom_a_series{PSXYSeries::create(
+      *p_mom_a_graph, flip_marker)};
+
+#if 0
+  PSPage * const fixed_page{PSPage::create(
+      plots, "Haha Afterburner Improvement for " + chr_name, "1 4")};
+  p_mom_a_graph->add(fixed_page);
+  PSXYSeries * const fixed_p_mom_a_series{PSXYSeries::create(
+      *fixed_page,
+      "Locus Afterburner;Position;Probability that Mom is Allele A",
+      flip_marker)};
+  PSXYSeries * const segment_p_mom_a_series{PSXYSeries::create(
+      *fixed_page,
+      "Segment Afterburner;Position;Probability that Mom is Allele A",
+      flip_marker)};
+  PSXYSeries * const window_p_mom_a_series{PSXYSeries::create(
+      *fixed_page,
+      "Growing Afterburner;Position;Probability that Mom is Allele A",
+      flip_marker)};
+#endif
 
   // Load Het table for chromosome
   const string table_name{data_dir + "/hets_" + ref.name(chr) + ".txt"};
@@ -285,12 +296,31 @@ int main(int argc, char * argv[]) try {
   // afterburner heatmap...
   if (confident_calls.back().size() < calls_per_bin)
     confident_calls.pop_back();
-  PSGraph * const afterburner_graph{new PSGraph{plots,
-          "Segment Concordance;Segment 1; Segment 2",
-          Bounds{0.0, 1.0 * confident_calls.size(),
-            0.0, 1.0 * confident_calls.size()}}};
-  ownp(afterburner_graph);
+  PSGraph * const afterburner_graph{PSGraph::create(
+      plots, "Segment Concordance;Segment 1; Segment 2",
+      Bounds{0.0, 1.0 * confident_calls.size(),
+            0.0, 1.0 * confident_calls.size()})};
+
+  PSXYSeries * const self_graph{PSXYSeries::create(
+      plots, "Self-agreement;Fraction correct;Flip Measure", flip_marker)};
+
+  uint64_t n_correct{0};
+  uint64_t n_calls{0};
+  for (unsigned int s1{0}; s1 != confident_calls.size(); ++s1) {
+     const vector<Call> & left_calls{confident_calls[s1]};
+     for (const Call & left : left_calls) {
+       ++n_calls;
+       const bool mom_a1{left.p_mom_a > 0.5};
+       n_correct += mom_a1;
+     }
+  }
+  cout << "initial fraction correct " << 1.0 * n_correct / n_calls << endl;
+
+  unsigned int best_segment{0};
+  double best_self_measure{0};
   ostringstream after_ps;
+  vector<vector<double>> measures(confident_calls.size(),
+                                  vector<double>(confident_calls.size()));
   for (unsigned int s1{0}; s1 != confident_calls.size(); ++s1) {
     const vector<Call> & left_calls{confident_calls[s1]};
     for (unsigned int s2{0}; s2 != confident_calls.size(); ++s2) {
@@ -319,6 +349,7 @@ int main(int argc, char * argv[]) try {
         }
       }
       const double measure{1.0 * val / std::max(opp, 1l)};
+      measures[s1][s2] = measure;
       const double frac{(measure + 1) / 2};
       after_ps << "newpath " << s1 << " " << s2 << " gc moveto "
                << s1 + 1 << " " << s2 << " gc lineto "
@@ -326,9 +357,97 @@ int main(int argc, char * argv[]) try {
                << s1 << " " << s2 + 1 << " gc lineto closepath "
                << frac << " " << " 0 " << 1 - frac << " setrgbcolor "
                << "fill\n";
+      if (s1 == s2) {
+        uint64_t n_calls_correct{0};
+        for (const Call & left : left_calls) {
+          if (left.p_mom_a > 0.5) ++n_calls_correct;
+        }
+        self_graph->add_point(1.0 * n_calls_correct / left_calls.size(),
+                              measure);
+        if (measure > best_self_measure) {
+          best_self_measure = measure;
+          best_segment = s1;
+        }
+      }
     }
   }
   afterburner_graph->ps(after_ps.str());
+  if (0) cout << best_segment;
+#if 0
+  // Is best segment itself flipped?
+  uint64_t best_n_correct{0};
+  const vector<Call> & left_calls{confident_calls[best_segment]};
+  for (const Call & left : left_calls) {
+    const bool mom_a1{left.p_mom_a > 0.5};
+    best_n_correct += mom_a1;
+  }
+  const bool best_correct{best_n_correct * 2 > left_calls.size()};
+
+  uint64_t n_fixed{0};
+  uint64_t n_broken{0};
+  uint64_t locus_correct{0};
+  uint64_t segment_correct{0};
+  uint64_t window_correct{0};
+  // correct phase of all loci to have good measure with best segment
+  // this includes best_segment loci
+  for (unsigned int s2{0}; s2 != confident_calls.size(); ++s2) {
+    const vector<Call> & right_calls{confident_calls[s2]};
+    for (const Call & right : right_calls) {
+      const uint64_t id2{right.id};
+      const bool mom_a2{right.p_mom_a > 0.5};
+      int64_t opp{0};
+      int64_t val{0};
+      for (uint64_t s{0}; s != hets.n_samples(); ++s) {
+        for (const Call & left : left_calls) {
+          const uint64_t id1{left.id};
+          const uint64_t obs1{hets.unflipped(s, id1)};
+          if (obs1 == 0 || obs1 == 3) continue;
+          const bool mom_a1{left.p_mom_a > 0.5};
+          const uint64_t obs2{hets.unflipped(s, id2)};
+          if (obs2 == 0 || obs2 == 3) continue;
+          ++opp;
+          if ((obs1 == obs2 && mom_a1 == mom_a2) ||
+              (obs1 != obs2 && mom_a1 != mom_a2)) {
+            ++val;
+          } else {
+            --val;
+          }
+        }
+      }
+      const double measure{1.0 * val / std::max(opp, 1l)};
+      if (measure < 0) {
+        if (mom_a2 < 0.5) {
+          ++n_fixed;
+          ++locus_correct;
+        } else {
+          ++n_broken;
+        }
+      } else {
+        if (mom_a2 >= 0.5) {
+          ++locus_correct;
+        }
+      }
+      fixed_p_mom_a_series->add_point(
+          right.pos,
+          (measure < 0 ? 1 - right.p_mom_a : right.p_mom_a) + gen());
+      const bool segme_p_mom_a{
+        measures[best_segment][s2] < 0 ? measure < 0 ? 1 - mom_a1 : mom_a1};
+      window_p_mom_a_series->add_point(
+          to_change.pos, window_p_mom_a + gen());
+      window_correct += segment_p_mom_a > 0.5;
+    }
+  }
+
+  if (!best_correct) {
+    std::swap(n_fixed, n_broken);
+    locus_correct = n_calls - locus_correct;
+  }
+  cout << "Fixed " << n_fixed << " broken " << n_broken << endl;
+  cout << "locus fraction correct " << 1.0 * locus_correct / n_calls << endl;
+  cout << "segment fraction correct " << 1.0 * segment_correct / n_calls
+       << endl;
+  cout << "window fraction correct " << 1.0 * window_correct / n_calls << endl;
+#endif
 
   return 0;
 } catch (Error & e) {

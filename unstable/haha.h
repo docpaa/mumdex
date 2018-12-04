@@ -484,36 +484,30 @@ std::vector<double> coverage_lowess(const std::string & title,
 
   // Create and fill plots
   using Hist = PSHSeries<unsigned int, unsigned int>;
-  Hist * const fragments_hist{new Hist{plots,
-          title + " fragment coverage;Position;N",
-          Bounds{0, 1.0 * fragment_table.max_position()}}};
-  ownp(fragments_hist);
-  Hist * const samples_hist{new Hist{plots,
-          title + " sample counts;Sample index;N",
-          Bounds{0, 1.0 * fragment_table.n_samples()},
-          static_cast<unsigned int>(fragment_table.n_samples())}};
-  ownp(samples_hist);
+  Hist * const fragments_hist{Hist::create(
+      plots, title + " fragment coverage;Position;N",
+      Bounds{0, 1.0 * fragment_table.max_position()})};
+  Hist * const samples_hist{Hist::create(
+      plots, title + " sample counts;Sample index;N",
+      Bounds{0, 1.0 * fragment_table.n_samples()},
+      static_cast<unsigned int>(fragment_table.n_samples()))};
   const Marker black_marker{paa::circle(), 0.1, "0 0 0", 0.1, true};
   const Marker red_marker{paa::circle(), 0.1, "1 0 0", 0.1, true};
-  std::unique_ptr<PSXYSeries> coverage_series{std::make_unique<PSXYSeries>(
+  PSXYSeries * const coverage_series{PSXYSeries::create(
       plots, title + " fragment Coverage;Position;Combined Coverage",
       black_marker)};
-  PSXYSeries::PSPart & coverage_graph{coverage_series->graph()};
-  coverage_graph.log_y(true);
-  std::unique_ptr<PSXYSeries> lowess_series{std::make_unique<PSXYSeries>(
+  coverage_series->graph().log_y(true);
+  PSXYSeries * const lowess_series{PSXYSeries::create(
       plots, title + " fragment Coverage;Fragment Length;Combined Coverage",
       black_marker)};
-  PSXYSeries::PSPart & lowess_graph{lowess_series->graph()};
-  lowess_graph.log_y(true);
-  std::unique_ptr<PSXYSeries> smoothed_series{std::make_unique<PSXYSeries>(
-      lowess_graph, red_marker)};
-  std::unique_ptr<PSXYSeries> smoothed_coverage_series{
-    std::make_unique<PSXYSeries>(
+
+  lowess_series->graph().log_y(true);
+  PSXYSeries * const smoothed_series{PSXYSeries::create(
+      lowess_series->graph(), red_marker)};
+  PSXYSeries * const smoothed_coverage_series{PSXYSeries::create(
       plots, title + " smoothed Fragment Coverage;Position;Smoothed Coverage",
       black_marker)};
-  PSXYSeries::PSPart & smoothed_coverage_graph{
-    smoothed_coverage_series->graph()};
-  smoothed_coverage_graph.log_y(true);
+  smoothed_coverage_series->graph().log_y(true);
 
   for (unsigned int sample{0}; sample != fragment_table.n_samples(); ++sample) {
     for (uint64_t frag{0}; frag != fragment_table.n_fragments(); ++frag) {
@@ -535,10 +529,6 @@ std::vector<double> coverage_lowess(const std::string & title,
                                         combined_coverage[f] /
                                         smoothed_coverage[f]);
   }
-  coverage_graph.own(std::move(coverage_series));
-  smoothed_coverage_graph.own(std::move(smoothed_coverage_series));
-  lowess_graph.own(std::move(lowess_series));
-  lowess_graph.own(std::move(smoothed_series));
   return smoothed_coverage;
 }
 
@@ -892,27 +882,21 @@ class CoverageHMM {
   }
   void plot_states() const {
     std::cout << "Making plots for coverage HMM on " << title << std::endl;
-    PSGraph * const states_graph{new PSGraph{plots,
-            title + " states " +
-            std::to_string(iteration) + ";Fragment Index;Sample Index",
-            Bounds{0.0, 1.0 * nFragments, 0.0, 1.0 * nSamples}}};
-    ownp(states_graph);
+    PSGraph * const states_graph{PSGraph::create(
+        plots, title + " states " +
+        std::to_string(iteration) + ";Fragment Index;Sample Index",
+        Bounds{0.0, 1.0 * nFragments, 0.0, 1.0 * nSamples})};
     const Marker marker{paa::circle(), 0.5, "0 0 0", 0.5, true};
-    PSXYSeries * const ploidy_series{new PSXYSeries{
+    PSXYSeries * const ploidy_series{PSXYSeries::create(
         plots, title + " Viterbi ploidy for iteration " +
-            std::to_string(iteration) + ";Sample Rank;Ploidy", marker}};
-    ploidy_series->parents()[0]->own(
-        std::unique_ptr<PSXYSeries>(ploidy_series));
-    PSXYSeries * const copy_series{new PSXYSeries{
+        std::to_string(iteration) + ";Sample Rank;Ploidy", marker)};
+    PSXYSeries * const copy_series{PSXYSeries::create(
         plots, title + " Viterbi average copy number for iteration " +
-            std::to_string(iteration) + ";Position;Average Ploidy", marker}};
-    ownp(copy_series);
-    PSXYSeries * const prob_series{new PSXYSeries{
+        std::to_string(iteration) + ";Position;Average Ploidy", marker)};
+    PSXYSeries * const prob_series{PSXYSeries::create(
         plots, title + " Viterbi observation probabilities for iteration " +
-            std::to_string(iteration) +
-            ";Sample Rank;Observation probability",
-            marker}};
-    ownp(prob_series);
+        std::to_string(iteration) + ";Sample Rank;Observation probability",
+        marker)};
     states_graph->ps(R"xxx(0 setlinewidth
 /box {
 newpath /y exch def /x2 exch def /x1 exch def
@@ -1430,10 +1414,9 @@ class HaHaHMM {
 
   void make_initial_plots() {
     using Hist = PSHSeries<unsigned int, unsigned int>;
-    Hist * const hets_hist{new Hist{plots,
-            "Het distribution;Position;N",
-            Bounds{0, 1.0 * hets.max_position()}}};
-    ownp(hets_hist);
+    Hist * const hets_hist{Hist::create(
+        plots, "Het distribution;Position;N",
+        Bounds{0, 1.0 * hets.max_position()})};
     for (uint64_t h{0}; h != nHets; ++h)
       hets_hist->add_point(hets[h].position());
   }
@@ -1854,38 +1837,32 @@ class HaHaHMM {
       PSPage * const phase_page{
         new PSPage{plots, title_stream.str(), layout_stream.str()}};
       for (uint64_t s{start_sample}; s != stop_sample; ++s) {
-        PSGraph * const state_graph{new PSGraph{*phase_page, ""}};
+        PSGraph * const state_graph{PSGraph::create(*phase_page, "")};
         state_graph->do_border(false);
         for (const unsigned int i : haplos) {
-          PSXYSeries * state_series{new PSXYSeries{
-              *state_graph, state_markers[i]}};
+          PSXYSeries * state_series{PSXYSeries::create(
+              *state_graph, state_markers[i])};
           for (unsigned int l{0}; l < nLoci; l += sample)
             state_series->add_point(exp(posterior[s][l][i]),
                                     actual_locus_position(l));
-          ownp(state_series);
         }
-        ownp(state_graph);
       }
-      PSGraph * const model_graph{new PSGraph{
-          *phase_page, "", Bounds{0, 1, 0.0, 1.0 * max_pos()}}};
-      PSXYSeries * model_series{new PSXYSeries{*model_graph, flip_marker}};
-      PSGraph * const flip_graph{new PSGraph{
-          *phase_page, "", Bounds{-200.0, 50.0, 0.0, 1.0 * max_pos()}}};
+      PSGraph * const model_graph{PSGraph::create(
+          *phase_page, "", Bounds{0, 1, 0.0, 1.0 * max_pos()})};
+      PSXYSeries * model_series{PSXYSeries::create(
+          *model_graph, flip_marker)};
+      PSGraph * const flip_graph{PSGraph::create(
+          *phase_page, "", Bounds{-200.0, 50.0, 0.0, 1.0 * max_pos()})};
       flip_graph->ps("1 0 0 c 1 lw np " + std::to_string(flip_threshold) +
                      " 0 gc moveto " + std::to_string(flip_threshold) + " " +
                      std::to_string(max_pos()) + " gc lineto stroke");
-      PSXYSeries * flip_series{new PSXYSeries{*flip_graph, flip_marker}};
+      PSXYSeries * flip_series{PSXYSeries::create(*flip_graph, flip_marker)};
       for (unsigned int h{0}; h != nHets; ++h) {
         const double p_mom_a{hets.flip(h) ? 1 - exp(p_mom_as[h]) :
               exp(p_mom_as[h])};
         model_series->add_point(p_mom_a, hets[h].position());
         flip_series->add_point(flip_diffs[h], hets[h].position());
       }
-      ownp(flip_series);
-      ownp(flip_graph);
-      ownp(model_series);
-      ownp(model_graph);
-      ownp(phase_page);
       if (!show_all) break;
     }
   }
@@ -2016,39 +1993,33 @@ class HaHaHMM {
                                   const ChromosomeIndexLookup & lookup,
                                   const double tolerance) const {
     const unsigned int chr{lookup[chr_name]};
+
     // measure plots
     const Marker flip_marker{paa::circle(), 0.2, "0 0 0", 1, true, "0 0 0"};
-    PSPage * const measure_page{new PSPage{plots,
-            "Measure for " + chr_name, "1 3 (0.5 0.25)"}};
-    ownp(measure_page);
-    PSGraph * const measure_graph{new PSGraph{
+
+    PSPage * const measure_page{PSPage::create(plots, "Measure for " + chr_name,
+                                               "1 3 (0.5 0.25)")};
+    PSGraph * const measure_graph{PSGraph::create(
         *measure_page, ";Position;Measure",
-            Bounds{0.0, 1.0 * ref.size(chr), -0.5, 0.5}}};
-    ownp(measure_graph);
-    PSXYSeries * const measure_series{new PSXYSeries{
-        *measure_graph, flip_marker}};
-    ownp(measure_series);
+        Bounds{0.0, 1.0 * ref.size(chr), -0.5, 0.5})};
 
     const Marker flip_marker2{paa::circle(), 0.2, "1 0 0", 1, true, "1 0 0"};
-    PSGraph * const flip_measure_graph{new PSGraph{*measure_page,
-            ";Position;Flip Difference",
-            Bounds{0.0, 1.0 * ref.size(chr), 2 * tolerance, 10.0}}};
+
+    PSGraph * const flip_measure_graph{PSGraph::create(
+        *measure_page, ";Position;Flip Difference",
+        Bounds{0.0, 1.0 * ref.size(chr), 2 * tolerance, 10.0})};
     std::ostringstream tol_ps;
     tol_ps << "0 0 1 c 2 lw np 0 xfc " << tolerance << " yc m "
            << " 1 xfc " << tolerance << " yc l sp ";
     flip_measure_graph->ps(tol_ps.str());
-    ownp(flip_measure_graph);
-    PSXYSeries * const flip_measure_series{new PSXYSeries{
-        *flip_measure_graph, flip_marker2}};
-    ownp(flip_measure_series);
+    PSXYSeries * const flip_measure_series{PSXYSeries::create(
+        *flip_measure_graph, flip_marker2)};
 
-    PSGraph * const p_mom_a_graph{new PSGraph{*measure_page,
-            ";Position;Probability that Mom is Allele A",
-            Bounds{0.0, 1.0 * ref.size(chr), -0.2, 1.2}}};
-    ownp(p_mom_a_graph);
-    PSXYSeries * const p_mom_a_series{new PSXYSeries{
-        *p_mom_a_graph, flip_marker}};
-    ownp(p_mom_a_series);
+    PSGraph * const p_mom_a_graph{PSGraph::create(
+        *measure_page, ";Position;Probability that Mom is Allele A",
+        Bounds{0.0, 1.0 * ref.size(chr), -0.2, 1.2})};
+    PSXYSeries * const p_mom_a_series{PSXYSeries::create(
+        *p_mom_a_graph, flip_marker)};
 
     std::random_device rd{};
     std::mt19937_64 mersenne{rd()};

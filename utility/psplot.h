@@ -266,7 +266,7 @@ class Multiplexer {
  public:
   // Construct
   explicit Multiplexer(Self * self__) : self_{self__} { }
-  template<class ... Parents>
+  template <class ... Parents>
   Multiplexer(Self * self__, Parents ... parents__) : self_{self__} {
     add(parents__ ...);
   }
@@ -327,27 +327,9 @@ class Multiplexer {
     managed_children_.push_back(std::move(m));
     return *this;
   }
-#if 1
   template <class PTR>
   Multiplexer & ownp(PTR * m) {
-    // parents().front()->managed_children_.push_back(std::unique_ptr<PTR>{m});
     parents().front()->managed_children_.emplace_back(m);
-    return *this;
-  }
-#endif
-#if 0
-  template <class PTR>
-  Multiplexer & ownp(std::unique_ptr<Self> && m) {
-    parents().front().managed_parents_.push_back(std::move(m));
-    return *this;
-  }
-#endif
-  Multiplexer & own(std::unique_ptr<Parent> && m) {
-    managed_parents_.push_back(std::move(m));
-    return *this;
-  }
-  Multiplexer & own(std::unique_ptr<Child> && m) {
-    managed_children_.push_back(std::move(m));
     return *this;
   }
 
@@ -692,6 +674,14 @@ class PSPageT :
   using Multi::finalize_doc;
   using Multi::manage;
 
+  // factory
+  template <class ... Args>
+  static PSPageT * create(Args && ... args) {
+    PSPageT * page{new PSPageT{std::forward<Args>(args)...}};
+    ownp(page);
+    return page;
+  }
+
   // Construct
   explicit PSPageT(const std::string & title__ = "",
                    const std::string & layout__ = "") :
@@ -815,6 +805,14 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
   using PSPart::Multi::finalize_doc;
   using PSPart::Multi::manage;
   using PSPart::write_text;
+
+  // factory
+  template <class ... Args>
+  static PSGraphT * create(Args && ... args) {
+    PSGraphT * graph__{new PSGraphT{std::forward<Args>(args)...}};
+    ownp(graph__);
+    return graph__;
+  }
 
   // Construct
   explicit PSGraphT(const std::string & title__ = "",
@@ -1601,6 +1599,16 @@ template <class ValType, class CountType>
 class PSHSeries : public PSSeries {
  public:
   using PSGraph = PSGraphT<PSSeries>;
+
+  // factory
+  template <class ... Args>
+  static PSHSeries * create(Args && ... args) {
+    PSHSeries * xyseries__{new PSHSeries{std::forward<Args>(args)...}};
+    paa::ownp(xyseries__);
+    return xyseries__;
+  }
+
+
   PSHSeries(PSPart & hist__,
             const unsigned int n_bins__ = 100,
             const std::string & color__ = "0 0 0",
@@ -1749,6 +1757,14 @@ class PSXYSeries : public PSSeries {
   using PSSeries::add;
   using PSSeries::manage;
 
+  // factory
+  template <class ... Args>
+  static PSXYSeries * create(Args && ... args) {
+    PSXYSeries * xyseries__{new PSXYSeries{std::forward<Args>(args)...}};
+    paa::ownp(xyseries__);
+    return xyseries__;
+  }
+
   // Construct
   PSXYSeries(PSPart & graph__,
              const std::string & draw_commands__,
@@ -1793,6 +1809,17 @@ class PSXYSeries : public PSSeries {
     draw_commands_{Marker().draw_commands()},
     setup_commands_{Marker().setup_commands()} {
       std::unique_ptr<PSGraph> graph_{std::make_unique<PSGraph>(file_name)};
+      manage(std::move(graph_));
+    }
+  PSXYSeries(PSPage & page,
+             const std::string & title__,
+             const Marker & marker__ = Marker(),
+             const Bounds & range__ = Bounds{0.0}) :
+    draw_commands_{marker__.draw_commands()},
+    setup_commands_{marker__.setup_commands()},
+    marker_{marker__} {
+      std::unique_ptr<PSGraph> graph_{
+        std::make_unique<PSGraph>(page, title__, range__)};
       manage(std::move(graph_));
     }
   PSXYSeries(const std::string & file_name,

@@ -66,16 +66,16 @@ int main(int argc, char* argv[])  try {
     auto minmax = minmax_element(values.begin(), values.end());
     const double min{*minmax.first};
     const double max{*minmax.second};
-    PSPage * page{new PSPage{plots, header[c] +
-            (suppress_zeros ? " (zeros suppressed)" : ""), "1 2"}};
-    ownp(page);
+    PSPage * page = PSPage::create(
+        plots, header[c] +
+        (suppress_zeros ? " (zeros suppressed)" : ""), "1 2");
     const unsigned int n_bins{static_cast<unsigned int>(max - min + 1.5)};
-    Hist * hist0{new Hist{*page, header[0] + " = false;" + header[c] + ";N",
-            Bounds{min, max + 1}, n_bins}};
-    ownp(hist0);
-    Hist * hist1{new Hist{*page, header[0] + " = true;" + header[c] + ";N",
-            Bounds{min, max + 1}, n_bins}};
-    ownp(hist1);
+    Hist * hist0 = Hist::create(
+        *page, header[0] + " = false;" + header[c] + ";N",
+        Bounds{min, max + 1}, n_bins);
+    Hist * hist1 = Hist::create(
+        *page, header[0] + " = true;" + header[c] + ";N",
+        Bounds{min, max + 1}, n_bins);
     vector<Hist *> hists{hist0, hist1};
     for (unsigned int v{0}; v != values.size(); ++v)
       if (fabs(values[v]) > 0.001 || !suppress_zeros)

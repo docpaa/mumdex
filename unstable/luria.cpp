@@ -189,12 +189,11 @@ int main(int argc, char * argv[]) try {
       title << "Luria-Delbruck distribution simulation for p = " << p
             << ", Ngen = " << n_generations
             << ", Ntrials = " << commas(total_trials);
-      PSGraph * graph{new PSGraph{plots, title.str() + ";Percent mutation;N"}};
+      PSGraph * graph{PSGraph::create(
+          plots, title.str() + ";Percent mutation;N")};
       graph->log_y(true);
-      ownp(graph);
       const Marker marker{paa::circle(), 0.1, "0 0 0", 0.1, true, "0 0 0"};
-      PSXYSeries * hist{new PSXYSeries{*graph, marker}};
-      ownp(hist);
+      PSXYSeries * hist{PSXYSeries::create(*graph, marker)};
       for (uint64_t bin{0}; bin != bin_data.size(); ++bin)
         hist->add_point(bin_value(bin), bin_data[bin]);
     }

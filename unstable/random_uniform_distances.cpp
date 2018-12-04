@@ -94,18 +94,15 @@ int main(int argc, char* argv[]) try {
 
       // Make sorted distance plots, sampling points to show
       sort(distances.begin(), distances.end());
-      PSGraph * const distances_graph{new PSGraph{plots,
-              "Distances for dimension " + to_string(dim) +
-              ", " + to_string(n_points) + " points" +
-              (sphere ? " (sphere)" : ""),
-              Bounds{-0.05 * n_distances, 1.05 * n_distances, -0.05, 1.05}}};
-      ownp(distances_graph);
-      PSXYSeries * const distances_plot{new PSXYSeries{
-          *distances_graph, marker}};
-      ownp(distances_plot);
-      PSXYSeries * const inv_distances_plot{new PSXYSeries{
-          *distances_graph, red_marker}};
-      ownp(inv_distances_plot);
+      PSGraph * const distances_graph{PSGraph::create(
+          plots, "Distances for dimension " + to_string(dim) +
+          ", " + to_string(n_points) + " points" +
+          (sphere ? " (sphere)" : ""),
+          Bounds{-0.05 * n_distances, 1.05 * n_distances, -0.05, 1.05})};
+      PSXYSeries * const distances_plot{PSXYSeries::create(
+          *distances_graph, marker)};
+      PSXYSeries * const inv_distances_plot{PSXYSeries::create(
+          *distances_graph, red_marker)};
       for (uint64_t p{0}; p < distances.size();
            p += max(n_distances / 1000, 1u)) {
         distances_plot->add_point(p, distances[p] / distances.back());
