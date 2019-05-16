@@ -5,13 +5,17 @@ DEVELOPMENT_PROGRAMS := \
 	anchor_reads \
 	anchor_mismatches \
 	anchor_repeatness \
+	animate \
 	annotate_candidates \
 	annotate_repeats \
 	assembler \
 	assembly_index \
 	assess_haha \
+	assess_hahaha \
 	assess_known_cn_events \
 	averages \
+	a2ds \
+	bad_haha_loci \
 	bam_genotyper \
 	bin_events \
 	bridge_counts \
@@ -59,18 +63,24 @@ DEVELOPMENT_PROGRAMS := \
 	find_repeats \
 	gene_view \
 	haha \
+	hahaha \
+	haplothreads \
+	haplothreads2a2ds \
+	haplothread_sharing \
+	haplothread_summary \
 	hists \
 	hist_compare \
 	ihists \
 	jackpot \
 	karyotype \
+	kenny_positions \
 	local_similarity \
 	lookup_bridge \
 	luria \
 	make_reference \
 	male_cn_stats \
 	mapper \
-	matrix \
+	kenny_matrix \
 	mismatches \
 	missing_chromosome \
 	model_transmission \
@@ -80,12 +90,15 @@ DEVELOPMENT_PROGRAMS := \
 	nlaIII_bsrsI \
 	optional_test \
 	pair_view \
+	phase_correlation \
 	pivot_table \
 	plot_cn_detailed \
 	plot_cn_stats \
 	plot_coverage \
 	plot \
+	plot_chr_panels \
 	plot_invariants \
+	plot_panels \
 	plot_simulate_cn \
 	plot_tnp \
 	plot_unequal \
@@ -94,6 +107,7 @@ DEVELOPMENT_PROGRAMS := \
 	primers \
 	print_invariants \
 	process_bisulfite_rna \
+	qsd_enzymes \
 	random_mumdex_sequences \
 	random_position \
 	random_uniform_distances \
@@ -120,10 +134,12 @@ DEVELOPMENT_PROGRAMS := \
 	table_stats \
 	talk2018 \
 	talk2018dec \
+	test_args \
 	test_hmm \
 	test_mumdex \
 	test_numerical \
 	test_psplot \
+	test_psshade \
 	test_threads \
 	test_x11 \
 	transmission \
@@ -142,6 +158,7 @@ all : $(DEVELOPMENT_PROGRAMS)
 anchor_reads : genes.o utility.o
 afterburner: afterburner.gslo
 anchor_repeatness : files.o
+animate: animate.x11o
 assess_known_cn_events : assess_known_cn_events.gslo
 assess_haha : assess_haha.gslo
 bam_genotyper : utility.o
@@ -172,11 +189,13 @@ find_bridge : utility.o
 find_indel : utility.o
 gene_view : genes.o utility.o
 haha: haha.gslo
+hahaha: hahaha.gslo
 lookup_bridge : utility.o
 mapper : files.o utility.o
 mumdex_examples : utility.o
 museq_primers : utility.o
 optional_test : files.o
+phase_correlation: phase_correlation.gslo
 process_bisulfite_rna : files.o utility.o
 primers : files.o
 print_invariants : utility.o
