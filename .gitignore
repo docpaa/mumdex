@@ -109,6 +109,7 @@ museq_primers
 mview
 namepair
 nlaIII_bsrsI
+offset_beds
 optional_test
 pair_view
 pivot_table

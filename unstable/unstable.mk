@@ -88,6 +88,7 @@ DEVELOPMENT_PROGRAMS := \
 	mumdex_sequences \
 	museq_primers \
 	nlaIII_bsrsI \
+	offset_beds \
 	optional_test \
 	pair_view \
 	phase_correlation \
