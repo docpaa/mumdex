@@ -3,7 +3,7 @@
 n_threads=$1
 
 if [ "$n_threads" = '' ] ; then
-    n_threads = 2
+    n_threads=2
 fi
 
 command_name=$2
@@ -25,7 +25,7 @@ if [ "$command_name" != '' ] ; then
 fi
 
 # implements a process pool!
-xargs -I CMD --max-procs=$n_threads bash -c CMD
+xargs -I CMD -P $n_threads bash -c CMD
 
 wait
 

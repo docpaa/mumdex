@@ -5,10 +5,8 @@
 //
 // Copyright 2018 Peter Andrews
 //
-// ~/mumdex/talk2018dec
-// cp ~/mumdex/talk2018dec ~/web/talk2-18dec/index.cgi
-// firefox http://localhost/talk2018dec/
 //
+
 #include <climits>
 #include <deque>
 #include <iostream>
@@ -482,6 +480,12 @@ class PageElement {
     type_ = type__;
     return *this;
   }
+#if 0
+  virtual PageElement & huge() {
+    type_ = "huge";
+    return *this;
+  }
+#endif
 
  protected:
   std::string type_{""};
@@ -806,21 +810,22 @@ class Table : public PageElement {
 
 std::string default_style() {
     return R"xxx(
-body { margin:0em; padding:0em; padding-top:1.5em; padding-bottom:5em;
+body { margin:0em; padding:0em; padding-top:1.5em;
        font-size:calc(0.9vw + 12pt); }
 h1 { text-align:center; margin: 0em 0em; font-size:150%; }
 h2 { margin: 0.2em 0; font-size:120%; }
 h3 { margin: 0.2em 0; font-size:110%; }
 h4 { margin: 0.2em 0; font-size:100%; }
-ol, ul { margin-top:0em; padding-top:0.5em; }
+ol, ul { margin-top:0em; padding-top:0.5em;
+         margin-bottom:0em; padding-bottom:0.5em; }
 li { padding-bottom:0.3em; }
 .clear { clear:both; }
 .bold { font-weight:bold; }
 .tiny { font-size:35%; }
 .smaller { font-size:70%; }
 .bigger { font-size:130%; }
-.huge { font-size:150%; }
-.huger { font-size:180%; }
+.huge { font-size:135%; }
+.huger { font-size:160%; }
 .hugelist { font-size:200%; padding-left:3em; }
 .lower { position:relative; top:0.25em; }
 .third { display:inline; float:left; width:33%; }
@@ -848,10 +853,10 @@ table.header td { vertical-align:center; padding:0.25em; margin:0em; }
 .righthead { text-align:right; width:18em; }
 td.left td.right { white-space:nowrap; }
 div.thumb { float:left; display:inline; margin:0px; padding:0px;
-            width:25%; min-width:300px; max-width:100vw;
-            font-size:30%; height:340px; }
+            width:20%; min-width:200px; max-width:100vw;
+            font-size:30%; height:240px; }
 div.thumb div.thumbslide { border:1px solid black; margin:10px; padding:10px;
-                           height:300px; overflow:auto; }
+                           height:200px; overflow:auto; }
 div#body { margin:0em; padding:10px 10px 10px 10px; }
 div#body.slide { margin:0em; padding:10px 2vw 10px 2vw; }
 div#body p { margin:0em; padding:0.5em; }
@@ -938,17 +943,19 @@ class HTML : public PageElement {
 
 class Slide : public PageElement {
  public:
-  explicit Slide(const Title & title__,
+  explicit Slide(const std::string & title__,
                  const std::string & part__,
+                 const std::string & short_title__ = "",
                  const Employees & people__ = Employees()) :
       title_{title__},
-    part_{part__},
-    people_{people__} { }
+      part_{part__},
+      short_title_{short_title__.size() ? short_title__ : title_},
+      people_{people__} { }
   virtual ~Slide() = default;
 
   virtual std::string text() const {
     std::ostringstream slide;
-    slide << heading(title_.title()).text() << "\n";
+    slide << heading(title_).text() << "\n";
     for (const PEP & pe : elements)
       slide << (*pe).text() << "\n";
     return slide.str();
@@ -956,12 +963,13 @@ class Slide : public PageElement {
   virtual std::string html() const {
     std::ostringstream slide;
     if (center()) slide << "<div class=\"center\">";
-    slide << heading(title_.title()).html() << "\n";
+    slide << heading(title_).html() << "\n";
     for (const PEP & pe : elements) slide << (*pe).html() << "\n";
     if (center()) slide << "</div>";
     return slide.str();
   }
-  Title title() const { return title_; }
+  std::string title() const { return title_; }
+  std::string short_title() const { return short_title_; }
   std::string part() const { return part_; }
   Employees people() const { return people_; }
 
@@ -982,8 +990,9 @@ class Slide : public PageElement {
   }
 
  private:
-  Title title_;
+  std::string title_;
   std::string part_;
+  std::string short_title_;
   Employees people_;
   bool center_{true};
 };
@@ -1068,8 +1077,8 @@ class Talk : public PageElement {
     std::string valid{page() == "all" || int_page() == 0 ?
           "Peter Andrews" :
           (page() + " - " + slides[int_page()].part() + " - " +
-           slides[int_page()].title().short_title())};
-    if (query.server_name().find("wigclust") == std::string::npos)
+           slides[int_page()].short_title())};
+    if (query.server_name().find("wig") == std::string::npos)
       valid = hlink("https://validator.w3.org/check?uri=" +
                    query.request_uri(), valid).html();
     if (page() == "all") {
@@ -1083,22 +1092,22 @@ class Talk : public PageElement {
                      valid,
                      ">> " +
                      hlink(right_link = query.query_string("page", 1),
-                           slides[1].title().short_title()).html(),
+                           slides[1].short_title()).html(),
                      true).html();
     } else {
       talk << Header(
           hlink(left_link = query.query_string("page", int_page() - 1),
-                slides[int_page() - 1].title().short_title()).html() +
+                slides[int_page() - 1].short_title()).html() +
           " &lt;&lt;",
           valid,
           "&gt;&gt; " +
           (int_page() + 1 == slides.size() ?
-           std::string("End") :
+           hlink(tiles_link, "Index").html() :
            hlink(right_link =
                  (int_page() + 1 == slides.size() ?
                   query.query_string("page", "all") :
                   query.query_string("page", int_page() + 1)),
-                 slides[int_page() + 1].title().short_title()).html()),
+                 slides[int_page() + 1].short_title()).html()),
           true).html();
     }
 
@@ -1136,7 +1145,7 @@ class Talk : public PageElement {
              << "      window.location = \"" << right_link << "\"\n"
              << "    }\n";
     }
-    script << "    if (event.key == \"0\") {\n"
+    script << "    if (event.key == \"t\") {\n"
            << "      window.location = \"" << tiles_link << "\"\n"
            << "    }\n";
 
@@ -1145,10 +1154,13 @@ class Talk : public PageElement {
     return HTML(talk.str(), seminar.title(), style.str(), script.str()).html();
   }
 
-  Slide & slide(const Title & title__,
-                const std::string & part__,
-                const Employees & people__ = Employees()) {
-    slides.emplace_back(title__, part__, people__);
+  Slide & slide(const std::string & title__,
+                 const std::string & part__,
+                 const std::string & short_title__ = "",
+                 const Employees & people__ = Employees()) {
+    slides.emplace_back(title__, part__,
+                        short_title__.size() ? short_title__ : title__,
+                        people__);
     return slides.back();
   }
   static Allowed allowed() {
@@ -1299,7 +1311,7 @@ int main(int argc, char ** argv, char ** envp) {
           "Cold Spring Harbor Laboratory", "Associate Professor"};
 
     const Seminar seminar{
-      "SV and CNV in Autism, CHD and Cancer",
+      "Structural and Copy Number Variation in Autism, CHD and Cancer",
           "Analysis and Visualization with MUMdex",
           "SNV, CNV, MUMdex",
           "Weekly&nbsp;Lab&nbsp;Meeting",
@@ -1310,7 +1322,8 @@ int main(int argc, char ** argv, char ** envp) {
     Talk talk{query, "talk2018dec", peter, seminar,
           png("atan.png", "atan Profile", "100%", "atan_full.png")};
 
-    talk.slide(seminar, "Introduction", Employees{peter})
+    talk.slide(seminar.title(), "Introduction", "SNV, CNV, MUMdex",
+               Employees{peter})
           << heading2(seminar.subtitle())
           << png("./sv_denovo.png", "SV de novo", "49%", "./sv_denovo.pdf")
           << png("./cn_denovo.png", "CN de novo", "49%")
@@ -1336,6 +1349,7 @@ Our findings include a moderate increase in sensitivity and equal specificity fo
 </div>
 )xxx";
 
+    if (0)
     talk.slide("Previous Seminars", "Introduction").center(false)
         << type(division(
             division(
@@ -1361,56 +1375,71 @@ Our findings include a moderate increase in sensitivity and equal specificity fo
             "This seminar builds on my prior work"), "center"));
 
     talk.slide("This Talk", "Introduction")
-        << division(
-            type(division(
-                heading2("1. MUMdex concepts"),
-                png("./bridges_read.png", "", "100%")), "half"),
-            type(division(
-                heading2("2. MUMdex software tools"),
-                png("./mview.png", "mview application", "60%")), "half"))
-        << type(division(
-            heading2("3. SV and CNV discovery and visualization using MUMdex"),
-            png("./indel_deletion.png", "Indel", "32%"),
-            png("./CZ30.png", "", "45%")), "clear");
+        << heading2("1. MUMdex concepts and tools")
+        << png("./bridges_read.png", "", "60%")
+        << "&nbsp;&nbsp;&nbsp;"
+        << png("./mview.png", "mview application", "26%")
+        << heading2("2. SV and CNV discovery and visualization")
+        << png("./indel_deletion.png", "Indel", "32%")
+        << png("./CZ30.png", "", "45%");
 
-    talk.slide("What are MUMs and MUMdex?", "Concepts").center(false)
+    talk.slide("What is a MUM?", "Concepts").center(false)
         << heading2("A Maximal Unique Match (MUM) "
                     "between two sequences:")
-        << list("is a subsequence in common, matching exactly (match)",
-                "cannot be extenced to the left or right (maximal)",
-                "exists only once in each sequence (unique)")
-        << png("./mum.png", "An example of a MUM", "90%")
-        << heading2("MUMdex software uses MUMs for genomic analysis "
-                    "and visualization:")
-        << list("fast suffix array aligner outputs MUMdex alignment format",
-                "<i>de novo</i> and transmitted structural variation "
-                "mutation finder",
-                "MUM-based traditional copy number analysis",
-                "SV and CN visualization software");
+        << type(list("is a subsequence in common, matching exactly (match)",
+                     "cannot be extended to the left or right (maximal)",
+                     "exists only once in each sequence (unique)"), "huge")
+        << png("./mums.png", "An example of MUMs", "90%")
+        <<heading2("Why are MUMs useful?")
+        << type(list("MUMs terminating within a read are called anchors",
+                     "Anchors are adjacent to sample's differences "
+                     "from reference"), "huge");
 
-    talk.slide("Bridges", "Concepts")
-        << heading2("Bridges are pairs of MUMs in a read")
-        << "moo";
+    talk.slide("What is MUMdex?", "Concepts").center(false)
+        << heading2("MUMdex software uses MUMs as a basis for genomic analysis "
+                    "and visualization")
+        << heading2("&nbsp;")
+        << heading2("MUMdex is written in C++, is open source, "
+                    "and runs on Linux, Mac, Windows")
+        << heading2("&nbsp;")
+        << heading2("MUMdex contains:")
+        << type(list(
+            "fast suffix array aligner outputs MUMdex alignment format",
+            "<i>de novo</i> and transmitted structural variation "
+            "mutation finder",
+            "MUM-based traditional copy number analysis",
+            "SV and CN visualization software",
+            "Software for SMASH CN and HAHA phasing data"), "huge");
 
+    talk.slide("Bridges are pairs of MUMs", "Concepts")
+        << png("./bridges.png", "", "77%");
 
-    talk.slide("New Variant Detection", "Main")
-        << heading2("I specialize in Structural and Copy Number "
-                    "Variant Detection")
-        << png("./indel_deletion.png", "A small deletion", "48%",
-                 "./indel_deletion.pdf")
-        << png("./cn_deletion.png", "A large deletion", "50%",
-                 "http://mumdex.com/chd/500000/5105P/"
-                 "denovo_loss.chr12.124661924-125013032/")
-        << heading("SV and CNV are responsible")
-        << heading("for many diseases and developmental syndromes");
+    talk.slide("Invariants", "Concepts")
+        << heading2("Every bridge has an invariant")
+        << heading2("that characterizes its structural effect")
+        << png("./invariants.png", "", "90%")
+        << heading2("The insertion above has an invariant of +2");
 
-    talk.slide("Structural Variant Detection", "Main")
-        << png("./indel_deletion.png", "A small deletion", "60%",
-                 "./indel_deletion.pdf")
-        << heading2("MUMdex finds structural variants by split-read mapping");
+    talk.slide("MUMdex Format", "Concepts")
+        << heading2("The MUMdex format stores MUMs by read pair")
+        << png("./mumdex_format.png", "", "95%")
+        << heading2("An index allows genome-ordered MUM access")
+        << heading2("&nbsp;")
+        << heading2("Bases not covered by MUMs are also stored")
+        << heading2("&nbsp;")
+        << heading2("Can reconstruct reads from the MUMdex format");
 
-    talk.slide({"Types of Structural Variation", "", "SV Types"},
-               "Main").center(false)
+    talk.slide("The MUMdex SV Pipeline", "Concepts").center(false)
+        << heading2("&nbsp;")
+        << png("./software.png", "", "95%")
+        << type(list("mummer: suffix-array aligner",
+                     "merge_mumdex: assembles the MUMdex format from pieces",
+                     "bridges: extracts all brigdes from reads",
+                     "population_denovos: finds <i>de novo</i> candidates"),
+                "huge");
+
+    talk.slide("Types of Structural Variation", "Concepts", "SV Types").
+        center(false)
         << type(division(
             type(list(
                 "small insertions",
@@ -1420,79 +1449,101 @@ Our findings include a moderate increase in sensitivity and equal specificity fo
                 "large insertions (usually CNV)",
                 "large deletions (usually CNV)",
                 "inversions",
-                "translocations"), "huge")), "thirdplus")
-        << png("./wedges.png", "Types of SV events", "44%", "./wedges.png");
+                "translocations"), "huge")), "halfminus")
+        << png("./wedges.png", "Types of SV events", "40%", "./wedges.png");
 
-    talk.slide({"Split-Read Structural Variation in the SSC", "",
-            "SSC SV Detection"}, "Main")
+    talk.slide("New Variant Detection", "Main")
+        << png("./indel_deletion.png", "A small deletion", "48%",
+                 "./indel_deletion.pdf")
+        << png("./cn_deletion.png", "A large deletion", "50%",
+                 "http://mumdex.com/chd/500000/5105P/"
+                 "denovo_loss.chr12.124661924-125013032/")
+        << heading("SV and CNV are responsible")
+        << heading("for many diseases and developmental syndromes");
+
+    talk.slide("Structural Variant Detection", "Main")
+        << png("./indel_deletion.png", "A small deletion", "57%",
+                 "./indel_deletion.pdf")
+        << heading2("MUMdex finds structural variants by split-read mapping");
+
+    talk.slide("Split-Read Structural Variation in the SSC", "Main",
+               "SSC SV Detection")
         << heading2("9079 30x coverage whole genome samples "
                     "in 2380 SSC autism families")
         << type(iframe("http://mumdex.com/indels/"), "indels")
         << heading2("33376 <i>de novo</i> SV candidates were found, "
-                    "with a 95% successful validation rate");
+                    "with a 95% successful validation rate")
+        << heading2("~8 candidates per child");
 
-    talk.slide({"Standard (BWA, GATK, etc) Indel Method Comparison ", "",
-            "SV Detection Comparison"}, "Main")
-        << png("bridge_count_compare.png", "Bridge Count Comparison", "30%")
-        << png("invariant_compare.png", "Event Size Comparison", "30%")
-        << png("repeat_compare.png", "Repeat Content Comparison", "30%")
-        << png("parents_compare.png", "Parent Coverage Comparison", "30%")
-        << png("offset_compare.png", "Anchor Offset Comparison", "30%")
+    talk.slide("Standard (BWA, GATK, etc) Indel Method Comparison ", "Main",
+               "SV Detection Comparison")
+        << png("bridge_count_compare.png", "Bridge Count Comparison", "29%")
+        << png("invariant_compare.png", "Event Size Comparison", "29%")
+        << png("repeat_compare.png", "Repeat Content Comparison", "29%")
+        << png("parents_compare.png", "Parent Coverage Comparison", "29%")
+        << png("offset_compare.png", "Anchor Offset Comparison", "29%")
         << png("max_other_compare.png", "Max Population Count Comparison",
-               "30%")
+               "29%")
         << heading2("MUMdex finds 15.5% more <i>de novo</i> indel candidates, "
                     "and they validate equally well");
 
-    talk.slide({"Other Uses for Structural Variants", "",
-            "SV Variant Utility"}, "Main")
+    if (0)
+    talk.slide("Other Uses for Structural Variants", "Main",
+               "SV Variant Utility")
         << heading2("Luria-Delbr&uuml;ck was used to show "
                     "that indel sequencing errors are very rare!")
-        << png("./luria.png", "luria-delbruck", "50%")
+        << png("./luria.png", "luria-delbruck", "48%")
         << heading2("Most indel errors are due to "
                     "machine error, not PCR error")
         << heading2("We now use indels as very sensitive probes, "
                     "many with error rates &lt; ", super("10", "-6"));
 
-    talk.slide({"Structural Variation Visualization with MView", "",
-            "SV Variant Visualization"}, "Main")
-        << png("./mview.png", "mview application", "80%")
+    talk.slide("Structural Variation Visualization with MView", "Main",
+               "SV Variant Visualization")
+        << png("./mview.png", "mview application", "77%")
         << heading2("This MUMdex GUI is designed to visualize MUM alignments");
 
     talk.slide("Copy Number Variant Detection", "Main")
-        << png("./cn_deletion.png", "A large deletion", "60%",
-                 "./cn_deletion.png")
+        << png("./cn_deletion.png", "A large deletion", "56%",
+                 "CN deletion")
         << heading2("MUMdex finds CN variants by bin counting read pairs "
                     "and then segmenting");
 
-     talk.slide({"Classical Copy Number Variation in Metastatic Breast Cancer",
-             "", "CN in Breast Cancer"}, "Main")
+    talk.slide("Copy Number Method", "Main")
+        << png("./cn_primer.png", "The CN method", "90%", "CN primer");
+
+     talk.slide("Classical Copy Number Variation in Metastatic Breast Cancer",
+                "Main", "CN in Breast Cancer")
          << heading2("Website for project uses new CN scale "
                      "to visualize highly aneuploid profiles")
          << type(iframe("http://mumdex.com/cn/?n_x=3"), "indels")
          << heading2("Features include scale choices, zoom to chromosome, "
                      "profile ordering and grouping");
 
-     talk.slide({"SMASH Copy Number Variation in Congenital Heart Disease",
-             "", "CN in CHD"}, "Main")
+     talk.slide("The SMASH CN Protocol", "Main")
+         << png("./smash_protocol.png", "", "70%")
+         << heading2("Packs 4+ mappings per read pair to save $");
+
+     talk.slide("SMASH Copy Number Variation in Congenital Heart Disease",
+                "Main", "CN in CHD")
          << heading2("To find <i>de novo</i> and transmitted CN events in CHD")
          << type(iframe("http://mumdex.com/chd/100000/denovo.html"), "indels")
-         << heading2("Most known events were found, plus many more");
+         << heading2("Most previously known events were found, plus many more");
 
-     talk.slide({"A New Copy Number Display Scale",
-             "", "New CN Scale"}, "Main")
-         << png("./atan_fun.png", "CN function definition", "45%")
-         << png("./atan.png", "New CN Scale", "80%")
+     talk.slide("A New Copy Number Display Scale",
+                "Main", "New CN Scale")
+         << png("./atan_fun.png", "CN function definition", "42%")
+         << png("./atan.png", "New CN Scale", "75%")
          << heading2(
              "Smoothly projects CN range of 0 - ",
-             lower(huge("&#x221e;")), " to graph Y axis range of 0 - 1");
+             lower(huge("&#x221e;")), " to graph Y axis range");
 
-     talk.slide({"G-Graph Copy Number Visualization", "", "G-Graph"}, "Main")
+     talk.slide("G-Graph Copy Number Visualization", "Main", "G-Graph")
          << heading2("Used to easily explore copy number profiles")
          << png("./ggraph.png", "G-Graph Application", "70%")
          << heading2("G-Graph is a GUI that runs on Linux, Mac and Windows");
 
-     talk.slide({"SV and CNV Complementarity in SSC Data", "", "SV and CNV"},
-                "Main")
+     talk.slide("SV and CNV Complementarity in SSC Data", "Main", "SV and CNV")
          << heading2("<i>De novo</i> SV events often also show up "
                      "as <i>de novo</i> CNV events, and vice-versa")
          << png("./sv_denovo.png", "SV de novo", "49%", "./sv_denovo.pdf")
@@ -1501,32 +1552,33 @@ Our findings include a moderate increase in sensitivity and equal specificity fo
                      "and ~30% of CNV are found as SV")
          << heading2("Exploiting this will be one focus for me in the future");
 
-      talk.slide({"MUMdex and Related Tools From this Seminar",
-              "", "MUMdex Tools"}, "Summary").center(false)
+      talk.slide("MUMdex and Related Tools From this Seminar",
+                 "Summary", "MUMdex Tools").center(false)
           << type(division(png("./CZ30.png", "", "95%"),
                            png("./indel_deletion.png", "", "95%"),
                            png("./chd_view.png", "CHD website", "95%")),
                   "quarter")
           << type(division(
-              heading2("MUMdex: SV, CN analysis"),
+              heading3("MUMdex: SV, CN analysis"),
               list(hlink("http://mumdex.com/",
                          "http://mumdex.com/ for downloads and tutorial"),
                    hlink("http://mumdex.com/indels/",
                          "http://mumdex.com/indels/ for SSC analysis results"),
                    hlink("http://mumdex.com/cn/",
                          "http://mumdex.com/cn/ for html-based CN viewer")),
-              heading2("SMASH: CN analysis for SMASH data"),
+              heading3("SMASH: CN analysis for SMASH data"),
               list(hlink("http://mumdex.com/chd/",
                          "http://mumdex.com/chd/ for CHD CN analysis results")),
-              heading2("G-Graph: CN exploratory analysis"),
+              heading3("G-Graph: CN exploratory analysis"),
               list(hlink("http://mumdex.com/ggraph/",
                          "http://mumdex.com/ggraph/ "
                          "for download and tutorial")),
-              heading2("MView: MUM alignment viewer"),
+              heading3("MView: MUM alignment viewer"),
               list(hlink("http://mumdex.com/",
-                         "http://mumdex.com/ included with MUMdex package"))),
+                         "download as part of http://mumdex.com/"))),
                   "half")
           << type(division(png("./indels_web.png", "", "100%"),
+                           png("./suffix_array.png", "Suffix Array", "50%"),
                            png("./mview.png", "mview application", "100%")),
                   "quarter");
 
@@ -1539,11 +1591,7 @@ Our findings include a moderate increase in sensitivity and equal specificity fo
                      "maximally distant barcode creation for multiplexing",
                      "machine learning for determining candidate thresholds",
                      "machine learning for judging sequence alignment validity",
-                     "C++ unified display architecture for multiple output "
-                     " formats (html, text, pdf, png, svg, ps, ...) and "
-                     "modalities (file, http, X11, printer, app, stdout, ...) "
-                     "- developed in part to present this seminar"),
-                "huger");
+                     "HAHA: haplotyping by halves"), "huger");
 
     talk.slide("Thanks!", "Conclusion").center(false)
         << type(division(
@@ -1569,21 +1617,17 @@ Our findings include a moderate increase in sensitivity and equal specificity fo
                      "Joan Alexander",
                      "Asya Stepansky",
                      "David McCandlish",
-                     "Jason Sheltzer",
-                     "Anders Zetterberg")), "thirdminus"),
+                     "Anders Zetterberg",
+                     "CSHL")), "thirdminus"),
             type(division(
                 list("The Simons Foundation",
-                     "The CSHL IT Department",
-                     "Cold Spring Harbor Laboratory",
-                     "The New York Genome Center", "Lots More!"),
+                     "The NYGC IT Department",
+                     "Christopher Black",
+                     "The NYGC Clinical Lab",
+                     "Vaidehi Jobanputra",
+                     "Lots More!"),
                 png("thanks.png", "Thanks!", "90%")),
                  "thirdplus")), "huge");
-    talk.slide({"Behind the Talk Curtains", "", "Talk Secrets"},
-               "Conclusion")
-        << png("./emacs.png", "Talk source code", "32%", "./emacs.png")
-        << png("./gemacs.png", "Graph source code", "32%", "./emacs.png")
-        << png("./iemacs.png", "Graph source code", "32%", "./emacs.png")
-        << heading2("Seven slides worth of source code plus the graph demo");
 
 #if 0
     talk.slide("Talk program debug details", "Technical").center(false)

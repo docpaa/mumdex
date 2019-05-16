@@ -315,6 +315,34 @@ int main(int argc, char * argv[]) try {
   const bool create_pdf{false};
 
   --argc;
+
+  // process optional arguments first
+  double alpha{0.05};
+  double undo{1.0};
+  unsigned int minw{3};
+  while (argc) {
+    bool acted{false};
+    if (argc > 1 && argv[1] == string("-a")) {
+      alpha = atof(argv[2]);
+      argc -= 2;
+      argv += 2;
+      acted = true;
+    }
+    if (argc > 1 && argv[1] == string("-u")) {
+      undo = atof(argv[2]);
+      argc -= 2;
+      argv += 2;
+      acted = true;
+    }
+    if (argc > 1 && argv[1] == string("-m")) {
+      minw = atoi(argv[2]);
+      argc -= 2;
+      argv += 2;
+      acted = true;
+    }
+    if (!acted) break;
+  }
+
   if (argc != 10 && argc != 11)
     throw Error("normal usage: smash ref fq1 fq2 minLength minExcess "
                 "excludeWindow n_threads out_prefix bin_file,... bad_pos\n"
@@ -606,7 +634,7 @@ int main(int argc, char * argv[]) try {
   for (unsigned int b{0}; b != bins->size(); ++b) {
     copy_number(ref, (*bins)[b], counts[b],
                 output_prefix + " " + to_string((*bins)[b].size()) + " bins",
-                create_pdf);
+                create_pdf, true, alpha, undo, minw);
   }
 
   cout << "Make mapping statistics plots" << endl;

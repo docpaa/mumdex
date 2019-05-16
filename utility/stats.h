@@ -158,6 +158,7 @@ class NormalParams {
         }) / values.size() / pow(stdev, 4.0);
     n = values.size();
   }
+  double seom() const { return stdev / sqrt(n); }
   uint64_t n{0};
   double mean{0};
   double stdev{0};

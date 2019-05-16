@@ -107,17 +107,8 @@ class TSV_col {
 
 class TSV {
  public:
-  // Construct from a text data file
-  explicit TSV(const std::string & file_name__) :
-      file_name_{file_name__},
-      ps{remove_substring(file_name_, ".txt")},
-    mersenne{rd()},
-    unitGen{std::bind(std::uniform_real_distribution<double>(-0.5, 0.5),
-                      mersenne)} {
-    // Open file
-    std::ifstream file{(file_name_).c_str()};
-    if (!file) throw Error("Problem opening file") << file_name_;
-
+  // "Construct" from an istream
+  void load(std::istream & file) {
     // Read header line
     std::string text;
     std::getline(file, text);
@@ -181,6 +172,30 @@ class TSV {
       std::cerr << "data has dimensions " << n_cols() << " x " << n_rows()
                 << std::endl;
     }
+  }
+
+  // Construct from a text data file
+  explicit TSV(const std::string & file_name__) :
+      file_name_{file_name__},
+      ps{remove_substring(file_name_, ".txt")},
+    mersenne{rd()},
+    unitGen{std::bind(std::uniform_real_distribution<double>(-0.5, 0.5),
+                      mersenne)} {
+    // Open file
+    std::ifstream file{(file_name_).c_str()};
+    if (!file) throw Error("Problem opening file") << file_name_;
+
+    load(file);
+  }
+
+  // Construct from an istream
+  explicit TSV(std::istream & stream, const std::string & name = "stream") :
+      file_name_{name},
+      ps{remove_substring(file_name_, ".txt")},
+    mersenne{rd()},
+    unitGen{std::bind(std::uniform_real_distribution<double>(-0.5, 0.5),
+                      mersenne)} {
+    load(stream);
   }
 
   // Add data series to tsv as a vector

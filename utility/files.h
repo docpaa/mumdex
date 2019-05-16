@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include <string>  // Placed before cstring, no error, why?
 #include <algorithm>
 #include <cstring>
 #include <cstdio>
@@ -23,7 +24,6 @@
 #include <limits>
 #include <map>
 #include <sstream>
-#include <string>
 #include <thread>
 #include <utility>
 #include <vector>

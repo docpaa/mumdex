@@ -57,7 +57,6 @@ using paa::commas;
 using paa::doc_defaults;
 using paa::mkdir;
 using paa::nunset;
-using paa::remove_substring;
 using paa::unset;
 using paa::Bin;
 using paa::Bounds;

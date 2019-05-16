@@ -147,7 +147,7 @@ int main(int argc, char * argv[]) try {
   for (unsigned int i{0}; i != bins.size(); ++i)
     pool.run(cn_results, copy_number, cref(ref), cref(bins[i]), cref(counts[i]),
              title + " " + to_string(bins[i].size()) + " bins", create_pdf,
-             minimal);
+             minimal, 0.05, 1.0, 3);
   while (cn_results.size()) cn_results.get();
 
   cerr << "Done" << endl;

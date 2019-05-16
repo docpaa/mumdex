@@ -60,6 +60,7 @@ using paa::dne;
 using paa::inv_atanlog;
 using paa::rect;
 using paa::remove_substring;
+using paa::remove_substring_inplace;
 using paa::remove_including_final;
 using paa::iBounds;
 using paa::CN_abspos;
@@ -210,7 +211,8 @@ bool add_genes(const RefCN & ref,
             const double winsize{max_name_mb * 1000000.0 / 2};
             const std::string first{entered_search.substr(0, chr_end)};
             for (const bool with_chr : {false, true}) {
-              const std::string s_chr_name{remove_substring(first, "chr")};
+              const std::string s_chr_name{
+                remove_substring(first, "chr")};
               const std::string chr_name{std::string(with_chr ? "chr" : "") +
                     s_chr_name};
               if (!ref.chr_lookup.exists(chr_name)) continue;
@@ -336,10 +338,11 @@ bool add_genes(const RefCN & ref,
                 xmotion.y >= max(graph.bounds[1][0], gene.bounds[1][0]) &&
                 xmotion.y <= min(graph.bounds[1][1], gene.bounds[1][1])) {
               graph.status = gene.description;
-              remove_substring(&graph.status, "Homo sapiens ");
-              remove_substring(&graph.status,
+              remove_substring_inplace(&graph.status, "Homo sapiens ");
+              remove_substring_inplace(&graph.status,
                                std::string(" (") + gene.name + ")");
-              remove_substring(&graph.status, std::string(" ") + gene.name);
+              remove_substring_inplace(
+                  &graph.status, std::string(" ") + gene.name);
               graph.draw_status(true);
               graph.status = "";
               return true;

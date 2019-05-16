@@ -216,7 +216,7 @@ class PSCNGraph : public PSGraph {
     write_text(doc, bounds, scale);
 
     // Arbitrary ps
-    do_ps(doc, scales, bounds);
+    do_ps(doc, scales, bounds, ps_);
 
     // Restore range
     range_ = saved_range;
@@ -1117,7 +1117,10 @@ void copy_number(const Reference & ref,
                  const std::vector<unsigned int> & raw_counts,
                  const std::string & title,
                  const bool create_pdf = false,
-                 const bool minimal = false) {
+                 const bool minimal = false,
+                 const double alpha = 0.05,
+                 const double undo = 1.0,
+                 const unsigned int minw = 3) {
   std::cout << "Running copy number analysis with "
             << bins.size() << " bins" << std::endl;
 
@@ -1227,7 +1230,7 @@ void copy_number(const Reference & ref,
 
   // Base name for output files
   std::string out_name{title.size() ? title : std::string("copy_number")};
-  replace(out_name, ' ', '_');
+  replace_inplace(out_name, ' ', '_');
 
   // Output data for segmentation
   std::cout << "Output data for segmentation" << std::endl;
@@ -1286,9 +1289,10 @@ if (!exists("sample")) {
    stop("missing command line argument: sample")
 }
 # alpha 0.05 undo.sd 1.0 good for normal profile
-# alpha 0.02 undo.sd 0.5 good for cancer
-cbs.segment(sample=sample, alpha=0.05, nperm=1000, undo.SD=1.0, min.width=3)
-)foo"};
+# alpha 0.02 undo.sd 0.5 good for cancer\n)foo" +
+std::string("cbs.segment(sample=sample, alpha=") +
+    std::to_string(alpha) + ", nperm=1000, undo.SD=" + std::to_string(undo) +
+    ", min.width=" + std::to_string(minw) + ")"};
 
   // Output R code
   const std::string r_name{out_name + "_cbs.r"};

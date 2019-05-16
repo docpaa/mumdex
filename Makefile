@@ -29,6 +29,7 @@ include $(wildcard $(DEPDIR)/*.dep)
 # Compile command and flags
 CXX :=  g++
 STD := -std=c++11
+# -DNO_IMPLICIT_EXTERN_C=1
 
 # debug = 1
 ifdef debug
@@ -192,6 +193,6 @@ bin : all
 	@mkdir -p ~/bin
 	@make fbin
 fbin :
-	@rsync $(shell find $(shell pwd) -perm -u=x -type f | \
+	@rsync $(shell find $(shell pwd)/ -perm -u=x -type f | \
 		grep -v -e \.git -e /python/ -e '\'~$\'') ~/bin/
 	@echo bin transfer done

@@ -28,6 +28,19 @@
 
 namespace paa {
 
+template <class Value>
+inline std::string sround(const Value & value, const uint64_t n) {
+  std::ostringstream out;
+  out << std::setprecision(n) << value;
+  return out.str();
+}
+
+inline double bound(const double val, const double min, const double max) {
+  if (val < min) return min;
+  if (val > max) return max;
+  return val;
+}
+
 inline std::string commas(uint64_t number) {
   if (!number) return "0";
   std::deque<uint64_t> parts;
@@ -314,10 +327,10 @@ class Progress {
     ++n_;
     if (n_ == 1 || n_ % interval == 0 || n_ == n_total) {
       const auto minutes = timer.minutes();
-      fprintf(out, "\r%s: %.3f%% complete, %.2f minutes elapsed",
+      fprintf(out, "\r%s: %.3f%% complete, %.2f min elapsed",
               message.c_str(), 100.0 * n_ / n_total, minutes);
       if (n_ > 1 && n_ != n_total && minutes > 0) {
-        fprintf(out, ", %.2f minutes remaining", (n_total - n_) * minutes / n_);
+        fprintf(out, ", %.2f min remaining", (n_total - n_) * minutes / n_);
       }
       if (status.size()) fprintf(out, ", %s", status.c_str());
       fprintf(out, "%sK", csi);  // clear to end of line
@@ -331,10 +344,10 @@ class Progress {
     static const char csi[] = { esc, '[', 0 };  // character escape sequence
     n_ += to_add;
     const auto minutes = timer.minutes();
-    fprintf(out, "\r%s: %.3f%% complete, %.2f minutes elapsed",
+    fprintf(out, "\r%s: %.3f%% complete, %.2f min elapsed",
             message.c_str(), 100.0 * n_ / n_total, minutes);
     if (n_ > 1 && n_ != n_total && minutes > 0) {
-      fprintf(out, ", %.2f minutes remaining", (n_total - n_) * minutes / n_);
+      fprintf(out, ", %.2f min remaining", (n_total - n_) * minutes / n_);
     }
     if (status.size()) {
       fprintf(out, ", %s", status.c_str());

@@ -1965,6 +1965,34 @@ pstream_common<C, T>::fopen(FILE*& fin, FILE*& fout, FILE*& ferr) {
 
 #pragma GCC diagnostic pop
 
+#include "error.h"
+
+// better pstream
+namespace paa {
+
+class ipstream {
+ public:
+  explicit ipstream(const std::string & file_name) :
+      stream{file_name.c_str()} {
+    if (!stream.is_open()) throw Error("Problem opening stream") << file_name;
+  }
+  ~ipstream() {
+    stream.close();
+    if (!stream.rdbuf()->exited()) {
+      std::cerr << "Stream has not exited " << stream.rdbuf()->status();
+      exit(1);
+    }
+  }
+  redi::ipstream & operator()() { return stream; }
+  const redi::ipstream & operator()() const { return stream; }
+
+ private:
+  redi::ipstream stream;
+};
+
+}  // namespace paa
+
+
 #endif  // REDI_PSTREAM_H_SEEN
 
 // vim: ts=2 sw=2 expandtab

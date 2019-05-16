@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <iostream>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -408,12 +409,15 @@ class PSDocT : public DocSettings,
     if (finalized) return;
     finalized = true;
     if (eps() && children().size() != 1) {
-      throw Error("Must have one page in an eps file:") << children().size();
+      std::cerr << "Must have one page in an eps file: " << children().size()
+                << std::endl;
+      return;
     }
 
     // Open output file
     psout.open((file_name + ext() + ".tmp").c_str());
-    if (!psout) throw Error("Problem opening ps file") << file_name;
+    if (!psout) std::cerr << "Problem opening ps file " << file_name
+                          << std::endl;
 
     // Write postscript header
     psout << std::setprecision(default_precision);
@@ -699,16 +703,22 @@ class PSPageT :
     std::unique_ptr<PSDoc> doc_{std::make_unique<PSDoc>(file_name, title__)};
     manage(std::move(doc_));
   }
-  ~PSPageT() {
+  virtual ~PSPageT() {
     if (VERBOSE) std::cerr << "Destroy page " << title_.text() << std::endl;
     finalize_doc();
   }
 
   const Text & title() const { return title_; }
   Text & title() { return title_; }
+  PSPageT & title(const Text & title__) {
+    title_ = title__;
+    return *this;
+  }
 
   // Finalize
-  void finalize(PSDoc & doc, const unsigned int page, Bounds bounds) {
+  virtual void finalize(PSDoc & doc, const unsigned int page, Bounds bounds) {
+    if (children().empty()) return;
+
     // Start page
     doc << "%%Page: " << page << " " << page << "\n";
     doc << "save\n";
@@ -909,6 +919,11 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
   }
 
   virtual void finalize(PSDoc & doc, Bounds bounds) {
+    if (children().empty()) {
+      std::cerr << "Empty graph" << std::endl;
+      exit(1);
+    }
+
     const Bounds saved_range{range_};
 
     // Set a scale for details of plot like marker size
@@ -931,8 +946,8 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     const Axis y_axis{range().yl(), range().yh(),
           (this->log_y_ ? 3 : 7) * y_page_scale, this->log_y_};
     // using Ticks = std::vector<std::pair<double, bool>>;
-    const Ticks x_ticks{do_ticks_ ? x_axis.ticks() : Ticks()};
-    const Ticks y_ticks{do_ticks_ ? y_axis.ticks() : Ticks()};
+    const Ticks x_ticks{do_x_ticks_ ? x_axis.ticks() : Ticks()};
+    const Ticks y_ticks{do_x_ticks_ ? y_axis.ticks() : Ticks()};
     if (y_ticks.size()) {
       unsigned int max_size{0};
       for (const std::pair<double, bool> tick : y_ticks) {
@@ -946,9 +961,9 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
       }
       bounds.xl() += 0.65 * max_size * tick_size__;
     } else {
-      if (do_ticks_) bounds.xl() += 0.7 * tick_size__;
+      if (do_x_ticks_) bounds.xl() += 0.7 * tick_size__;
     }
-    if (do_ticks_) bounds.yl() += 1.3 * tick_size__;
+    if (do_y_ticks_) bounds.yl() += 1.3 * tick_size__;
 
     // Set x y scales
     double scales[2]{bounds.xw() / range().xw(), bounds.yw() / range().yw()};
@@ -1031,6 +1046,9 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
       prepare_hist_overlap();
     }
 
+    // Arbitrary ps
+    do_ps(doc, scales, bounds, pre_ps_);
+
     // Finalize series
     for (PSSeries * series : children()) {
       series->finalize(doc, bounds, range_, *this);
@@ -1075,7 +1093,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     write_text(doc, bounds, scale);
 
     // Arbitrary ps
-    do_ps(doc, scales, bounds);
+    do_ps(doc, scales, bounds, ps_);
 
     // Restore range
     range_ = saved_range;
@@ -1090,6 +1108,10 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
   // Add raw postscript to graph
   PSGraphT & ps(const std::string & ps__) {
     ps_ += ps__ + "\n";
+    return *this;
+  }
+  PSGraphT & pre_ps(const std::string & ps__) {
+    pre_ps_ += ps__ + "\n";
     return *this;
   }
 
@@ -1110,7 +1132,16 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
   }
 
   PSGraphT & do_ticks(const bool do_ticks__) {
-    do_ticks_ = do_ticks__;
+    do_x_ticks_ = do_ticks__;
+    do_y_ticks_ = do_ticks__;
+    return *this;
+  }
+  PSGraphT & do_x_ticks(const bool do_ticks__) {
+    do_x_ticks_ = do_ticks__;
+    return *this;
+  }
+  PSGraphT & do_y_ticks(const bool do_ticks__) {
+    do_y_ticks_ = do_ticks__;
     return *this;
   }
 
@@ -1201,26 +1232,27 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
         << "cbb } def c2g\n";
   }
 
-  void do_ps(PSDoc & doc, double * scales, const Bounds & bounds) {
-    if (ps_.size()) {
-      if (ps_.find(" pfc ") != std::string::npos) {
+  void do_ps(PSDoc & doc, double * scales, const Bounds & bounds,
+             const std::string & ps__) {
+    if (ps__.size()) {
+      if (ps__.find(" pfc ") != std::string::npos) {
         doc << "/pfc { /y e def "
             << doc.width() << " mul " << " y " << doc.height() << " mul "
             << "} def\n";
       }
-      if (ps_.find(" xc ") != std::string::npos) {
+      if (ps__.find(" xc ") != std::string::npos) {
         doc << "/xc { " << (this->log_x() ? "log " : "")
             << range().xl() << " sub "
             << scales[0] << " mul " << bounds.xl() << " add "
             << "} def\n";
       }
-      if (ps_.find(" yc ") != std::string::npos) {
+      if (ps__.find(" yc ") != std::string::npos) {
         doc << "/yc { " << (this->log_y() ? "log " : "")
             << range().yl() << " sub "
             << scales[1] << " mul " << bounds.yl() << " add "
             << "} def\n";
       }
-      if (ps_.find(" gc ") != std::string::npos) {
+      if (ps__.find(" gc ") != std::string::npos) {
         doc << "/gc { /y e " << (this->log_y() ? "log " : "")
             << "def " << (this->log_x() ? "log " : "")
             << range().xl() << " sub "
@@ -1229,23 +1261,23 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
             << scales[1] << " mul " << bounds.yl() << " add "
             << "} def\n";
       }
-      if (ps_.find(" gfc ") != std::string::npos) {
+      if (ps__.find(" gfc ") != std::string::npos) {
         doc << "/gfc { /y e def "
             << bounds.xw() << " mul " << bounds.xl() << " add "
             << " y " << bounds.yw() << " mul " << bounds.yl() << " add "
             << "} def\n";
       }
-      if (ps_.find(" xfc ") != std::string::npos) {
+      if (ps__.find(" xfc ") != std::string::npos) {
         doc << "/xfc { "
             << bounds.xw() << " mul " << bounds.xl() << " add "
             << "} def\n";
       }
-      if (ps_.find(" yfc ") != std::string::npos) {
+      if (ps__.find(" yfc ") != std::string::npos) {
         doc << "/yfc { "
             << bounds.yw() << " mul " << bounds.yl() << " add "
             << "} def\n";
       }
-      doc << ps_ << "\n";
+      doc << ps__ << "\n";
     }
   }
 
@@ -1253,72 +1285,16 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
   Text title_{};
   Text labels_[2];
   bool hist_{false};
-  bool do_ticks_{doc_defaults.ticks()};
+  bool do_x_ticks_{doc_defaults.ticks()};
+  bool do_y_ticks_{doc_defaults.ticks()};
   bool do_border_{true};
   std::string ps_{};
+  std::string pre_ps_{};
 };
 
 // Histogram class
 template<class PSSeries, class Int>
 class PSHistT : public PSGraphT<PSSeries> {
-#if 0
-
- public:
-  using PSGraph = PSGraphT<PSSeries>;
-  using PSGraph::PSGraph;
-  using PSPage = PSPageT<PSGraph>;
-  using PSDoc = PSDocT<PSPage>;
-  using Multi = Multiplexer<PSPage, PSGraph, PSSeries>;
-  PSHist(PSPage & page__, const PSGraph & graph, const bool y_axis__) :
-      Multi{this} {
-    this->add(page__);
-    this->range(graph.range()).
-        title(graph.title()).
-        x_label(y_axis ? graph.y_label() : graph.x_label()).
-        y_label("N");
-  }
-
-  for (PSSeries * series : this->children()) {
-    series->get_hist_limit(range_.xl(), range_.xh(), range_.yh());
-  }
-
-  doc << Marker().setup_commands() << "\n";
-  doc << "/p {gs tr np " << scale << " sc "
-  << Marker().draw_commands() << "sp gr} def"
-  << "\n";
-  for (unsigned int i{0}; i != hist_.size(); ++i) {
-    const double x_val{range.xl() +
-          range.xw() * (i + 0.5) / hist_.size()};
-    const unsigned int y_val{hist_[i]};
-    doc << bounds.xl() + (x_val - range.xl()) * scales[0] << " "
-        << bounds.yl() + (y_val - range.yl()) * scales[1] << " p"
-        << "\n";
-  }
-
-  // Swap X and y
-  void swapxy() {
-    std::swap(x, y);
-  }
-
-  PSGraph & yhist(const bool yhist__) {
-    hist_ = true;
-    yhist_ = yhist__;
-    return *this;
-  }
-  void get_hist_limit(const double xl, const double xh, double & yh) {
-    const unsigned int n_bins{100};
-    hist_.resize(n_bins);
-    for (const double val : x) {
-      const double bin{(val - xl) / (xh - xl) * n_bins};
-      if (bin >=0 && bin < n_bins) {
-        ++hist_[bin];
-      }
-    }
-    yh = *max_element(hist_.begin(), hist_.end());
-  }
-
-  std::vector<Int> hist_;
-#endif
 };
 
 std::string dot() {
@@ -1393,8 +1369,8 @@ std::string star() {
 class Marker {
  public:
   // Default values
-  static constexpr double default_scale() { return 2.0; }
-  static constexpr double default_line_width() { return 1.0;}
+  static constexpr double default_scale() { return 0.25; }
+  static constexpr double default_line_width() { return 0.5;}
   static std::string default_color() { return "bk"; }
   static std::string default_fill_color() { return "bk"; }
 
@@ -1403,7 +1379,7 @@ class Marker {
          const double scale__ = default_scale(),
          const std::string & color__ = default_color(),
          const double line_width__ = default_line_width(),
-         const bool fill__ = false,
+         const bool fill__ = true,
          const std::string & fill_color__ = default_fill_color(),
          const double rotation__ = 0.0) :
       path_{path__}, scale_{scale__}, color_{color__},
@@ -1552,7 +1528,7 @@ class PSSeries : public Multiplexer<PSPartT<PSSeries>, PSSeries, PSSeries> {
                         const Bounds & bounds,
                         const Bounds & range,
                         const PSPart & graph) = 0;
-  virtual double y_val(const unsigned int i) const = 0;
+  virtual double y_val(const uint64_t i) const = 0;
   virtual uint64_t size() const = 0;
   virtual std::string title() const {
     return "";
@@ -1608,9 +1584,8 @@ class PSHSeries : public PSSeries {
     return xyseries__;
   }
 
-
   PSHSeries(PSPart & hist__,
-            const unsigned int n_bins__ = 100,
+            const uint64_t n_bins__ = 100,
             const std::string & color__ = "0 0 0",
             const bool normalize__ = true,
             const std::string & title__ = "") :
@@ -1620,8 +1595,20 @@ class PSHSeries : public PSSeries {
     }
   PSHSeries(PSDoc & doc__,
             const std::string & title__,
-            const Bounds & range__,
-            const unsigned int n_bins__ = 100,
+            const Bounds & range__ = Bounds{},
+            const uint64_t n_bins__ = 100,
+            const std::string & color__ = "1 0 0") :
+      n_bins_{n_bins__},
+    color_{color__}, normalize_{false}, title_{""} {
+      std::unique_ptr<PSGraph> graph_{std::make_unique<PSGraph>(
+          doc__, title__, range__)};
+      graph_->hist(true);
+      manage(std::move(graph_));
+    }
+  PSHSeries(PSDoc & doc__,
+            const std::string & title__,
+            const uint64_t n_bins__ = 100,
+            const Bounds & range__ = Bounds{},
             const std::string & color__ = "1 0 0") :
       n_bins_{n_bins__},
     color_{color__}, normalize_{false}, title_{""} {
@@ -1633,10 +1620,24 @@ class PSHSeries : public PSSeries {
   PSHSeries(PSPage & page__,
             const std::string & title__,
             const Bounds & range__,
-            const unsigned int n_bins__ = 100,
-            const std::string & color__ = "1 0 0") :
+            const uint64_t n_bins__ = 100,
+            const std::string & color__ = "1 0 0",
+            const bool normalize__ = false) :
       n_bins_{n_bins__},
-    color_{color__}, normalize_{false}, title_{""} {
+    color_{color__}, normalize_{normalize__}, title_{""} {
+      std::unique_ptr<PSGraph> graph_{std::make_unique<PSGraph>(
+          page__, title__, range__)};
+      graph_->hist(true);
+      manage(std::move(graph_));
+    }
+  PSHSeries(PSPage & page__,
+            const std::string & title__,
+            const uint64_t n_bins__ = 100,
+            const Bounds & range__ = Bounds{0.0},
+            const std::string & color__ = "1 0 0",
+            const bool normalize__ = false) :
+      n_bins_{n_bins__},
+    color_{color__}, normalize_{normalize__}, title_{""} {
       std::unique_ptr<PSGraph> graph_{std::make_unique<PSGraph>(
           page__, title__, range__)};
       graph_->hist(true);
@@ -1646,7 +1647,7 @@ class PSHSeries : public PSSeries {
   explicit PSHSeries(std::vector<PSSeries *> others) {
     const PSSeries * first{others.front()};
     const PSSeries * second{others.back()};
-    n_bins_ = static_cast<unsigned int>(first->size());
+    n_bins_ = first->size();
     // color_ = "0.8 0 0.8";
     color_ = mix_colors(first->marker().fill_color(),
                         second->marker().fill_color());
@@ -1658,11 +1659,11 @@ class PSHSeries : public PSSeries {
       title_ = "Area in Common";
     }
 #endif
-    for (unsigned int i{0}; i != h_.size(); ++i) {
+    for (uint64_t i{0}; i != h_.size(); ++i) {
       h_[i] = std::min(first->y_val(i), second->y_val(i));
     }
   }
-  ~PSHSeries() {
+  virtual ~PSHSeries() {
     if (VERBOSE) std::cerr << "Destroy PSHSeries " << std::endl;
     this->finalize_doc();
   }
@@ -1672,18 +1673,37 @@ class PSHSeries : public PSSeries {
   }
 
   void add_value(const ValType x__, const uint64_t count) {
-    for (unsigned int i{0}; i != count; ++i) {
+    for (uint64_t i{0}; i != count; ++i) {
       x_.push_back(x__);
     }
   }
 
   void get_range(const Bounds & range, Bounds & new_range,
                  const bool, const bool) {
+    if (x_.empty()) {
+      std::cerr << "Empty series in PSHSeries get_range - faking" << std::endl;
+      new_range = Bounds{0, 1, 0, 1};
+      return;
+    }
     h_.clear();
     h_.resize(n_bins_);
+    // std::cerr << range.xl() << " " << range.xh() << std::endl;
+
+    const bool get_range_low{is_unset(range.xl())};
+    const bool get_range_high{is_unset(range.xh())};
+    const bool do_get_range{get_range_low || get_range_high};
+
+    if (do_get_range) {
+      // std::cerr << range.xl() << " " << range.xh() << std::endl;
+      const auto minmax = std::minmax_element(x_.begin(), x_.end());
+      if (get_range_low) new_range.xl(*minmax.first);
+      if (get_range_high) new_range.xh(*minmax.second);
+      // std::cerr << new_range.xl() << " " << new_range.xh() << std::endl;
+    }
+
     for (const ValType val : x_) {
-      const unsigned int bin{
-        static_cast<unsigned int>((val - range.xl()) * n_bins_ / range.xw())};
+      const uint64_t bin{
+        static_cast<uint64_t>((val - range.xl()) * n_bins_ / range.xw())};
       if (bin >= 0 && bin < n_bins_) {
         ++h_[bin];
       }
@@ -1703,14 +1723,18 @@ class PSHSeries : public PSSeries {
     }
   }
 
-  double y_val(const unsigned int i) const {
+  double y_val(const uint64_t i) const {
     return normalize_ ? 1.0 * h_[i] / x_.size() : 1.0 * h_[i];
   }
   uint64_t size() const { return h_.size(); }
-  void finalize(PSDoc & doc,
+  virtual void finalize(PSDoc & doc,
                 const Bounds & bounds,
                 const Bounds & range,
                 const PSPart &) {
+    if (x_.empty()) {
+      std::cerr << "Empty series in PSHSeries finalize - skipping" << std::endl;
+      return;
+    }
     const double scales[2]{bounds.xw() / range.xw(),
           bounds.yw() / range.yw()};
     const double binw{bounds.xw() / n_bins_};
@@ -1722,7 +1746,7 @@ class PSHSeries : public PSSeries {
         doc << "gs " << color_ << " c fp gr ";
       }
       doc << "sp} def\n";
-      for (unsigned int i{0}; i != h_.size(); ++i) {
+      for (uint64_t i{0}; i != h_.size(); ++i) {
         if (h_[i] > 0) {
           doc << (y_val(i) - range.yl()) * scales[1]
               << " " << bounds.xl() + i * binw << " h"
@@ -1742,7 +1766,7 @@ class PSHSeries : public PSSeries {
  private:
   std::vector<ValType> x_{};
   std::vector<CountType> h_{};
-  unsigned int n_bins_{};
+  uint64_t n_bins_{};
   std::string color_{};
   bool normalize_{};
   std::string title_{};
@@ -1766,6 +1790,10 @@ class PSXYSeries : public PSSeries {
   }
 
   // Construct
+  explicit PSXYSeries(const Marker & marker__ = Marker()) :
+      draw_commands_{marker__.draw_commands()},
+      setup_commands_{marker__.setup_commands()},
+      marker_{marker__} { }
   PSXYSeries(PSPart & graph__,
              const std::string & draw_commands__,
              const std::string & setup_commands__ = "") :
@@ -1838,7 +1866,7 @@ class PSXYSeries : public PSSeries {
              const Bounds & range__ = Bounds{0.0}) :
       PSXYSeries{file_name, title__, range__, marker__} { }
   PSXYSeries(PSXYSeries && other) = default;
-  ~PSXYSeries() {
+  virtual ~PSXYSeries() {
     if (VERBOSE) std::cerr << "Destroy PSXYSeries " << std::endl;
     this->finalize_doc();
   }
@@ -1850,8 +1878,13 @@ class PSXYSeries : public PSSeries {
   }
 
   // Set X Y limits
-  void get_range(const Bounds & range, Bounds & new_range,
-                 const bool log_x, const bool log_y) {
+  virtual void get_range(const Bounds & range, Bounds & new_range,
+                         const bool log_x, const bool log_y) {
+    if (x.empty()) {
+      std::cerr << "Empty series in PSXYSeries get_range - faking" << std::endl;
+      new_range = Bounds{0, 1, 0, 1};
+      return;
+    }
     // Get x y ranges
     if (is_unset(range.xl()) && is_unset(range.xh())) {
       set_x_limits(new_range.xl(), new_range.xh(), log_x);
@@ -1935,12 +1968,17 @@ class PSXYSeries : public PSSeries {
     yh = *max_element(y.begin(), y.end());
   }
 
-  double y_val(const unsigned int i) const { return y[i]; }
+  double y_val(const uint64_t i) const { return y[i]; }
   uint64_t size() const { return x.size(); }
 
   // Finalize
-  void finalize(PSDoc & doc, const Bounds & bounds,
+  virtual void finalize(PSDoc & doc, const Bounds & bounds,
                 const Bounds & range, const PSPart & part) {
+    if (x.empty()) {
+      std::cerr << "Empty series in PSXYSeries finalize - skipping"
+                << std::endl;
+      return;
+    }
     const double scales[2]{bounds.xw() / range.xw(),
           bounds.yw() / range.yw()};
     const double scale{pow(bounds.xw() * bounds.yw() /
@@ -2040,7 +2078,7 @@ class PSXYDSeries : public PSSeries {
       PSSeries{graph__},
     x_bins_{x_bins__}, y_bins_{y_bins__} { }
   PSXYDSeries(PSXYDSeries && other) = default;
-  ~PSXYDSeries() {
+  virtual ~PSXYDSeries() {
     if (VERBOSE) std::cerr << "Destroy PSXYDSeries " << std::endl;
     this->finalize_doc();
   }
@@ -2099,11 +2137,11 @@ class PSXYDSeries : public PSSeries {
     yh = *max_element(y.begin(), y.end());
   }
 
-  double y_val(const unsigned int i) const { return y[i]; }
+  double y_val(const uint64_t i) const { return y[i]; }
   uint64_t size() const { return x.size(); }
 
   // Finalize
-  void finalize(PSDoc & doc, const Bounds & bounds,
+  virtual void finalize(PSDoc & doc, const Bounds & bounds,
                 const Bounds & range, const PSPart &) {
     const double scales[2]{bounds.xw() / range.xw(),
           bounds.yw() / range.yw()};
@@ -2195,11 +2233,16 @@ class PSXYMSeries : public PSXYSeries {
       PSXYSeries{graph__, draw_commands__, setup_commands__} { }
   PSXYMSeries(PSDoc & doc,
               const std::string & title__,
-              const Bounds & range__,
+              const Bounds & range__ = Bounds{0.0},
               const Marker & marker__ = Marker()) :
       PSXYSeries{doc, title__, range__, marker__} {}
+  PSXYMSeries(PSPage & page,
+              const std::string & title__,
+              const Marker & marker__ = Marker(),
+              const Bounds & range__ = Bounds{0.0}) :
+      PSXYSeries{page, title__, marker__, range__} {}
   PSXYMSeries(PSXYMSeries && other) = default;
-  ~PSXYMSeries() {
+  virtual ~PSXYMSeries() {
     if (VERBOSE) std::cerr << "Destroy PSXYMSeries " << std::endl;
     this->finalize_doc();
   }
@@ -2217,7 +2260,7 @@ class PSXYMSeries : public PSXYSeries {
   }
 
   // Finalize
-  void finalize(PSDoc & doc, const Bounds & bounds,
+  virtual void finalize(PSDoc & doc, const Bounds & bounds,
                 const Bounds & range, const PSPart & part) {
     const double scales[2]{bounds.xw() / range.xw(),
           bounds.yw() / range.yw()};
@@ -2251,6 +2294,212 @@ class PSXYMSeries : public PSXYSeries {
   std::set<Marker> markers{};
 };
 
+class HistEq {
+ public:
+  HistEq(std::vector<double> values, const uint64_t n_choices) {
+    sort(values.begin(), values.end());
+    for (uint64_t bin{0}; bin != n_choices; ++bin) {
+      const double value{values[static_cast<uint64_t>(
+          1.0 * bin * values.size() / n_choices)]};
+      stops.push_back(value);
+    }
+  }
+  uint64_t operator()(const double value) const {
+    return lower_bound(stops.begin(), stops.end(), value) - stops.begin();
+  }
+ private:
+  std::vector<double> stops{};
+};
+
+class PSXYSSeries : public PSXYSeries {
+ public:
+  using PSDoc = PSDocT<PSPage>;
+
+  // factory
+  template <class ... Args>
+  static PSXYSSeries * create(Args && ... args) {
+    PSXYSSeries * xyseries__{new PSXYSSeries{std::forward<Args>(args)...}};
+    paa::ownp(xyseries__);
+    return xyseries__;
+  }
+
+  PSXYSSeries() : PSXYSeries{} { }
+  explicit PSXYSSeries(PSPart & graph__, const double side__ = 1.0) :
+      PSXYSeries{graph__},
+      side_{side__} { }
+  PSXYSSeries(PSXYSSeries && other) = default;
+
+  virtual ~PSXYSSeries() {
+    if (VERBOSE) std::cerr << "Destroy PSXYSSeries " << std::endl;
+    this->finalize_doc();
+  }
+
+  // Add data point
+  void set_value(const double x_, const double y_, const double z) {
+    add_point(x_, y_);
+    values.push_back(z);
+  }
+  void set_value_symmetric(const double x_, const double y_, const double z) {
+    set_value(x_, y_, z);
+    if (x_ < y_ || x_ > y_) set_value(y_, x_, z);
+  }
+
+  virtual void get_range(const Bounds & range, Bounds & new_range,
+                         const bool log_x, const bool log_y) {
+    PSXYSeries::get_range(range, new_range, log_x, log_y);
+    new_range.xh() += side_;
+    new_range.yh() += side_;
+  }
+
+  // Finalize
+  virtual void finalize(PSDoc & doc, const Bounds & bounds,
+                        const Bounds & range, const PSPart &) {
+    const double scales[2]{bounds.xw() / range.xw(),
+          bounds.yw() / range.yw()};
+
+    if (histeq_) hist_eq = std::make_unique<HistEq>(values, n_values);
+
+    std::function<double(double)> identity_color{
+      [] (const double value) {
+        return value;
+      }};
+    const auto minmax = minmax_element(values.begin(), values.end());
+    std::function<double(double)> expanded_color{
+      [minmax](const double value) {
+        return (value - *minmax.first) / (*minmax.second - *minmax.first);
+      }};
+    std::function<double(double)> histeq_color{
+        [this](const double value) {
+          return 1.0 * ((*hist_eq)(value)) / n_values;
+        }};
+    color = [this, identity_color, expanded_color, histeq_color]
+        (const double value) {
+      return bound((histeq_ ? histeq_color :
+                    (expanded_ ? expanded_color : identity_color))(value),
+                   0, 1);
+    };
+    doc << "gs "
+        << bounds.xl() << " " << bounds.yl() << " tr "
+        << scales[0] << " " << scales[1] << " scale "
+        << -range.xl() << " " << -range.yl() << " tr\n";
+    doc << "/sz " << side_ << " def "
+        << "/p { np 0 0 c m "
+        << "sz 0 rl 0 sz rl sz neg 0 rl 0 sz neg rl cp fp } def\n";
+    for (unsigned int i{0}; i != x.size(); ++i) {
+      if (false && values.size() < 200) {
+        std::cerr << i << " " << x[i] << " " << y[i]
+                  << " " << values[i] << " " << color(values[i]) << std::endl;
+      }
+      doc << x[i] << " " << y[i] << " " << color(values[i]) << " p\n";
+    }
+    doc << "gr\n";
+  }
+  bool histeq() const { return histeq_; }
+  PSXYSSeries & histeq(const bool histeq__) {
+    histeq_ = histeq__;
+    return *this;
+  }
+  bool expanded() const { return expanded_; }
+  PSXYSSeries & expanded(const bool expanded__) {
+    expanded_ = expanded__;
+    return *this;
+  }
+  PSXYSSeries & side(const double side__) {
+    side_ = side__;
+    return *this;
+  }
+
+ protected:
+  double side_{1.0};
+  std::function<double(double)> color{nullptr};
+  const unsigned int n_values{100};
+  std::vector<double> values{};
+  std::unique_ptr<HistEq> hist_eq{nullptr};
+  bool histeq_{false};
+  bool expanded_{false};
+};
+
+class PSHeat : public PSXYSSeries {
+ public:
+  using PSDoc = PSDocT<PSPage>;
+  using PSGraph = PSGraphT<PSSeries>;
+  using PSPage = PSPageT<PSPart>;
+
+  // factory
+  template <class ... Args>
+  static PSHeat * create(Args && ... args) {
+    PSHeat * xyseries__{new PSHeat{std::forward<Args>(args)...}};
+    paa::ownp(xyseries__);
+    return xyseries__;
+  }
+
+  explicit PSHeat(PSDoc & doc__, const std::string & title__) :
+      PSXYSSeries{},
+      page{doc__, "", "2 (0.75) 1 ^1 0 1 4 (0.45 0.05 0.45)^"},
+      graph{page, title__},
+      hist{page, ";Value;N", {0, 1}, n_values},
+      legend{page, ";Value;Color"},
+      legend_series{legend, 1.0 / n_values},
+      color_hist{page, ";Color;N", {0, 1}, n_values},
+      color_legend{page, ";Color;Color"},
+      color_legend_series{color_legend, 1.0 / n_values} {
+        page.title(graph.title());
+        graph.title("");
+        add(&graph);
+        // legend.do_y_ticks(false);  // broken...
+        // color_legend.do_y_ticks(false);
+      }
+  PSHeat(PSHeat && other) = default;
+
+  virtual ~PSHeat() {
+    if (VERBOSE) std::cerr << "Destroy PSHeat " << std::endl;
+    this->finalize_doc();
+  }
+
+  virtual void finalize(PSDoc & doc, const Bounds & bounds,  // NOLINT
+                        const Bounds & range, const PSPart & part) {  // NOLINT
+    PSXYSSeries::finalize(doc, bounds, range, part);
+    if (false) std::cerr << page.title().text() << std::endl;
+    if (0) std::cerr << "Display States: "
+                     << " " << expanded()
+                     << " " << histeq()
+                     << " " << legend_series.expanded()
+                     << " " << legend_series.histeq()
+                     << " " << color_legend_series.expanded()
+                     << " " << color_legend_series.histeq() << std::endl;
+    for (uint64_t vb{0}; vb <= n_values; ++vb) {
+      const double value{1.0 * vb / n_values};
+      const double color_{color(value)};
+      legend_series.set_value(value, 0, color_);
+      // std::cerr << value << " " << color_ << std::endl;
+    }
+    for (uint64_t cb{0}; cb <= n_values; ++cb) {
+      const double color_{1.0 * cb / n_values};
+      color_legend_series.set_value(color_, 0, color_);
+    }
+    for (const double value : values) {
+      hist.add_point(value);
+      color_hist.add_point(color(value));
+    }
+  }
+
+  // Add raw postscript to graph
+  PSHeat & ps(const std::string & ps__) {
+    graph.ps(ps__);
+    return *this;
+  }
+
+ private:
+  PSPage page;
+  PSGraph graph;
+  PSHSeries<double, uint64_t> hist;
+  PSGraph legend;
+  PSXYSSeries legend_series;
+  PSHSeries<double, uint64_t> color_hist;
+  PSGraph color_legend;
+  PSXYSSeries color_legend_series;
+};
+
 template <class PSSeries>
 void PSGraphT<PSSeries>::prepare_hist_overlap() {
   std::unique_ptr<PSHSeries<int, double>> overlap_{
@@ -2258,7 +2507,159 @@ void PSGraphT<PSSeries>::prepare_hist_overlap() {
   manage(std::move(overlap_));
 }
 
-// using PSHist = PSSeries::PSHist;
+class PSShade : public PSXYSeries {
+ public:
+  using PSDoc = PSDocT<PSPage>;
+
+  // factory
+  template <class ... Args>
+  static PSShade * create(Args && ... args) {
+    PSShade * xyseries__{new PSShade{std::forward<Args>(args)...}};
+    paa::ownp(xyseries__);
+    return xyseries__;
+  }
+
+  PSShade() : PSXYSeries{} { }
+  explicit PSShade(PSGraph & graph__,
+                   const std::string & target_color__ = "1 0 0") :
+      PSXYSeries{graph__}, target_color{target_color__} {}
+  PSShade(PSDoc & doc, const std::string & title__,
+          const std::string & target_color__ = "1 0 0") :
+      PSXYSeries{doc, title__, Bounds{0.0}, Marker{}},
+      target_color{target_color__} {}
+  PSShade(PSShade && other) = default;
+
+  virtual ~PSShade() {
+    if (VERBOSE) std::cerr << "Destroy PSShade " << std::endl;
+    this->finalize_doc();
+  }
+
+  // Finalize
+  virtual void finalize(PSDoc & doc, const Bounds & bounds,
+                        const Bounds & range, const PSPart &) {
+    const double scales[2]{bounds.xw() / range.xw(),
+          bounds.yw() / range.yw()};
+
+    // Make histogram of points / values
+    const uint64_t n_points{x.size()};
+    const uint64_t n_bins{static_cast<uint64_t>(sqrt(n_points))};
+    const uint64_t n_bins_side{static_cast<uint64_t>(
+        std::min(2000.0, std::max(500.0, pow(n_bins, 0.75))))};
+    // std::cerr << "Side Bins " << n_bins_side << std::endl;
+    std::vector<std::vector<uint64_t>> hist(n_bins_side,
+                                            std::vector<uint64_t>(n_bins_side));
+    for (uint64_t n{0}; n != n_points; ++n) {
+      const uint64_t x_bin(n_bins_side * (x[n] - range.xl()) / range.xw());
+      const uint64_t y_bin(n_bins_side * (y[n] - range.yl()) / range.yw());
+      ++hist[x_bin][y_bin];
+    }
+
+    uint64_t minb{100000000000000000};
+    uint64_t maxb{0};
+    for (uint64_t xi{0}; xi != n_bins_side; ++xi) {
+      for (uint64_t yi{0}; yi != n_bins_side; ++yi) {
+        if (minb > hist[xi][yi]) minb = hist[xi][yi];
+        if (maxb < hist[xi][yi]) maxb = hist[xi][yi];
+      }
+    }
+    std::vector<double> xb;
+    std::vector<double> yb;
+    std::vector<double> values;
+    for (uint64_t xi{0}; xi != n_bins_side; ++xi) {
+      const double xv{range.xl() + xi * range.xw() / n_bins_side};
+      for (uint64_t yi{0}; yi != n_bins_side; ++yi) {
+        const double yv{range.yl() + yi * range.yw() / n_bins_side};
+        if (hist[xi][yi]) {
+          const double zv{1.0 * hist[xi][yi] / maxb};
+          xb.push_back(xv);
+          yb.push_back(yv);
+          values.push_back(zv);
+        }
+      }
+    }
+    if (histeq_) hist_eq = std::make_unique<HistEq>(values, n_colors);
+
+    std::function<double(double)> identity_color{
+      [] (const double value) {
+        return value;
+      }};
+    const auto minmax = minmax_element(values.begin(), values.end());
+    std::function<double(double)> expanded_color{
+      [minmax](const double value) {
+        return (value - *minmax.first) / (*minmax.second - *minmax.first);
+      }};
+    std::function<double(double)> histeq_color{
+        [this](const double value) {
+          return 1.0 * ((*hist_eq)(value)) / n_colors;
+        }};
+    color = [this, identity_color, expanded_color, histeq_color]
+        (const double value) {
+      return bound((histeq_ ? histeq_color :
+                    (expanded_ ? expanded_color : identity_color))(value),
+                   0, 1);
+    };
+    const double x_width{range.xw() / n_bins_side};
+    const double y_width{range.yw() / n_bins_side};
+    std::istringstream color_stream{target_color.c_str()};
+    double r;
+    double g;
+    double b;
+    color_stream >> r >> g >> b;
+    const double total_color{r + g + b};
+    const double max_color{std::max(r, std::max(g, b))};
+    const bool single_color{total_color >= 1 && total_color <= 1 &&
+          max_color >= 1 && max_color <= 1};
+    const unsigned int max_index{r > g ? (r > b ? 0U : 2U) : (g > b ? 1U : 2U)};
+
+    doc << "gs "
+        << bounds.xl() << " " << bounds.yl() << " tr "
+        << scales[0] << " " << scales[1] << " scale "
+        << range.xl() << " neg  " << range.yl() << " neg tr\n";
+    doc << "/xsz " << x_width << " def "
+        << "/ysz " << y_width << " def "
+        << "/p { np ";
+    if (single_color) {
+      if (max_index == 0) {
+        doc << "0 0";
+      } else if (max_index == 1) {
+        doc << "0 exch 0";
+      } else {
+        doc << "0 exch 0 exch";
+      }
+    }
+    doc << " c m "
+        << "xsz 0 rl 0 ysz rl xsz neg 0 rl 0 ysz neg rl cp fp } def\n";
+    for (unsigned int i{0}; i != xb.size(); ++i) {
+      const double c{color(values[i])};
+      doc << xb[i] << " " << yb[i] << " ";
+      if (single_color) {
+        doc << c << " p\n";
+      } else {
+        doc << r * c << " " << g * c << " " << b * c << " p\n";
+      }
+    }
+    doc << "gr\n";
+  }
+  bool histeq() const { return histeq_; }
+  PSShade & histeq(const bool histeq__) {
+    histeq_ = histeq__;
+    return *this;
+  }
+  bool expanded() const { return expanded_; }
+  PSShade & expanded(const bool expanded__) {
+    expanded_ = expanded__;
+    return *this;
+  }
+
+ protected:
+  std::function<double(double)> color{nullptr};
+  const unsigned int n_colors{1000};
+  std::unique_ptr<HistEq> hist_eq{nullptr};
+  bool histeq_{true};
+  bool expanded_{false};
+  std::string target_color{"1 0 0"};
+};
+
 using PSGraph = PSXYSeries::PSGraph;
 using PSPage = PSGraph::PSPage;
 using PSDoc = PSPage::PSDoc;
@@ -2341,18 +2742,6 @@ class LayoutTester {
   std::vector<std::string (*)()> shapes{};
 };
 
-#endif
-
-#if 0
-template <class Parent, class Self, class Child>
-Multiplexer<Parent, Self, Child>::~Multiplexer() {
-  for (Parent * parent : parents_) {
-    parent->erase_child(self_);
-  }
-  for (Child * child : children_) {
-    child->erase_parent(self_);
-  }
-}
 #endif
 
 }  // namespace paa

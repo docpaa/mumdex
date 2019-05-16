@@ -431,7 +431,8 @@ class X11WindowT {  // : public Geometry {
                   const uint64_t max_colors = 256,
                   void_fun call_back = [] () {}) {
     const std::string image_name{get_next_file(base_name, "xpm")};
-    const std::string png_name{replace_substring(image_name, "xpm", "png")};
+    const std::string png_name{
+      replace_substring(image_name, "xpm", "png")};
     // draw();
     save_image(image_name, pixmap, 0, 0, width(), height(),
                call_back, max_colors);
@@ -1051,7 +1052,7 @@ class Click : public Point {
 class Color {
  public:
   explicit Color(std::string color_name) {
-    replace_substring(color_name, "rgb:", "");
+    replace_substring_inplace(color_name, "rgb:", "");
     std::istringstream name{color_name.c_str()};
     std::string hex;
     getline(name, hex, '/');

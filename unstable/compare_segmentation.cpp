@@ -42,7 +42,6 @@ using std::string;
 using std::unique_ptr;
 using std::vector;
 
-using paa::replace_substring;
 using paa::Bin;
 using paa::Bounds;
 using paa::ChromosomeIndexLookup;

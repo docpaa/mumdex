@@ -1,4 +1,10 @@
-UTILITY_PROGRAMS := even_columns randomize_order
+UTILITY_PROGRAMS := column_split \
+	even \
+	even_columns \
+	lines_at_pos \
+	randomize_order \
+	stats
+
 PROGRAMS += $(UTILITY_PROGRAMS)
 all : $(UTILITY_PROGRAMS)
 

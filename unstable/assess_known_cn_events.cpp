@@ -37,7 +37,6 @@ using std::string;
 using std::vector;
 
 using paa::readable;
-using paa::replace;
 using paa::Bin;
 using paa::ChromosomeIndexLookup;
 using paa::CN_Bin;

@@ -26,7 +26,7 @@ using std::string;
 using std::vector;
 
 using paa::Error;
-using paa::replace;
+using paa::replace_inplace;
 
 int main(int argc, char ** argv) try {
   if (argc != 3 && argc != 4)
@@ -68,7 +68,7 @@ int main(int argc, char ** argv) try {
       } else {
         errors = bases;
       }
-      if (argc == 4) replace(bases, 'N', 'Z');
+      if (argc == 4) replace_inplace(bases, 'N', 'Z');
       if (plus != '+') {
         throw Error("Fastq + parse error");
       }

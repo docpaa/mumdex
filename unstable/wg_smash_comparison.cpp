@@ -37,7 +37,6 @@ using std::pair;
 using std::string;
 using std::vector;
 
-using paa::remove_substring;
 using paa::Bin;
 using paa::Bounds;
 using paa::ChromosomeIndexLookup;

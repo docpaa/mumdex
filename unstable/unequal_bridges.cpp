@@ -66,6 +66,7 @@ using Bridge = Bridges::Bridge;
 
 const bool verbose{false};
 
+const bool output_snps{false};
 const unsigned int min_support_length{20};
 const unsigned int min_mate_support_length{20};
 
@@ -101,7 +102,7 @@ int main(int argc, char* argv[])  try {
   const Mappability map{reference_file, true};
   const string chromosome_name{argv[2]};
   const unsigned int chromosome{chr_lookup[chromosome_name]};
-  //  const unsigned int chromosome_offset{ref.offset(chromosome)};
+  const unsigned int chromosome_offset{ref.offset(chromosome)};
   const unsigned int start{static_cast<unsigned int>(atoi(argv[3]))};
   const unsigned int stop{static_cast<unsigned int>(atoi(argv[4]))};
 
@@ -150,7 +151,7 @@ int main(int argc, char* argv[])  try {
       cout << " p_" << samples[s];
     }
   }
-  cout << " p lp" << endl;
+  cout << " mapA mapB p lp" << endl;
 
   // Loop, adding one bridge at a time to all_bridges if the same event
   vector<BridgeInfo> all_bridges;
@@ -199,7 +200,7 @@ int main(int argc, char* argv[])  try {
       if (total_bridge_count < 5) continue;
       // The first bridge, the exemplar since all are the same
       const BridgeInfo & bridge{all_bridges[0]};
-
+      if (bridge.invariant() == 0 && !output_snps) continue;
       const unsigned int max_anchor1_length{[&all_bridges]() {
           unsigned int m{0};
           for (const BridgeInfo & b : all_bridges) {
@@ -287,7 +288,6 @@ int main(int argc, char* argv[])  try {
         ssout << mean_count * mean_n_pairs;
       }
       double p{1};
-      // const double min_prob{10E-100};
       for (unsigned int s{0}; s != samples.size(); ++s) {
         const unsigned int count{counts[s]};
         const double sample_mean{mean_count * n_pairs[s]};
@@ -299,16 +299,14 @@ int main(int argc, char* argv[])  try {
         // ssout << cdf;
       }
 
-      ssout << p << log10(p);
-      if (p < 0.0001) cout << out.str() << endl;
-
-#if 0
       // Get mappability information
       const unsigned int mum1_abspos{chromosome_offset + bridge.pos1()};
       const unsigned int mum2_abspos{ref.offset(bridge.chr2()) + bridge.pos2()};
       const unsigned int mum1_map{map.low_high(bridge.high1(), mum1_abspos)};
       const unsigned int mum2_map{map.low_high(bridge.high2(), mum2_abspos)};
-#endif
+      ssout << mum1_map << mum2_map;
+      ssout << p << log10(p);
+      if (p < 0.001) cout << out.str() << endl;
     }
   }
 
