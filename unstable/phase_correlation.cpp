@@ -221,10 +221,10 @@ int main(int argc, char * argv[]) try {
     result.left_bin = lb;
     result.right_bin = rb;
     for (uint64_t sample{0}; sample != n_samples; ++sample) {
-      const bool lA{has_allele[sample][lb] & 1};
-      const bool lB{has_allele[sample][lb] & 2};
-      const bool rA{has_allele[sample][rb] & 1};
-      const bool rB{has_allele[sample][rb] & 2};
+      const bool lA{static_cast<bool>(has_allele[sample][lb] & 1)};
+      const bool lB{static_cast<bool>(has_allele[sample][lb] & 2)};
+      const bool rA{static_cast<bool>(has_allele[sample][rb] & 1)};
+      const bool rB{static_cast<bool>(has_allele[sample][rb] & 2)};
       if (lA) {
         ++result.solo[0][0];
         ++result.solo[0][1];

@@ -37,9 +37,9 @@ ifeq ($(shell hostname -s | perl -pe 's/\d+//'), wigclust)
   endif
 else ifeq ($(SGE_ROOT), /opt/uge)
 # NYGC special definitions 
-ifeq ($(USER), andrewsp-488)
+ifeq ($(USER), pandrews)
   # for Peter
-  GCC_DIR := /gpfs/commons/home/andrewsp-488/4.9.2
+  GCC_DIR := /gpfs/commons/home/pandrews/4.9.2
 endif
   PATH := $(GCC_DIR)/bin:$(PATH)
   LD_LIBRARY_PATH := $(GCC_DIR)/lib64:$(LD_LIBRARY_PATH)

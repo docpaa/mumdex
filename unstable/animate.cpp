@@ -257,14 +257,14 @@ class MovingObject {
   Pixels draw(Image & image) const {
     uint64_t rad{10};
     Pixels changed;
-    for (uint64_t x{x_ > rad ? static_cast<uint64_t>(x_ - rad) : 0UL};
-         x < image.n_x() && x <= x_ + rad; ++x) {
-      for (uint64_t y{static_cast<uint64_t>(y_ > rad ? y_ - rad : 0)};
-           y < image.n_y() && y <= y_ + rad; ++y) {
-        const double distance{sqr(x - x_) + sqr(y - y_)};
+    for (uint64_t x__{x_ > rad ? static_cast<uint64_t>(x_ - rad) : 0UL};
+         x__ < image.n_x() && x__ <= x_ + rad; ++x__) {
+      for (uint64_t y__{static_cast<uint64_t>(y_ > rad ? y_ - rad : 0)};
+           y__ < image.n_y() && y__ <= y_ + rad; ++y__) {
+        const double distance{sqr(x__ - x_) + sqr(y__ - y_)};
         if (distance <= sqr(rad)) {
-          image(x, y) = id;
-          changed.emplace_back(x, y);
+          image(x__, y__) = id;
+          changed.emplace_back(x__, y__);
         }
       }
     }

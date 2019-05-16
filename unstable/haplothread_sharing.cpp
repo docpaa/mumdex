@@ -59,14 +59,14 @@ class IvanMetadata {
     if (!file) throw Error("Problem opening lookup file") << file_name;
     string family;
     string individual;
-    string sex;
-    string role;
+    string sex_;
+    string role_;
     file.ignore(10000, '\n');
-    while (file >> family >> individual >> sex >> role) {
+    while (file >> family >> individual >> sex_ >> role_) {
       if (lookup.find(individual) != lookup.end())
         throw Error("Duplicate entry for individual") << individual;
-      lookup[individual] = role;
-      sex_lookup[individual] = sex;
+      lookup[individual] = role_;
+      sex_lookup[individual] = sex_;
     }
   }
   Result operator[](const string & individual) const {

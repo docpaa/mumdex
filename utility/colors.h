@@ -46,13 +46,13 @@ class Color {
   explicit Color(std::string color_name) {
     replace_substring_inplace(color_name, "rgb:", "");
     std::istringstream name{color_name.c_str()};
-    std::string hex;
-    getline(name, hex, '/');
-    r = strtol(hex.c_str(), nullptr, 16);
-    getline(name, hex, '/');
-    g = strtol(hex.c_str(), nullptr, 16);
-    getline(name, hex, '/');
-    b = strtol(hex.c_str(), nullptr, 16);
+    std::string hex_;
+    getline(name, hex_, '/');
+    r = strtol(hex_.c_str(), nullptr, 16);
+    getline(name, hex_, '/');
+    g = strtol(hex_.c_str(), nullptr, 16);
+    getline(name, hex_, '/');
+    b = strtol(hex_.c_str(), nullptr, 16);
   }
 
   Color(const unsigned int r_, const unsigned int g_, const unsigned int b_) :

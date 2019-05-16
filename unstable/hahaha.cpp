@@ -578,7 +578,8 @@ int main(int argc, char * argv[]) try {
   uHist n_iter_hist{plots, "EM iterations;N iterations;N bins",
         100, Bounds{0, 200}};
 
-  using ROC = vector<pair<double, bool>>;
+  using ROC_Point = pair<double, bool>;
+  using ROC = vector<ROC_Point>;
   ROC all_roc;
   auto do_roc = [n_loci, &plots, &rocs, &mersenne]
       (ROC & roc, const string & name) {
@@ -601,7 +602,7 @@ int main(int argc, char * argv[]) try {
     confidence_ps << "12 sf\n";
     for (uint64_t rr{0}; rr != roc.size(); ++rr) {
       const uint64_t r{roc.size() - rr - 1};
-      const auto & roc_point{roc[r]};
+      const ROC_Point & roc_point{roc[r]};
       const double confidence{roc_point.first};
       const bool correct{roc_point.second};
       if (correct) ++total_correct;
