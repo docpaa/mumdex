@@ -350,7 +350,7 @@ inline double float_round(const double val, const double mul) {
 #ifdef __APPLE__
 #define CONSTEXPR
 #else
-#define constexpr
+#define CONSTEXPR constexpr
 #endif
 
 static inline constexpr double atan_cn() { return 2.5; }

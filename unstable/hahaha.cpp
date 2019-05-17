@@ -49,7 +49,7 @@ const bool use_old_coverage{1};
 const uint64_t max_em_iter{1000};
 const unsigned int n_em_trials{3};
 constexpr bool cut_hets{false};
-const uint64_t afterburner_range{15};
+const size_t afterburner_range{15};
 const uint64_t sample_coverage_low_cutoff{1};
 const uint64_t sample_coverage_high_cutoff{1000000000};  // basically unused
 const uint64_t het_coverage_low_cutoff{1};
@@ -733,8 +733,7 @@ int main(int argc, char * argv[]) try {
         int do_flip{0};
         // See if we should flip this result to match orientation of last few
         for (unsigned int i{0};
-             i != std::min(afterburner_range,
-                           static_cast<uint64_t>(results.size())); ++i) {
+             i != std::min(afterburner_range, results.size()); ++i) {
           const EMResult & last{results[results.size() - 1 - i]};
           double A{0};
           double B{0};
