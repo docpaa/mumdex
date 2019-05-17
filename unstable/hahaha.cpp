@@ -282,7 +282,7 @@ using paa::ThreadPool;
 
 // Flip this to test effect of simple afterburner
 const bool do_simple_afterburner{true};
-const bool do_afterburner{true};
+// const bool do_afterburner{true};
 
 // Defines data to be returned from the EM over a bin
 using ObsType = vector<vector<unsigned char>>;
@@ -733,7 +733,8 @@ int main(int argc, char * argv[]) try {
         int do_flip{0};
         // See if we should flip this result to match orientation of last few
         for (unsigned int i{0};
-             i != std::min(afterburner_range, results.size()); ++i) {
+             i != std::min(afterburner_range,
+                           static_cast<uint64_t>(results.size())); ++i) {
           const EMResult & last{results[results.size() - 1 - i]};
           double A{0};
           double B{0};
@@ -780,7 +781,7 @@ int main(int argc, char * argv[]) try {
 
     sort(n_iter.begin(), n_iter.end());
     for (const uint64_t iter : n_iter)
-      n_iter_hist.add_point(std::min(iter, 99ul));
+      n_iter_hist.add_point(std::min(iter, static_cast<uint64_t>(99)));
 
     cerr << "Total log likelihood = " << total_like << ", prob per obs = "
          << exp(total_like / hets.n_hets() / hets.n_samples()) << endl;

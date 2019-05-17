@@ -68,7 +68,7 @@ int main(int argc, char* argv[])  try {
     const int64_t min{*minmax.first};
     const int64_t max{*minmax.second};
     PSPage * page{PSPage::create(plots)};
-    const unsigned int n_bins(max - min + 1);
+    const unsigned int n_bins{static_cast<unsigned int>(max - min + 1)};
     Hist * hist{Hist::create(*page, header[c] + ";" + header[c] + ";N",
                              Bounds{static_cast<double>(min),
                                    static_cast<double>(max) + 1}, n_bins)};

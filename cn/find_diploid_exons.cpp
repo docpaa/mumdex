@@ -209,7 +209,7 @@ int main(int argc, char* argv[]) try {
       result.reserve(futures.size());
       Progress progress{futures.size(), 0.001, "get sample info"};
       for (future<CN_Bins> & fut : futures) {
-        result.push_back(std::move(fut.get()));
+        result.push_back(fut.get());
         progress();
         if (result.back().size() != bins.size())
           throw Error("Bin size mismatch");

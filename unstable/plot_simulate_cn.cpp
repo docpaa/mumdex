@@ -253,7 +253,7 @@ int main(int argc, char* argv[])  try {
   auto is_filled = [&colors](const unsigned int i) {
     return static_cast<bool>((i / colors.size()) % 2);
   };
-  auto fill_color = [color, is_filled, &colors](const unsigned int i) {
+  auto fill_color = [color, is_filled](const unsigned int i) {
     return is_filled(i) ? color(i) : "1 1 1";
   };
 #if 0

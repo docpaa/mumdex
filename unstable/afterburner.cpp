@@ -273,7 +273,7 @@ int main(int argc, char * argv[]) try {
     }
     cout << chr_name << " " << opp << " " << val << " " << 1.0 * val / opp
          << endl;
-    const double measure{1.0 * val / std::max(opp, 1l)};
+    const double measure{1.0 * val / std::max(opp, static_cast<int64_t>(1))};
     const double height_scale{1.0 / 10000 / 2};
     const double lh{left_calls.size() * height_scale};
     const double rh{right_calls.size() * height_scale};
@@ -348,7 +348,7 @@ int main(int argc, char * argv[]) try {
           }
         }
       }
-      const double measure{1.0 * val / std::max(opp, 1l)};
+      const double measure{1.0 * val / std::max(opp, static_cast<int64_t>(1))};
       measures[s1][s2] = measure;
       const double frac{(measure + 1) / 2};
       after_ps << "newpath " << s1 << " " << s2 << " gc moveto "

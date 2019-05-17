@@ -571,7 +571,7 @@ int main(int argc, char* argv[])  try {
       block_size = std::max(block_size, get_block_size(bridges_name.str()));
       cerr << "Block size is " << block_size << endl;
     }
-    futures.push_back(pool.run([s, start, stop](const string name){
+    futures.push_back(pool.run([start, stop](const string name){
           return BlockReader{name, start, stop};
         }, bridges_name.str()));
   }

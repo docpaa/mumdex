@@ -85,17 +85,17 @@ int main(int argc, char * argv[]) try {
 
   while (argc--) {
     const double p{strtod((argv++)[1], nullptr)};
-    auto bin_bin = [n_bins] (const double value) {
+    auto bin_bin = [] (const double value) {
       if (value > 100) throw Error("Bad percentage > 100");
       if (value < 0) throw Error("Bad percentage < 0");
       return (n_bins - 1) * value / 100;
     };
-    auto bin_value = [n_bins] (const uint64_t bin) {
+    auto bin_value = [] (const uint64_t bin) {
       return 100 * (bin + 0.5) / (n_bins - 1);
     };
 
     using Result = vector<uint64_t>;  // pair<uint64_t, uint64_t>;
-    auto do_trial = [bin_bin, bin_value, n_generations, p, n_bins]
+    auto do_trial = [bin_bin, n_generations, p]
         (const unsigned int seed, const uint64_t trials_this_job) {
       mt19937_64 mersenne{seed};
       vector<uint64_t> bin_data(n_bins);

@@ -191,7 +191,7 @@ class BlockMerger {
       }
 
       // Determine last good bridge index
-      unsigned int lowest_sample{0};
+      uint64_t lowest_sample{0};
       bool lowest_unset{true};
       for (uint64_t h{0}; h != readers.size(); ++h) {
         if (counts[h] &&

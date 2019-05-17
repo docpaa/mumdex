@@ -31,7 +31,7 @@ namespace paa {
 template <class Value>
 inline std::string sround(const Value & value, const uint64_t n) {
   std::ostringstream out;
-  out << std::setprecision(n) << value;
+  out << std::setprecision(static_cast<unsigned int>(n)) << value;
   return out.str();
 }
 

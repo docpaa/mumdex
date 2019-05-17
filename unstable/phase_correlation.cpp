@@ -85,7 +85,7 @@ int main(int argc, char * argv[]) try {
 
   // Chromosomes to process
   const vector<string> chromosome_names{
-    [&ref, &chr_lookup, argc, argv]() {
+    [&chr_lookup, argc, argv]() {
       vector<string> result;
       for (int a{0}; a != argc; ++a) {
         const std::string name{argv[a + 1]};
@@ -115,7 +115,7 @@ int main(int argc, char * argv[]) try {
   using uVec = vector<uint64_t>;
   using Result1 = vector<uVec>;
 
-  auto bin_fun = [n_loci_window, n_samples]
+  auto bin_fun = [n_samples]
       (const HetTable & table, const uint64_t start) {
     Result1 result(4, uVec(n_samples));
     for (uint64_t h{start}; h != start + n_loci_window; ++h) {
@@ -162,7 +162,7 @@ int main(int argc, char * argv[]) try {
   plots.pdf(true);
 
   using Hist = PSHSeries<uint64_t, uint64_t>;
-  unsigned int cover_bound((n_samples + 1) / 5);
+  unsigned int cover_bound{static_cast<unsigned int>((n_samples + 1) / 5)};
   Hist * coverage_hist = Hist::create(
       plots, "Coverage;Single Allele Count;N",
       Bounds{0, 1.0 * cover_bound}, cover_bound);
@@ -215,7 +215,7 @@ int main(int argc, char * argv[]) try {
     uint64_t solo[2][2]{{0, 0}, {0, 0}};
   };
 
-  auto bin_fun_2 = [&het_tables, &counts, &has_allele, n_samples]
+  auto bin_fun_2 = [&has_allele, n_samples]
       (const uint64_t lb, const uint64_t rb) noexcept {
     Result2 result;
     result.left_bin = lb;
@@ -318,7 +318,7 @@ int main(int argc, char * argv[]) try {
       coverage_hist->add_point(n_single_alleles);
       if (n_single_alleles > 20) {
         loci.push_back(move(values));
-        loci_chr.push_back(t);
+        loci_chr.push_back(static_cast<unsigned int>(t));
         loci_pos.push_back(table[het].position());
       }
     }
@@ -336,9 +336,7 @@ int main(int argc, char * argv[]) try {
   mutex plot_mutex;
   for (uint64_t ll_{0}; ll_ != loci.size(); ++ll_) {
     futures3.push_back(pool.run(
-        [&loci, &loci_chr, &loci_pos,
-         n_samples, agree_corr_hist, disagree_corr_hist,
-         &plot_mutex]
+        [&loci, &loci_chr, &loci_pos, n_samples]
         (const uint64_t ll) {
           vector<Result3> results;
           for (uint64_t rl{0}; rl != loci.size(); ++rl) {

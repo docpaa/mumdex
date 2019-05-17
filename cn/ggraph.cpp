@@ -373,7 +373,7 @@ bool add_genes(const RefCN & ref,
                 const double pres{pow(10, floor(log10(res)))};
                 const double rval{round(val / pres) * pres};
                 const double nval{(y ? graph.y_cn_scale : 1) *
-                      (graph.log_radios[y] >= 2 ? inv_atanlog(rval) :
+                      (graph.log_radios[y].state() >= 2 ? inv_atanlog(rval) :
                        (graph.log_radios[y] ? pow(10, rval) : rval))};
                 if (y && graph.tiled_radio) {
                   coordinates << " , Y coordinate not available in tiled mode";
@@ -685,7 +685,7 @@ bool add_ratio_lines(const vector<double> cn_lines,  // Not a reference
     y /= graph.y_cn_scale;
     if (graph.log_radios[1]) {
       if (y <= 0) continue;
-      y = graph.log_radios[1] >= 2 ? paa::atanlog(y) : log10(y);
+      y = graph.log_radios[1].state() >= 2 ? paa::atanlog(y) : log10(y);
     }
     if (y > graph.range[1][0] && y < graph.range[1][1]) {
       const unsigned int y_pos(graph.coord(1, y));
@@ -1259,8 +1259,7 @@ int main(int argc, char * argv[]) try {
         Info{short_names, input_data.front().info()}};
 
   auto add_special_features =
-      [do_genome, do_cn, &input_data, n_sets,
-       n_y, &ref_ptr, &ratio_lines, scale]
+      [do_genome, do_cn, &ref_ptr, &ratio_lines, scale]
       (X11Graph & graph) {
     if (do_genome) {
       // Chromosomes and ratio lines
@@ -1292,7 +1291,7 @@ int main(int argc, char * argv[]) try {
 
     if (do_cn) {
       graph.y_cn_scale = scale;
-      const vector<double> cn_lines{[&input_data, &ratio_lines, &graph]() {
+      const vector<double> cn_lines{[&ratio_lines]() {
           if (ratio_lines.size()) {
             return ratio_lines;
           } else {
@@ -1305,7 +1304,7 @@ int main(int argc, char * argv[]) try {
 
       graph.add_call_back("Toggle ratio lines", X11Graph::CallBack{std::bind(
           &add_ratio_lines, cn_lines, _1, _2)}, false, true,
-        [&graph]() { return true; /* !graph.tiled_radio; */ });
+        []() { return true; /* !graph.tiled_radio; */ });
 
       graph.grid_radios[1][1].toggled(false);
       graph.grid_radios[0][1].toggled(false);

@@ -165,7 +165,7 @@ int main(int argc, char* argv[])  try {
 
   // Number of trials per condition
   const unsigned int n_trials{static_cast<unsigned int>(atoi(argv[8]))};
-  const double small{0.5 / n_trials};
+  // const double small{0.5 / n_trials};
 
   // Number of threads
   const unsigned int n_threads{static_cast<unsigned int>(atoi(argv[9]))};
@@ -173,7 +173,7 @@ int main(int argc, char* argv[])  try {
   random_device rd;
 
   // Base name for output
-  const string out_title{[argv, &rd]() {
+  const string out_title{[&rd]() {
       uniform_int_distribution<uint64_t> udist{
         0, numeric_limits<uint64_t>::max()};
       auto mersenne = mt19937_64(rd());
@@ -189,7 +189,7 @@ int main(int argc, char* argv[])  try {
     const MappedVector<unsigned char> bad{bad_pos_name};
     for (unsigned int b{0}; b != x_start; ++b) {
       const Bin & cbin{bins[b]};
-      pool.run(results, [&bad, &full_counts, &pop_counts, &bins]
+      pool.run(results, [&bad, &full_counts, &pop_counts]
                (const unsigned int abspos_start,
                 const unsigned int abspos_stop,
                 const unsigned int bin) {
@@ -252,11 +252,11 @@ int main(int argc, char* argv[])  try {
 
   // Simulation function for one length and one cpb, many trials
   auto run_fun = [&lengths, &cpbs,
-                  n_trials, small,
+                  n_trials,
                   level, &level_str,
                   &bins, &all_bins, x_start, mb,
                   &full_counts, average_count,
-                  &ps, &pages, &graphs, &series, &hists,
+                  &ps, &pages, &graphs, &series,
                   &dark_circle_marker, &graph_mutex,
                   &out_title,
 #if DO_HIST

@@ -57,7 +57,7 @@ struct PosInfo {
   unsigned int counts[4]{0, 0, 0, 0};
 };
 
-const char * const bases{"ACGT"};
+// const char * const bases{"ACGT"};
 
 const unsigned int max_families{10000};
 

@@ -1658,10 +1658,10 @@ class X11Graph : public X11Win, public SavedConfig {
     {[this]() { return lines_radio ? prepare_draw() : draw(); },
           [this]() { return can_do_lines(); }},  true, true};
   Radio tick_radios[2]{
-    {"Toggle X axis labels (shown when cursor leaves window)",
-          this, {5.5, -1}, {[this]() { }}, true},
+    {"Toggle X axis labels (shown when cursor leaves window)", this,
+      {5.5, -1}, {[this]() { if (false) { prepare_draw(); } }}, true},
     {"Toggle Y axis labels (shown when cursor leaves window)",
-          this, {1, -5.5}, {[this]() { }, radio_off(tiled_radio)}, true}};
+          this, {1, -5.5}, {[]() { }, radio_off(tiled_radio)}, true}};
   Radio log_radios[2]{
     {"Toggle X axis logarithmic scale", this, {6.5, -1},
       {[this]() { prepare_log(); prepare_draw(); }}, true},
@@ -1687,7 +1687,7 @@ class X11Graph : public X11Win, public SavedConfig {
     {"Toggle range restriction on Y axis to actual data range", this, {1, -3},
       {[this]() { get_range(1); prepare_draw(); }}, true, true}};
   Radio previous_views_radio{"Show previous view",
-        this, {-1, 1}, {[this]() { },
+        this, {-1, 1}, {[]() { },
           [this]() {return saved_config.size() > 1; },
           {[this]() {
               if (saved_config.size() > 1) {
@@ -1820,14 +1820,14 @@ void X11Graph::add_input(Values & x__, Values & y__, Input && ... input) {
 
 void X11Graph::add_call_back(const std::string & help_text,
                              const CallBack & call_back,
-                             const bool full_draw,
+                             const bool,  // full_draw
                              const bool initially_on,
                              bool_fun active_fun) {
   call_back_radios.reserve(100);
   call_backs.reserve(100);
   call_backs.push_back(call_back);
   call_back_radios.push_back(Radio{help_text, this,
-      {1, call_backs.size() + 3.0}, {[this, full_draw]() {
+      {1, call_backs.size() + 3.0}, {[this]() {
           return draw(); }, active_fun}, true, initially_on});
   radios.push_back(&call_back_radios.back());
 }
@@ -2038,7 +2038,7 @@ inline void X11Graph::get_range(const unsigned int a) {
   for (const bool y : {0, 1}) {
     if (a != 2 && a != y) continue;
     range[y] = {unset(1.0), nunset(1.0), 0};
-    if (y && log_radios[1] == 2) {
+    if (y && log_radios[1].state() == 2) {
       range[1][0] = 0;
       range[1][1] = 1;
       range[1][2] = 1;
@@ -2441,7 +2441,7 @@ inline void X11Graph::motion(const XMotionEvent & event) {
         const double pres{pow(10, floor(log10(res)))};
         const double rval{round(val / pres) * pres};
         const double nval{(y ? y_cn_scale : 1) *
-              (log_radios[y] >= 2 ? inv_atanlog(rval) :
+              (log_radios[y].state() >= 2 ? inv_atanlog(rval) :
                (log_radios[y] ? pow(10, rval) : rval))};
         coordinates << (y ? " , " : " ") << nval;
       }
@@ -2872,7 +2872,7 @@ void X11Graph::prepare_log() {
   // Do log(0) better!
   // A one time operation to set up
   if (log_data.size() != input_data.size() &&
-      (log_radios[0] == 1 || log_radios[1] == 1)) {
+      (log_radios[0].state() == 1 || log_radios[1].state() == 1)) {
     log_data = Data(input_data.size());
     log_x_data = log_y_data = input_data;
     for (unsigned int s{0}; s != input_data.size(); ++s) {
@@ -2890,7 +2890,7 @@ void X11Graph::prepare_log() {
   }
 
   // Select data view each time
-  if (log_radios[1] >= 2) {
+  if (log_radios[1].state() >= 2) {
     if (atan_data.size() != input_data.size()) {
       atan_data = Data(input_data.size());
       for (unsigned int s{0}; s != input_data.size(); ++s) {
@@ -2985,8 +2985,9 @@ void X11Graph::draw_ticks(Drawable drawable) {
       const double val{tick.first};
       std::ostringstream label;
       label << std::setprecision(6)
-            << (log_radios[y] == 1 ? pow(10, val + log10(xyscale)) :
-                xyscale * (log_radios[y] >= 2 ? inv_atanlog(val) : val));
+            << (log_radios[y].state() == 1 ? pow(10, val + log10(xyscale)) :
+                xyscale * (log_radios[y].state() >= 2 ?
+                           inv_atanlog(val) : val));
       tick_labels.push_back(label.str());
       std::string & text{tick_labels.back()};
       const int t_width{tick_font->string_width(text)};
@@ -3509,8 +3510,8 @@ inline SavedConfig X11Graph::current_config() const {
 }
 
 inline void X11Graph::restore_config(const SavedConfig & config) {
-  const bool log_change{log_radios[0] != config.radio_states[0] ||
-        log_radios[1] != config.radio_states[1]};
+  const bool log_change{log_radios[0].state() != config.radio_states[0] ||
+        log_radios[1].state() != config.radio_states[1]};
   if (dne(config.line_width, line_width))
     set_line_widths(series_line_gcs,
                     (config.line_width == 1 ? 0 : config.line_width));
@@ -3802,11 +3803,11 @@ class X11TextGrid : public X11Win {
   Click click{};
 
   Radio bigger_radio{"Bigger_text", this, {1, 98.5},
-    {[this]() { }, [this]() {
+    {[]() { }, [this]() {
         return font_index() + 1 != fonts.size(); }, [this]() {
         ++font; layout(); shrink_window_to_fit(); prepare_draw(); }}};
   Radio smaller_radio{"Bigger_text", this, {1, 99.5},
-    {[this]() { }, [this]() {
+    {[]() { }, [this]() {
         return font_index() != 0; }, [this]() {
         --font; layout(); shrink_window_to_fit(); prepare_draw(); }}};
   Radio clear_radio{"Clear all selections", this, {1, 1},

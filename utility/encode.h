@@ -429,7 +429,7 @@ class OptionalSaver {
   std::string operator[](const uint64_t index) const {
     return data[index];
   }
-  unsigned int to_u64(const uint64_t index) const {
+  uint64_t to_u64(const uint64_t index) const {
     return strtoul(data[index].c_str(), nullptr, 10);
   }
   unsigned int to_u32(const uint64_t index) const {

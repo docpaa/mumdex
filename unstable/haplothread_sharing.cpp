@@ -103,7 +103,7 @@ class IvanMetadata {
 class Counts {
  public:
   using CMatrix = Matrix<uint64_t, 2, 2>;
-  unsigned int size() const { return counts.size(); }
+  uint64_t size() const { return counts.size(); }
   const CMatrix & operator[](const uint64_t share_parity) const {
     return counts[share_parity];
   }

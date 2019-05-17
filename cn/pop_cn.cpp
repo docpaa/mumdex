@@ -600,7 +600,7 @@ class PopSegment {
 using PopSegments = vector<PopSegment>;
 
 const char * const colors[3]{"1 0 0", "0 0 1", "0 1 0"};
-const char * const members[3]{"M", "F", "P"};
+// const char * const members[3]{"M", "F", "P"};
 
 int main(int argc, char* argv[]) try {
   if (--argc != 5)
@@ -837,7 +837,7 @@ h1, h2, h3, p { clear:left; }
        &genes, &xref, &all_sample_info, &bins_dir, &out_dir,
        &denovo_events, &transmitted_events, &unsure_events,
        &html, &samples_html, &samples_samples, &samples_out_file,
-       &list_mutex, &html_mutex, &hist_mutex, &file_mutex, &first_out,
+       &list_mutex, &hist_mutex, &file_mutex, &first_out,
        &cand_pos_hist, &cand_cn_hist, &cand_size_hist, &cand_mad_hist,
        &cand_score_hist, &cand_dscore_hist,
        &cand_nscore_hist, &cand_pscore_hist]

@@ -205,6 +205,7 @@ class CharacterEncoding {
   static void test() {
     std::cout << "CharacterEncoding test" << std::endl;
     constexpr CharacterEncoding<alphabet> empty_encoding{true};
+    if (false) std::cerr << empty_encoding('a');
     const CharacterEncoding<alphabet> base_encoding{};
     std::cout << alphabet
               << " " << size

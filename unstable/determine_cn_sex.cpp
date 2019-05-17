@@ -35,22 +35,22 @@ int main(int argc, char* argv[])  try {
   const string cn_results_name{argv[1]};
   const TSV tsv{cn_results_name};
 
-  const unsigned int chr_col{tsv.index("chr")};
-  const unsigned int ratio_col{tsv.index("ratio")};
+  const uint64_t chr_col{tsv.index("chr")};
+  const uint64_t ratio_col{tsv.index("ratio")};
 
   const string regions{"AXY"};
 
   vector<vector<double> > ratios(3);
-  for (unsigned int r{0}; r != tsv.n_rows(); ++r) {
+  for (uint64_t r{0}; r != tsv.n_rows(); ++r) {
     const string chr{tsv.as_string(chr_col, r)};
     const bool is_x{chr.find('X') != string::npos};
     const bool is_y{chr.find('Y') != string::npos};
-    const unsigned int region_index{is_x ? 1U : (is_y ? 2U : 0U)};
+    const uint64_t region_index{is_x ? 1U : (is_y ? 2U : 0U)};
     ratios[region_index].push_back(tsv.as_real(ratio_col, r));
   }
 
   cout << cn_results_name;
-  for (unsigned int r{0}; r != ratios.size(); ++r) {
+  for (uint64_t r{0}; r != ratios.size(); ++r) {
     vector<double> & region_ratios{ratios[r]};
     sort(region_ratios.begin(), region_ratios.end());
     cout << " " << regions[r] << " "

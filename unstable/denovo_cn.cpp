@@ -233,7 +233,7 @@ int main(int argc, char* argv[]) try {
   return 0;
 
 
-  const vector<CN_Bins> results{[argv, argc, &pop, &bins] () {
+  const vector<CN_Bins> results{[argv, argc, &bins] () {
       vector<CN_Bins> result;
       result.reserve(argc);
       for (int a{0}; a != argc; ++a) {

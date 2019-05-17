@@ -300,7 +300,7 @@ int main(int argc, char * argv[]) try {
   vector<TagInfosFuture> tag_infos_futures;
   const vector<int64_t> invariants_of_interest{
     -5, -4, -3, -2, -1};
-  auto process_mumdex = [min_mum_length, invariants_of_interest]
+  auto process_mumdex = [invariants_of_interest]
       (const string & mumdex_name, vector<unsigned int> & pos_counts,
        vector<unsigned int> & n_possible_indels, uint64_t & n_pairs,
        uint64_t & average_read_length, uint64_t & ref_length) {

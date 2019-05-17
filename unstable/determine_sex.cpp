@@ -127,7 +127,7 @@ int main(int argc, char* argv[])  try {
             ratio[c] = 1.0 * counts[chr] / expected[chr] / auto_density;
           }
 
-          const string sex{[&counts, &expected, ratio]() {
+          const string sex{[ratio]() {
               string result;
               const string chars{"XY"};
               for (const unsigned int c : {0, 1}) {

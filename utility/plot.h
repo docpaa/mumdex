@@ -347,25 +347,30 @@ inline double float_round(const double val, const double mul) {
     return mul * pow(10, round(log10(val)));
   }
 }
+#ifdef __APPLE__
+#define CONSTEXPR
+#else
+#define constexpr
+#endif
 
 static inline constexpr double atan_cn() { return 2.5; }
 static inline constexpr double atan_frac() { return 0.75; }
 static inline constexpr double frac_atan() { return 1 - atan_frac(); }
-static inline constexpr double atan_scale() {
+static inline CONSTEXPR double atan_scale() {
   return atan2(1, 0) * atan_frac() / frac_atan() / log1p(atan_cn()) /
       (1 + atan_cn());
 }
-static inline constexpr double atanlog_c1() {
+static inline CONSTEXPR double atanlog_c1() {
   return atan_frac() / log1p(atan_cn());
 }
-static inline constexpr double atanlog_c2() {
+static inline CONSTEXPR double atanlog_c2() {
   return frac_atan() / atan2(1, 0);
 }
 
-static inline constexpr double log1_pow(const double value, const double pow_) {
+static inline CONSTEXPR double log1_pow(const double value, const double pow_) {
   return log10(pow(value, 1 / pow_) + 1);
 }
-static inline constexpr double inv_log1_pow(
+static inline CONSTEXPR double inv_log1_pow(
     const double value, const double pow_) {
   return pow(pow(10, value) - 1, pow_);
 }
@@ -373,7 +378,7 @@ static inline constexpr double inv_log1_pow(
 static inline constexpr double a() { return 2.5; }
 static inline constexpr double b() { return 0.5; }
 
-inline constexpr double atanlog(const double value) {
+inline CONSTEXPR double atanlog(const double value) {
 #if 1
   return pow(atan2(log1_pow(value, b()) / log1_pow(a(), b()), 1) / atan2(1, 0),
              b());
@@ -384,8 +389,8 @@ inline constexpr double atanlog(const double value) {
       atan_frac();
 #endif
 }
-static inline constexpr double atan_val() { return atanlog(atan_cn()); }
-inline constexpr double inv_atanlog(const double value) {
+static inline CONSTEXPR double atan_val() { return atanlog(atan_cn()); }
+inline CONSTEXPR double inv_atanlog(const double value) {
 #if 1
   return inv_log1_pow(tan(pow(value, 1 / b()) * atan2(1, 0)) *
                       log1_pow(a(), b()), b());

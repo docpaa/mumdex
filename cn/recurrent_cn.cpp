@@ -190,7 +190,8 @@ int main(int argc, char* argv[]) try {
         ofstream limits_data{region_limits_name.str().c_str()};
         region_data << "abspos\trecurrence\n";
         limits_data << "abspos\trecurrence\n";
-        const CN_abspos::ChrPos chrpos{cn_abspos.chrpos(region_center)};
+        const CN_abspos::ChrPos chrpos{
+          cn_abspos.chrpos(static_cast<unsigned int>(region_center))};
         cut_file << region_file_name.str()
                  << " " << region_limits_name.str()
                  << " " << region_start

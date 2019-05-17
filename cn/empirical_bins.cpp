@@ -126,7 +126,7 @@ int main(int argc, char* argv[])  try {
   // Sample total counts across genome to get median and make plots
   cout << "Sampling counts to get approximate median total count" << endl;
   const unsigned int median_total_count{
-    [&cn_abspos, &male_files, &female_files,
+    [&male_files, &female_files,
      total_cutoff_factor, x_start, &out_name]() {
       const unsigned int n_checks{100};
       const unsigned int n_region{100000};
@@ -268,7 +268,7 @@ int main(int argc, char* argv[])  try {
   combined_counts.n_x(n_x);
   combined_counts.n_y(n_y);
   */
-  auto block_function = [&ref, &combined_counts, &bad_positions,
+  auto block_function = [&combined_counts, &bad_positions,
                          total_cutoff, &male_files, &female_files]
       (const unsigned int start_pos,
        const unsigned int stop_pos,
@@ -337,7 +337,7 @@ int main(int argc, char* argv[])  try {
   }
 
   // Gather X and Y results
-  locus_counts xy_totals;
+  // locus_counts xy_totals;
   Progress progress{results.size(), 0.1, "XY Positions"};
   std::cout << "Waiting for " << results.size() << " results" << endl;
   while (results.size()) {

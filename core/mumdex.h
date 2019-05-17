@@ -845,6 +845,7 @@ class Invariant {
   unsigned int abs_value() const { return value_ > 0 ? value_ : -value_; }
   int16_t low_chromosome() const { return low_chromosome_; }
   int16_t high_chromosome() const { return high_chromosome_; }
+  void hack() { extra = 0; }
 
  private:
   int value_;
@@ -1324,6 +1325,7 @@ class MUMindex {
       return pair_index_ < rhs.pair_index_;
     }
   }
+  void hack() { filler = 0; }
 
  private:
   MUMindex() = default;

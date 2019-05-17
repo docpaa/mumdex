@@ -294,8 +294,7 @@ int main(int argc, char* argv[])  try {
               if (!empty) merged.push_back(last_entry);
               saver = async(
                   std::launch::async,
-                  [output_file, chromosome]
-                  (const vector<BridgeInfo> & tosave) {
+                  [output_file] (const vector<BridgeInfo> & tosave) {
                     bwritec(output_file, &tosave[0], "bridges",
                             tosave.size() * sizeof(BridgeInfo));
                   }, std::ref(to_save));

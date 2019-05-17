@@ -511,7 +511,7 @@ std::vector<Bin> load_bins(const std::string & bins_name,
     throw Error("Code designed for hg19 only - need to change") << mask;
 
   const std::vector<unsigned char> masked_bins{
-    [&ref, &bins_, &bad_zones, &lookup, mask]() {
+    [&ref, &bins_, &bad_zones, mask]() {
       std::vector<unsigned char> result(bins_.size());
       if (!mask) return result;
       unsigned int b{0};

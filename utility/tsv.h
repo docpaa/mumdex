@@ -18,7 +18,6 @@
 #include <string>
 #include <sstream>
 #include <vector>
-
 #include "error.h"
 #include "psplot.h"
 #include "strings.h"
@@ -116,7 +115,7 @@ class TSV {
     std::vector<std::string> names;
     std::vector<std::string> labels;
     while (header >> text) {
-      indexes[text] = static_cast<unsigned int>(names.size());
+      indexes[text] = names.size();
       names.emplace_back(text);
       labels.emplace_back(text);
     }
@@ -128,7 +127,7 @@ class TSV {
     data.resize(names.size());
     while (std::getline(file, text)) {
       std::istringstream row{text.c_str()};
-      for (unsigned int c{0}; c!= names.size(); ++c) {
+      for (uint64_t c{0}; c!= names.size(); ++c) {
         row >> text;
         data[c].emplace_back(text);
       }
@@ -136,17 +135,17 @@ class TSV {
     selected.assign(n_rows(), 1);
 
     // Determine which columns are integral and/or real
-    for (unsigned int c{0}; c != n_cols(); ++c) {
+    for (uint64_t c{0}; c != n_cols(); ++c) {
       bool integral{true};
       bool real{true};
-      for (unsigned int r{0}; r != n_rows(); ++r) {
+      for (uint64_t r{0}; r != n_rows(); ++r) {
         if (data[c][r].find_first_not_of("-0123456789") != std::string::npos) {
           integral = false;
           break;
         }
       }
       try {
-        for (unsigned int r{0}; r != n_rows(); ++r) {
+        for (uint64_t r{0}; r != n_rows(); ++r) {
           size_t last;
           stod(data[c][r], &last);
           if (last != data[c][r].size()) {
@@ -163,7 +162,7 @@ class TSV {
     // Loading stats
     if (false) {
       std::cerr << "name is_int is_number" << std::endl;
-      for (unsigned int c{0}; c != n_cols(); ++c) {
+      for (uint64_t c{0}; c != n_cols(); ++c) {
         std::cerr << names[c] << " "
                   << cols[c].is_integral() << " "
                   << cols[c].is_real()
@@ -206,7 +205,7 @@ class TSV {
       throw Error("add_data size mismatch");
     }
     setup_data<T>(name);
-    for (unsigned int r{0}; r != n_rows(); ++r) {
+    for (uint64_t r{0}; r != n_rows(); ++r) {
       data.back().push_back(std::to_string(values[r]));
     }
     return *this;
@@ -217,7 +216,7 @@ class TSV {
   template <class F, class... Args>
   TSV & add_data(const std::string & name, F && f, Args &&... args) {
     setup_data<decltype(f(as_real(args, 0)...))>(name);
-    for (unsigned int r{0}; r != n_rows(); ++r) {
+    for (uint64_t r{0}; r != n_rows(); ++r) {
       data.back().push_back(std::to_string(
           std::bind(std::forward<F>(f), as_real(args, r)...)()));
     }
@@ -230,8 +229,8 @@ class TSV {
   TSV & add_data(const std::string & name, F && f,
                    const std::string & arg) {
     setup_data<decltype(f(0.0))>(name);
-    const unsigned int col{index(arg)};
-    for (unsigned int r{0}; r != n_rows(); ++r) {
+    const uint64_t col{index(arg)};
+    for (uint64_t r{0}; r != n_rows(); ++r) {
       data.back().push_back(std::to_string(
           std::bind(std::forward<F>(f), as_real(col, r))()));
     }
@@ -244,9 +243,9 @@ class TSV {
   TSV & add_data_sr(const std::string & name, F && f,
                       const std::string & arg1, const std::string & arg2) {
     setup_data<decltype(f("", 0.0))>(name);
-    const unsigned int col1{index(arg1)};
-    const unsigned int col2{index(arg2)};
-    for (unsigned int r{0}; r != n_rows(); ++r) {
+    const uint64_t col1{index(arg1)};
+    const uint64_t col2{index(arg2)};
+    for (uint64_t r{0}; r != n_rows(); ++r) {
       data.back().push_back(std::to_string(
           std::bind(std::forward<F>(f),
                     as_string(col1, r), as_real(col2, r))()));
@@ -260,10 +259,10 @@ class TSV {
   TSV_col & operator()(const std::string & col) {
     return cols[index(col)];
   }
-  const TSV_col & operator()(const unsigned int col) const {
+  const TSV_col & operator()(const uint64_t col) const {
     return cols[col];
   }
-  const TSV_col & operator[](const unsigned int col) const {
+  const TSV_col & operator[](const uint64_t col) const {
     return cols[col];
   }
 
@@ -283,8 +282,8 @@ class TSV {
     selected.assign(n_rows(), 0);
 
     if (op == "==") {
-      const unsigned int c{index(col)};
-      for (unsigned int r{0}; r != n_rows(); ++r) {
+      const uint64_t c{index(col)};
+      for (uint64_t r{0}; r != n_rows(); ++r) {
         if (data[c][r] == val) {
           selected[r] = 1;
         }
@@ -309,7 +308,7 @@ class TSV {
 
   // Plot one vs all others
   TSV & plot(const std::string & name1) {
-    for (unsigned int c{0}; c != cols.size(); ++c) {
+    for (uint64_t c{0}; c != cols.size(); ++c) {
       if (!cols[c].to_plot()) continue;
       const std::string & name2{cols[c].name()};
       if (name1 == name2) continue;
@@ -325,8 +324,8 @@ class TSV {
              const std::string & name3,
              const Args && ... args) {
     const std::vector<std::string> names{name1, name2, name3, args ...};
-    for (unsigned int n1{0}; n1 != names.size(); ++n1) {
-      for (unsigned int n2{n1 + 1}; n2 != names.size(); ++n2) {
+    for (uint64_t n1{0}; n1 != names.size(); ++n1) {
+      for (uint64_t n2{n1 + 1}; n2 != names.size(); ++n2) {
         plot(cols[index(names[n1])].name(), cols[index(names[n2])].name());
       }
     }
@@ -335,10 +334,10 @@ class TSV {
 
   // Plot all vs all
   TSV & plot() {
-    for (unsigned int c1{0}; c1 != cols.size(); ++c1) {
+    for (uint64_t c1{0}; c1 != cols.size(); ++c1) {
       if (!cols[c1].to_plot()) continue;
       const std::string & name1{cols[c1].name()};
-      for (unsigned int c2{c1 + 1}; c2 != cols.size(); ++c2) {
+      for (uint64_t c2{c1 + 1}; c2 != cols.size(); ++c2) {
         if (!cols[c2].to_plot()) continue;
         const std::string & name2{cols[c2].name()};
         plot(name1, name2);
@@ -359,13 +358,13 @@ class TSV {
         *graphs.back(), small_red_marker));
     PSGraph & graph_{*graphs.back()};
     PSXYSeries & series_{*series.back()};
-    const unsigned int xi{index(x)};
-    const unsigned int yi{index(y)};
+    const uint64_t xi{index(x)};
+    const uint64_t yi{index(y)};
     if (cols[xi].log()) log_x();
     if (cols[yi].log()) log_y();
     graph_.range(Bounds{cols[xi].low(), cols[xi].high(),
             cols[yi].low(), cols[yi].high()});
-    for (unsigned int r{0}; r < n_rows(); r += sample) {
+    for (uint64_t r{0}; r < n_rows(); r += sample) {
       if (selected[r]) {
         const double xv{as_real(xi, r)};
         // if (xv < cols[xi].low() || xv > cols[xi].high()) continue;
@@ -381,7 +380,7 @@ class TSV {
   // Plot x histogram
   TSV & hist(const std::string & x,
              const Bounds & range_ = Bounds{},
-             const unsigned int n_bins = 100) {
+             const uint64_t n_bins = 100) {
     graphs.push_back(std::make_unique<PSGraph>(
         ps, selection + ";" +
         cols[index(x)].label() + ";N",
@@ -390,11 +389,11 @@ class TSV {
         *graphs.back(), n_bins, "1 0 0"));
     // PSGraph & graph_{*graphs.back()};
     PSHSeries<double, uint64_t> & series_{*hseries.back()};
-    const unsigned int xi{index(x)};
+    const uint64_t xi{index(x)};
     // if (cols[xi].log()) log_x();
     // graph_.range(Bounds{cols[xi].low(), cols[xi].high(),
     //        cols[yi].low(), cols[yi].high()});
-    for (unsigned int r{0}; r < n_rows(); r += sample) {
+    for (uint64_t r{0}; r < n_rows(); r += sample) {
       if (selected[r]) {
         const double xv{as_real(xi, r)};
         series_.add_point(xv);
@@ -448,7 +447,7 @@ class TSV {
   uint64_t size() const { return data[0].size(); }
 
   // Get column index for column name
-  unsigned int index(const std::string & name) const {
+  uint64_t index(const std::string & name) const {
     try {
       return indexes.at(name);
     } catch (...) {
@@ -458,43 +457,43 @@ class TSV {
 
   // Access data by col and row in various formats
   const std::string & operator()(const std::string & col,
-                                 const unsigned int row) const {
+                                 const uint64_t row) const {
     return data[index(col)][row];
   }
   const std::string & as_string(const std::string & col,
-                                const unsigned int row) const {
+                                const uint64_t row) const {
     return data[index(col)][row];
   }
-  const std::string & as_string(const unsigned int col,
-                                const unsigned int row) const {
+  const std::string & as_string(const uint64_t col,
+                                const uint64_t row) const {
     return data[col][row];
   }
-  double as_real(const std::string & col, const unsigned int row) const {
+  double as_real(const std::string & col, const uint64_t row) const {
     return stod(data[index(col)][row]);
   }
-  double as_real(const unsigned int col, const unsigned int row) const {
+  double as_real(const uint64_t col, const uint64_t row) const {
     return stod(data[col][row]);
   }
-  uint64_t as_int(const std::string & col, const unsigned int row) const {
+  uint64_t as_int(const std::string & col, const uint64_t row) const {
     return stol(data[index(col)][row]);
   }
-  uint64_t as_int(const unsigned int col, const unsigned int row) const {
+  uint64_t as_int(const uint64_t col, const uint64_t row) const {
     return stol(data[col][row]);
   }
-  double as_jitter(const unsigned int col, const unsigned int row) const {
+  double as_jitter(const uint64_t col, const uint64_t row) const {
     return stol(data[col][row]) + unitGen();
   }
 
   PSGraph & graph() { return *graphs.back(); }
   PSPage & page() { return *graph().parents().front(); }
 
-  unsigned int sample{1};
+  uint64_t sample{1};
 
  private:
   // Used to add series to tsv
   template<class result_type>
   void setup_data(const std::string & name) {
-    indexes[name] = static_cast<unsigned int>(cols.size());
+    indexes[name] = cols.size();
     data.emplace_back();
     cols.emplace_back(name, std::is_integral<result_type>::value,
                       std::is_arithmetic<result_type>::value);
@@ -503,7 +502,7 @@ class TSV {
   std::string file_name_{};
 
   // data
-  std::map<std::string, unsigned int> indexes{};
+  std::map<std::string, uint64_t> indexes{};
   std::vector<TSV_col> cols{};
   std::vector<std::vector<std::string>> data{};
 
@@ -520,7 +519,7 @@ class TSV {
 
   // selection
   std::string selection{};
-  std::vector<unsigned int> selected{};
+  std::vector<uint64_t> selected{};
 };
 
 }  // namespace paa

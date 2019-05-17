@@ -113,13 +113,13 @@ int main(int argc, char * argv[]) try {
   cout << "/Helvetica findfont 10 scalefont setfont" << endl;
 
 
-  const auto xpos = [padding, chr_x_spacing, pos_scale, half_chr]
+  const auto xpos = [chr_x_spacing, pos_scale, half_chr]
       (const unsigned int chr_index, const unsigned int pos) {
     return (1.3 * padding + chr_index / half_chr * chr_x_spacing +
             pos * pos_scale);
   };
 
-  const auto ypos = [padding, chr_y_spacing, half_chr]
+  const auto ypos = [chr_y_spacing, half_chr]
       (const unsigned int chr_index) {
     return padding + (chr_index % half_chr) * chr_y_spacing;
   };
