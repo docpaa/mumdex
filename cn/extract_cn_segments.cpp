@@ -93,7 +93,7 @@ int main(int argc, char* argv[])  try {
   const GeneHitFinder gene_finder{genes};
 
   const string bins_name{argv[2]};
-  const vector<Bin> all_bins{load_bins(bins_name, ref, false, false)};
+  const vector<Bin> all_bins{load_bins(bins_name, ref, false, true)};
 
   // List of previously determined good bins
   const vector<Bin> bins{[&all_bins]() {
@@ -107,7 +107,7 @@ int main(int argc, char* argv[])  try {
 
   // Bin length sanity check
   if (profile.size() != bins.size()) {
-    throw Error("Bin size mismatch");
+    throw Error("Bin size mismatch") << profile.size() << bins.size();
   }
 
   // Extract segment data

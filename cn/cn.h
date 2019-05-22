@@ -1289,8 +1289,8 @@ if (!exists("sample")) {
    stop("missing command line argument: sample")
 }
 # alpha 0.05 undo.sd 1.0 good for normal profile
-# alpha 0.02 undo.sd 0.5 good for cancer\n)foo" +
-std::string("cbs.segment(sample=sample, alpha=") +
+# alpha 0.02 undo.sd 0.5 good for cancer)foo" +
+std::string("\ncbs.segment(sample=sample, alpha=") +
     std::to_string(alpha) + ", nperm=1000, undo.SD=" + std::to_string(undo) +
     ", min.width=" + std::to_string(minw) + ")"};
 
@@ -1598,21 +1598,29 @@ class CN_Bins {
     // Open file
     std::ifstream input{file_name.c_str()};
     if (!input) throw Error("Problem opening bin results file") << file_name;
-    input.ignore(10000, '\n');  // ignore header
+
+    // Determine column structure
+    std::string line;
+    getline(input, line);
+    std::istringstream header_stream{line.c_str()};
+    const unsigned int n_columns{[&header_stream]() {
+        unsigned int result{0};
+        std::string col;
+        while (header_stream >> col) ++result;
+        return result;
+      }()};
 
     // Read file
     unsigned int count;
     double norm_count;
     double ratio;
     double seg_ratio;
-    double quantal;
-    double seg_quantal;
+    double quantal{0};
+    double seg_quantal{0};
     std::string dummy;
-    while (input >> dummy >> dummy >> dummy >> dummy >> dummy >> dummy
-           >> dummy >> dummy >> dummy >> dummy
-           >> count >> norm_count
-           >> ratio >> seg_ratio
-           >> quantal >> seg_quantal) {
+    while (input >> dummy >> dummy >> dummy >> dummy >> dummy
+           >> count >> norm_count >> ratio >> seg_ratio) {
+      if (n_columns == 11) input >> quantal >> seg_quantal;
       if (!input) throw Error("Parse error for bin results file") << file_name;
       bins.emplace_back(count, norm_count, ratio, seg_ratio,
                         quantal, seg_quantal);

@@ -371,7 +371,8 @@ int main(int argc, char * argv[]) try {
   uint64_t n_mappings{0};
   {
     cout << "Loading suffix array structures" << endl;
-    const SA sa{ref_name, true, do_memory_map, true};
+    const bool reverse_complement{false};  // false for lower memory usage
+    const SA sa{ref_name, reverse_complement, do_memory_map, true};
     cout << "Mapping reads using " << n_threads << " threads" << endl;
     vector<future<vector<MappingInfo> > > futures(n_threads);
     mutex fq_mutex;
