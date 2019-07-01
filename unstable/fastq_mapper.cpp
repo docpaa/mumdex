@@ -37,6 +37,7 @@ using paa::Reference;
 using paa::SimpleHit;
 
 int main(int argc, char* argv[])  try {
+  paa::memory_mapped = false;
   read_ahead = false;
   std::ios_base::sync_with_stdio(false);
   cin.tie(nullptr);
@@ -54,7 +55,7 @@ int main(int argc, char* argv[])  try {
     throw Error("usage: mapper [-l min_len] ref_fasta fastq1 fastq2");
 
   const string ref_fasta{argv[1]};
-  const longSA sa{ref_fasta.c_str(), true, true, false};
+  const longSA sa{ref_fasta.c_str(), true, paa::memory_mapped, false};
   const Reference ref{ref_fasta};
 
   ifstream fastq1{argv[2]};

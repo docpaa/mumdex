@@ -1186,6 +1186,7 @@ int main(int argc, char * argv[]) try {
 
   const std::string first_argument{argv[1]};
   const bool do_cn{first_argument == "cn"};
+
   const bool do_genome{do_cn || first_argument == "genome"};
   unique_ptr<const RefCN> ref_ptr{nullptr};
   if (do_genome) {

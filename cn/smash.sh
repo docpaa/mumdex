@@ -103,7 +103,7 @@ for bin in $(echo $n_bins | perl -pe 's/,/ /g') ; do for results in $(find $PWD 
 wait 
 
 # Generate pdf from postscript
-find $PWD -name '*.ps' | while read file ; do pdf=${file%.ps}.pdf ; if [ ! -e $pdf ] ; then echo generate $pdf ; $mumdex_dir/src/ps2pdf.sh $file ; fi ; done
+find $PWD -name '*.ps' | while read file ; do pdf=${file%.ps}.pdf ; if [ ! -e $pdf ] ; then echo generate $pdf ; $mumdex_dir/*/ps2pdf.sh $file ; fi ; done
 
 exit 0
 

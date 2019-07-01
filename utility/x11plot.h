@@ -1659,7 +1659,7 @@ class X11Graph : public X11Win, public SavedConfig {
           [this]() { return can_do_lines(); }},  true, true};
   Radio tick_radios[2]{
     {"Toggle X axis labels (shown when cursor leaves window)", this,
-      {5.5, -1}, {[this]() { if (false) { prepare_draw(); } }}, true},
+      {5.5, -1}, {[]() { }}, true},
     {"Toggle Y axis labels (shown when cursor leaves window)",
           this, {1, -5.5}, {[]() { }, radio_off(tiled_radio)}, true}};
   Radio log_radios[2]{

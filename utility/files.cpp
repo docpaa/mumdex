@@ -74,7 +74,11 @@ void MappedFile::load(const std::string & file_name_,
                       const bool warn_empty) {
   file_name = file_name_;
   const uint64_t input_size = file_size(file_name);
+#ifdef __CYGWIN__
+  page = 4096;
+#else
   page = static_cast<uint64_t>(getpagesize());
+#endif
   // cerr << "Page size is " << page << endl;
   if (!input_size) {
     if (warn_empty) {

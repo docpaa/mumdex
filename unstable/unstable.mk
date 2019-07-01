@@ -92,6 +92,7 @@ DEVELOPMENT_PROGRAMS := \
 	optional_test \
 	pair_view \
 	phase_correlation \
+	pie \
 	pivot_table \
 	plot_cn_detailed \
 	plot_cn_stats \
@@ -135,6 +136,7 @@ DEVELOPMENT_PROGRAMS := \
 	table_stats \
 	talk2018 \
 	talk2018dec \
+	talk2019july \
 	test_args \
 	test_hmm \
 	test_mumdex \
