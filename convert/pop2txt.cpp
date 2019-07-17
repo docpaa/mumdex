@@ -3,7 +3,7 @@
 //
 // Convert the population database from text to binary and vice-versa
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

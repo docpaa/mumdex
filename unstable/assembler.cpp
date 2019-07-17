@@ -3,7 +3,7 @@
 //
 // debruijn read pair assembly and viewing
 //
-// Copyright Peter Andrews 2018 CSHL
+// Copyright Peter Andrews 2018 @ CSHL
 //
 
 #include <unistd.h>

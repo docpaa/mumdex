@@ -3,7 +3,7 @@
 //
 // examine properties of bridges
 //
-// Copyright 2018 Peter Andrews CSHL
+// Copyright 2018 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

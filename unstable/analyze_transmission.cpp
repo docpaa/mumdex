@@ -3,7 +3,7 @@
 //
 // study transmission results from transmission.cpp
 //
-// Copyright 2017 Peter Andrews CSHL
+// Copyright 2017 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

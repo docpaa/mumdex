@@ -3,7 +3,7 @@
 //
 // load up finebin files and generate empirical binning of them
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

@@ -3,7 +3,7 @@
 //
 // Create know profiles from aggregates of individuals
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

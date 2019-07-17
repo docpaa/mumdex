@@ -3,7 +3,7 @@
 //
 // get statistics from a table
 //
-// Copyright 2019 Peter Andrews
+// Copyright 2019 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

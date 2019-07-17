@@ -1,4 +1,4 @@
-# Copyright Peter Andrews CSHL 2017
+# Copyright Peter Andrews CSHL @ 2017
 
 build :
 	python setup.py build

@@ -3,7 +3,7 @@
 //
 // simple matrix computations
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 //
 

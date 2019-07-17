@@ -4,7 +4,7 @@
 // use machine learning to identify incidental MUMs
 // not finished or well thought out....
 //
-// Copyright 2018 Peter Andrews CSHL
+// Copyright 2018 Peter Andrews @ CSHL
 //
 
 #include <exception>

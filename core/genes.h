@@ -3,7 +3,7 @@
 //
 // information about genes
 //
-// Copyright 2014 Peter Andrews CSHL
+// Copyright 2014 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_GENES_H

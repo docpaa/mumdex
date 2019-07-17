@@ -3,7 +3,7 @@
 //
 // quick and dirty sex determination from copy number results
 //
-// Copyright 2017 Peter Andrews CSHL
+// Copyright 2017 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

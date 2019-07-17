@@ -1,7 +1,7 @@
 //
 // pivit_table.cpp
 //
-// Copyright 2016 Peter Andrews
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

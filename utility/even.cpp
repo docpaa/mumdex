@@ -4,7 +4,7 @@
 // simpler version of even_columns.cpp
 //   displays tabular data as text with even columns
 //
-// Copyright 2019 Peter Andrews
+// Copyright 2019 Peter Andrews @ CSHL
 //
 
 #include <fstream>

@@ -3,7 +3,7 @@
 //
 // suffix sorting
 //
-// Copyright Peter Andrews 2016 CSHL
+// Copyright Peter Andrews 2016 @ CSHL
 // See bottom of this document for additional copyright notice
 //
 

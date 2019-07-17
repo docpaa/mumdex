@@ -3,7 +3,7 @@
 //
 // bridge information format and extraction
 //
-// Copyright 2015 Peter Andrews CSHL
+// Copyright 2015 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_BRIDGES_H

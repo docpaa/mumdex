@@ -1340,6 +1340,7 @@ std::string("\ncbs.segment(sample=sample, alpha=") +
           Bounds{0, 5}};
     PSHSeries<double, unsigned int> quantal_hist{quantal_hist_graph, 1000};
     PSGraph seg_quantal_hist_graph{profiles_ps,
+          // "Segmented quantal results;CN value;N", Bounds{0.5, 4.0}};
           "Segmented quantal results;CN value;N", Bounds{1.9, 2.1}};
     PSHSeries<double, unsigned int> seg_quantal_hist{
       seg_quantal_hist_graph, 1000};

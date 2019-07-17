@@ -3,7 +3,7 @@
 //
 // Create segment files from bin results
 //
-// Copyright 2017 Peter Andrews CSHL
+// Copyright 2017 Peter Andrews @ CSHL
 //
 
 #include <exception>

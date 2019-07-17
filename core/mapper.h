@@ -3,7 +3,7 @@
 //
 // MUM based mapping
 //
-// Copyright Peter Andrews 2015 CSHL
+// Copyright Peter Andrews 2015 @ CSHL
 //
 
 #ifndef MAPPER_H_

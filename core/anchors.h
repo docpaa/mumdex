@@ -3,7 +3,7 @@
 //
 // anchor and reference counts
 //
-// Copyright 2015 Peter Andrews CSHL
+// Copyright 2015 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_ANCHORS_H

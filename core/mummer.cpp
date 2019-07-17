@@ -3,7 +3,7 @@
 //
 // map reads to produce mumdex parts
 //
-// Modifications of sparseMEM Copyright Peter Andrews 2013-2015 CSHL
+// Modifications of sparseMEM Copyright Peter Andrews 2013-2015 @ CSHL
 //
 
 #include <unistd.h>

@@ -3,7 +3,7 @@
 //
 // extracts data lines for selected positions
 //
-// Copyright 2019 Peter Andrews
+// Copyright 2019 Peter Andrews @ CSHL
 //
 
 #include <fstream>

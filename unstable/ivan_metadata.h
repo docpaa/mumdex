@@ -3,7 +3,7 @@
 //
 // interface to access Ivan's metadata format
 //
-// Copyright 2019 Peter Andrews CSHL
+// Copyright 2019 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_IVAN_METADATA_H

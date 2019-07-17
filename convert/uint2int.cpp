@@ -3,7 +3,7 @@
 //
 // convert binary unsigned integer to ascii integers from file input
 //
-// Copyright Peter Andrews 2016 CSHL
+// Copyright Peter Andrews 2016 @ CSHL
 //
 
 #include <exception>

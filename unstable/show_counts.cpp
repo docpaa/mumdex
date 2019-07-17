@@ -3,7 +3,7 @@
 //
 // show reference and anchor counts (needs update)
 //
-// Copyright Peter Andrews 2015 CSHL
+// Copyright 2015 Peter Andrews @ CSHL
 //
 
 #include <exception>

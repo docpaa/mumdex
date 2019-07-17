@@ -3,7 +3,7 @@
 //
 // load up finebin files and combine them
 //
-// Copyright 2017 Peter Andrews CSHL
+// Copyright 2017 Peter Andrews @ CSHL
 //
 
 #include <exception>

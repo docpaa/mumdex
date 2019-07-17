@@ -3,7 +3,7 @@
 //
 // convert bytes to ascii integers from file input
 //
-// Copyright Peter Andrews 2015 CSHL
+// Copyright Peter Andrews 2015 @ CSHL
 //
 
 #include <exception>

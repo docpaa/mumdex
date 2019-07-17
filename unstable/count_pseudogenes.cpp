@@ -3,7 +3,7 @@
 //
 // find pseudogenes and count them
 //
-// Copyright Peter Andrews 2015 CSHL
+// Copyright 2015 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

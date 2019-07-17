@@ -3,7 +3,7 @@
 //
 // simple thread pool
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 // See additional copyright notice at the bottom of this document
 // ThreadPool is altered from the original code

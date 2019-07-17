@@ -3,7 +3,7 @@
 //
 // various classes for points and geometry and layout
 //
-// Copyright 2018 Peter Andrews
+// Copyright 2018 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_UTILITY_LAYOUT_H_

@@ -3,7 +3,7 @@
 //
 // test the numerical.h header
 //
-// Copyright Peter Andrews 2017 CSHL
+// Copyright Peter Andrews 2017 @ CSHL
 //
 
 #include <algorithm>

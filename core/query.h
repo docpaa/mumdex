@@ -3,7 +3,7 @@
 //
 // mapping queries for mummer
 //
-// Copyright Peter Andrews 2015-2016 CSHL
+// Copyright Peter Andrews 2015-2016 @ CSHL
 //
 
 #ifndef LONGMEM_QUERY_H_

@@ -3,7 +3,7 @@
 //
 // various utility classes and functions
 //
-// Copyright 2015 Peter Andrews
+// Copyright 2015 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_UTILITY_UTILITY_H
@@ -62,6 +62,9 @@ inline std::string commas(uint64_t number) {
 
 inline bool dne(const double lhs, const double rhs) {
   return lhs < rhs || lhs > rhs;
+}
+inline bool de(const double lhs, const double rhs) {
+  return lhs <= rhs && lhs >= rhs;
 }
 
 template <class Val> Val min(const Val v) { return v; }

@@ -3,7 +3,7 @@
 //
 // plot a series in several panels
 //
-// Copyright 2019 Peter Andrews
+// Copyright 2019 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

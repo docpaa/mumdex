@@ -3,7 +3,7 @@
 //
 // does bridge impact a gene?
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

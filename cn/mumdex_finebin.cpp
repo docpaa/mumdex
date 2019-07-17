@@ -3,7 +3,7 @@
 //
 // finely bin mappings from one or more mumdex files
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <exception>

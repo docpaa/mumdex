@@ -3,7 +3,7 @@
 //
 // split a table by columns
 //
-// Copyright 2018 Peter Andrews
+// Copyright 2018 Peter Andrews @ CSHL
 //
 
 // command to use, all on one line:

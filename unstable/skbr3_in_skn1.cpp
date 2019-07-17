@@ -3,7 +3,7 @@
 //
 // Detect known profile when added to flat profile
 //
-// Copyright 2017 Peter Andrews CSHL
+// Copyright 2017 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

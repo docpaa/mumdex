@@ -2,7 +2,7 @@
 // even_columns.cpp
 //
 //
-// Copyright 2015 Peter Andrews
+// Copyright 2015 Peter Andrews @ CSHL
 //
 
 #include <iostream>

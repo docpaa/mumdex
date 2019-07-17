@@ -3,7 +3,7 @@
 //
 // Fancy constructors with "optional" arguments in any order
 //
-// Copyright 2019 Peter Andrews
+// Copyright 2019 Peter Andrews @ CSHL
 //
 
 #include <fstream>

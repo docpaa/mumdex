@@ -127,6 +127,7 @@ nlaIII_bsrsI
 offset_beds
 optional_test
 pair_view
+pie
 pivot_table
 phase_correlation
 plot
@@ -185,6 +186,7 @@ subsample
 table_stats
 talk2018
 talk2018dec
+talk2019july
 test_args
 test_hmm
 test_mumdex

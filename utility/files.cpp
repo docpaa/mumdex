@@ -3,7 +3,7 @@
 //
 // common operations on files
 //
-// Copyright Peter Andrews 2015 CSHL
+// Copyright Peter Andrews 2015 @ CSHL
 //
 
 #include "files.h"

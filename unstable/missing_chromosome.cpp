@@ -3,7 +3,7 @@
 //
 // look for missing chromosomes at the 1% level
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

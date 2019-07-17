@@ -3,7 +3,7 @@
 //
 // make bridges file smaller to aid specific processing
 //
-// Copyright 2018 Peter Andrews CSHL
+// Copyright 2018 Peter Andrews @ CSHL
 //
 
 #include <exception>

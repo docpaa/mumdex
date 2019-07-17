@@ -3,7 +3,7 @@
 //
 // chromosome position pairs, not used too much
 //
-// Copyright 2015 Peter Andrews CSHL
+// Copyright 2015 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_POSITION_H

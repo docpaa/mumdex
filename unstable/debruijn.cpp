@@ -3,7 +3,7 @@
 //
 // read pair assembly and viewing
 //
-// Copyright Peter Andrews 2015 CSHL
+// Copyright 2015 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

@@ -3,7 +3,7 @@
 //
 // useful string functions
 //
-// Copyright Peter Andrews 2015 CSHL
+// Copyright Peter Andrews 2015 @ CSHL
 //
 
 #ifndef LONGMEM_STRINGS_H_

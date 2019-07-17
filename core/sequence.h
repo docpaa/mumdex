@@ -3,7 +3,7 @@
 //
 // various sequence classes and functions
 //
-// Copyright 2016 Peter Andrews
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_SEQUENCE_H

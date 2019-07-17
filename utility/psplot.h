@@ -936,6 +936,13 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     // Get graph range
     do_range(hist_ ? 0.0 : 0.01);
 
+    // Check for bad range problem and abandon the graph if necessary
+    if (is_unset(range_.xl()) || is_unset(range_.xh()) ||
+        is_unset(range_.yl()) || is_unset(range_.yh()) ||
+        de(range_.xl(), range_.xh()) || de(range_.yl(), range_.yh())) {
+      return;
+    }
+
     // Axis label bounds adjustment
     const double tick_size__{tick_size() * scale};
     const double page_size{sqrt(doc.width() * doc.height())};

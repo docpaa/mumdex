@@ -3,7 +3,7 @@
 //
 // Make a postscript (or pdf) pie chart
 //
-// Copyright 2019 Peter Andrews
+// Copyright 2019 Peter Andrews @ CSHL
 //
 
 #include <algorithm>
@@ -49,6 +49,7 @@ class PSPie {
           input.get();
           getline(input, description);
           if (!input) throw Error("Problem parsing input");
+          if (value <= 0) continue;
           add_item(value, description);
         }
       }
@@ -57,7 +58,8 @@ class PSPie {
     total += value;
     max_length = max(max_length, description.size());
   }
-  void output(const std::string output_prefix, bool pdf = true) const {
+  void output(const std::string output_prefix,
+              bool pdf = true, bool png = true) const {
     const string output_name{output_prefix + ".ps"};
     ofstream output{output_name.c_str()};
     if (!output) throw Error("Could not open output file") << output_name;
@@ -68,7 +70,7 @@ class PSPie {
     const double auto_font{min(40.0, 2 * min_edge / max_length)};
     output << "%!PS-Adobe-3.0 EPSF-3.0\n"
            << "%%BoundingBox: 0 0 " << width << " " << height << "\n";
-    const double light_gray{0.9};
+    const double light_gray{0.9375};
     output << "gsave " << light_gray << " "
            << light_gray << " " << light_gray
            << " setrgbcolor newpath 0 0 moveto " << width << " 0 rlineto "
@@ -145,12 +147,15 @@ class PSPie {
       start_angle = stop_angle;
     }
     output.close();
-    if (pdf) {
+    if (pdf || png) {
       ostringstream command;
       command << "ps2pdf -dDEVICEWIDTHPOINTS=" << width
               << " -dDEVICEHEIGHTPOINTS=" << height
               << " " << output_name
               << " " << output_prefix << ".pdf";
+      if (png) command << " && convert " << output_prefix << ".pdf "
+                       << output_prefix << ".png";
+      if (!pdf) command << " && rm -f " << output_prefix << ".pdf ";
       const int result{system(command.str().c_str())};
       if (0) cerr << result;
     }
@@ -165,16 +170,27 @@ class PSPie {
 
 int main(int argc, char ** argv) try {
   --argc;
-  const string usage{"usage: pie [-t title] [input]"};
-  if (argc > 4) throw Error(usage);
+  const string usage{
+    "usage: pie [-pdf] [-png] [-t title] [-o out_prefix] [input]"};
+  if (argc > 6) throw Error(usage);
   string title{""};
   bool pdf{false};
+  bool png{false};
+  string output_prefix{"pie"};
   while (argc) {
     if (argc >= 2 && string(argv[1]) == "-t") {
       title = argv[2];
       argc -= 2;
       argv += 2;
-    } else if (argc >= 1 && string(argv[1]) == "-p") {
+    } else if (argc >= 2 && string(argv[1]) == "-o") {
+      output_prefix = argv[2];
+      argc -= 2;
+      argv += 2;
+    } else if (argc >= 1 && string(argv[1]) == "-png") {
+      --argc;
+      ++argv;
+      png = true;
+    } else if (argc >= 1 && string(argv[1]) == "-pdf") {
       --argc;
       ++argv;
       pdf = true;
@@ -193,9 +209,7 @@ int main(int argc, char ** argv) try {
   }
 
   const PSPie pie{title, *input};
-
-  const string output_prefix{"pie"};
-  pie.output(output_prefix, pdf);
+  pie.output(output_prefix, pdf, png);
 
   return 0;
 } catch (Error & e) {

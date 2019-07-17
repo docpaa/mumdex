@@ -3,7 +3,7 @@
 //
 // Code used to process HAHA data
 //
-// Copyright Peter Andrews 2018 CSHL
+// Copyright 2018 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_HAHA_H_

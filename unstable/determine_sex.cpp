@@ -3,7 +3,7 @@
 //
 // quick and dirty sex determination from mumdex
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <exception>

@@ -2,7 +2,7 @@
 // talk2018.cpp
 //
 //
-// Copyright 2018 Peter Andrews
+// Copyright 2018 Peter Andrews @ CSHL
 //
 // ~/mumdex/talk2018
 // cp ~/mumdex/talk2018 ~/web/talk/index.cgi && firefox http://localhost/talk/

@@ -2,7 +2,7 @@
 // venn.cpp
 //
 //
-// Copyright 2018 Peter Andrews
+// Copyright 2018 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

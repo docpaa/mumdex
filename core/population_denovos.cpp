@@ -3,7 +3,7 @@
 //
 // examine bridge information over a population to find denovo candidates
 //
-// Copyright 2018 Peter Andrews CSHL
+// Copyright 2018 Peter Andrews @ CSHL
 //
 
 // TO DO

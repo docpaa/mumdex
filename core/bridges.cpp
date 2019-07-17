@@ -3,7 +3,7 @@
 //
 // extract bridge information from a mumdex
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include "bridges.h"

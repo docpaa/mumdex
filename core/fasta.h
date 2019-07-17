@@ -3,7 +3,7 @@
 //
 // dealing with the reference for suffix array use
 //
-// Modifications of sparseMEM Copyright Peter Andrews 2013-2016 CSHL
+// Modifications of sparseMEM Copyright Peter Andrews 2013-2016 @ CSHL
 //
 
 #ifndef LONGMEM_FASTA_H_

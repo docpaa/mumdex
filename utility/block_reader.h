@@ -3,7 +3,7 @@
 //
 // Read blocks from files
 //
-// Copyright Peter Andrews 2018 CSHL
+// Copyright Peter Andrews 2018 @ CSHL
 //
 
 #ifndef BLOCK_READER_H_

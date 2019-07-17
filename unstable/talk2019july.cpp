@@ -3,7 +3,7 @@
 //
 // July 1, 2019 at MSKCC
 //
-// Copyright 2019 Peter Andrews
+// Copyright 2019 Peter Andrews @ CSHL
 //
 //
 
@@ -1333,7 +1333,7 @@ int main(int argc, char ** argv, char ** envp) {
     talk.slide(seminar.title(), "Introduction", "SNV, CNV, MUMdex",
                Employees{peter})
           << heading2(seminar.subtitle())
-          << png("atan_main.png", "atan Profile", "100%", "atan_main.png")
+          << png("atan_main.png", "atan Profile", "90%", "atan_main.png")
           << heading3(seminar.date() + ", " + seminar.year())
           << type(hlink("https://mumdex.com/mskcc/"), "red");
 
@@ -1343,7 +1343,7 @@ int main(int argc, char ** argv, char ** envp) {
         << "&nbsp;&nbsp;&nbsp;"
           << png("./smash_protocol.png", "", "30%")
         << heading2("2. Copy Number Visualization with G-Graph")
-        << png("./CZ30.png", "", "50%")
+        << png("./CZ30.png", "", "45%")
         << heading2("3. G-Graph Installation help");
 
     talk.slide("What is MUMdex?", "Part 1").center(false)
@@ -1360,7 +1360,7 @@ int main(int argc, char ** argv, char ** envp) {
             "SV and CN visualization software (includes G-Graph)"), "huge");
 
     talk.slide("Copy Number Variant Detection", "Part 1")
-        << png("./cn_deletion.png", "A large deletion", "75%")
+        << png("./cn_deletion.png", "A large deletion", "60%")
         << heading2("MUMdex finds copy number variants by aligning read pairs, "
                     "bin counting alignments and then segmenting the profile");
 
@@ -1371,20 +1371,13 @@ int main(int argc, char ** argv, char ** envp) {
 
     talk.slide("The SMASH CN Protocol", "Part 1")
         << heading2("Method for cheaper and better copy number")
-        << png("./smash_protocol.png", "", "90%")
+        << png("./smash_protocol.png", "", "75%")
         << heading2("Packs 4+ mappings per read pair to save $ "
                     "and reduce GC bias");
 
-    talk.slide("Marvel Genomics", "Part 1").notitle()
-        << png("./marvel.png", "", "30%")
-        << heading2("Mike Ronemus and "
-                    "Derek Brand are here to discuss SMASH")
-        << png("./ronemus.jpg", "", "48%")
-        << png("./brand.jpg", "", "48%");
-
      talk.slide("G-Graph Copy Number Visualization", "Part 2", "G-Graph")
          << heading2("Used to easily explore copy number profiles")
-         << png("./ggraph.png", "G-Graph Application", "85%")
+         << png("./ggraph.png", "G-Graph Application", "80%")
          << heading2("G-Graph is a GUI that runs on Linux, Mac and Windows");
 
      talk.slide("G-Graph Tutorial is Online", "Part 2", "G-Graph")
@@ -1394,11 +1387,11 @@ int main(int argc, char ** argv, char ** envp) {
 
      talk.slide("A New Copy Number Display Scale",
                 "Part 2", "New CN Scale")
-         << png("./atan_fun.png", "CN function definition", "60%")
+         << png("./atan_fun.png", "CN function definition", "50%")
          << heading2(
              "Smoothly projects CN range of 0 - ",
              lower(huge("&#x221e;")), " to graph Y axis range")
-         << png("./atan.png", "New CN Scale", "98%");
+         << png("./atan.png", "New CN Scale", "90%");
      const std::string cn_link{
        "http://mumdex.com/cn/?user=mskcc&data=breast&n_x=3"};
      talk.slide("Copy Number Variation in Metastatic Breast Cancer",
@@ -1410,11 +1403,13 @@ int main(int argc, char ** argv, char ** envp) {
                      "profile ordering and grouping")
          << type(hlink(cn_link), "red");
 
+     const std::string chd_link{};
      talk.slide("SMASH Copy Number Variation in Congenital Heart Disease",
                 "Part 2", "CN in CHD")
          << heading2("To find <i>de novo</i> and transmitted CN events in CHD")
          << type(iframe("http://mumdex.com/chd/100000/denovo.html"), "indels")
-         << heading2("Most previously known events were found, plus many more");
+         << heading2("Most previously known events were found, plus many more")
+         << type(hlink("http://mumdex.com/chd/"), "red");
 
      talk.slide("SV and CNV Complementarity in SSC Data",
                 "Part 2", "SV and CNV")
@@ -1488,6 +1483,13 @@ int main(int argc, char ** argv, char ** envp) {
                      "Lots More!"),
                 png("thanks.png", "Thanks!", "90%")),
                  "thirdplus")), "huge");
+
+    talk.slide("Marvel Genomics", "Part 1").notitle()
+        << png("./marvel.png", "", "20%")
+        << heading2("Mike Ronemus and "
+                    "Derek Brand are here to discuss SMASH")
+        << png("./ronemus.jpg", "", "48%")
+        << png("./brand.jpg", "", "48%");
 
 #if 0
     talk.slide("Talk program debug details", "Technical").center(false)

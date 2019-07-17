@@ -3,7 +3,7 @@
 //
 // find denovo pseudogenes in candidate list
 //
-// Copyright Peter Andrews 2017 CSHL
+// Copyright 2017 Peter Andrews @ CSHL
 //
 
 #include <exception>

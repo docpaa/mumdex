@@ -3,7 +3,7 @@
 //
 // sorting classes and functions
 //
-// Copyright 2015 Peter Andrews
+// Copyright 2015 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_SORT_H_

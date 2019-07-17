@@ -3,7 +3,7 @@
 //
 // look for a bridge that is similar to a specific bridge in bridges files
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

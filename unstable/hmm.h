@@ -3,7 +3,7 @@
 //
 // simple hmm hidden markov model
 //
-// Copyright Peter Andrews 2018 CSHL
+// Copyright 2018 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_HMM_H_

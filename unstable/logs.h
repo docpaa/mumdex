@@ -3,7 +3,7 @@
 //
 // simple computations with logarithms, mainly for EM methods
 //
-// Copyright 2019 Peter Andrews CSHL
+// Copyright 2019 Peter Andrews @ CSHL
 //
 //
 

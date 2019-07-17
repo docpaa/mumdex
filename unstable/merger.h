@@ -3,7 +3,7 @@
 //
 // parallel merger - probably not too useful in practice
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <string>

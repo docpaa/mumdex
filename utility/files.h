@@ -3,7 +3,7 @@
 //
 // classes and functions for dealing with files
 //
-// Copyright Peter Andrews 2015 CSHL
+// Copyright Peter Andrews 2015 @ CSHL
 //
 
 #ifndef LONGMEM_FILES_H_

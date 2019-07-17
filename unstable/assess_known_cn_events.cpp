@@ -3,7 +3,7 @@
 //
 // look for known events in CN and assess sensitivity and specificity
 //
-// Copyright 2017 Peter Andrews CSHL
+// Copyright 2017 Peter Andrews @ CSHL
 //
 
 #include <exception>

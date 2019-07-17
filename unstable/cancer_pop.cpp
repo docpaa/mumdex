@@ -4,7 +4,7 @@
 // Bridge counts for cancer and other population
 // to look for differences, variable regions, etc
 //
-// Copyright 2017 Peter Andrews CSHL
+// Copyright 2017 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

@@ -3,7 +3,7 @@
 //
 // get some counts for transmission study
 //
-// Copyright 2018 Peter Andrews CSHL
+// Copyright 2018 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

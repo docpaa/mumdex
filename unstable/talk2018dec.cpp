@@ -3,7 +3,7 @@
 //
 // Dec 6, 2018 at NYGC
 //
-// Copyright 2018 Peter Andrews
+// Copyright 2018 Peter Andrews @ CSHL
 //
 //
 

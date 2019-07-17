@@ -3,7 +3,7 @@
 //
 // plot results from simulate_cn
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

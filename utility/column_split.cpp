@@ -1,7 +1,7 @@
 //
 // column_split.cpp
 //
-// Copyright 2019 Peter Andrews
+// Copyright 2019 Peter Andrews @ CSHL
 //
 // split a file by first column
 //

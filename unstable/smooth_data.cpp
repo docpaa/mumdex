@@ -3,7 +3,7 @@
 //
 // Perform lowess smoothing of x y dataset
 //
-// Copyright 2017 Peter Andrews
+// Copyright 2017 Peter Andrews @ CSHL
 //
 
 #include <fstream>

@@ -474,7 +474,7 @@ class TMappability {
   // Definition of the mappability values
   // 255 - no uniqueness even if we go to the end of the chromosome
   // 254 - no uniqueness even if we go 253 positions left or right
-  // 0 < n <= 253 uniquenes if we go n positions left or right
+  // 0 < n <= 253 uniqueness if we go n positions left or right
   // and no uniqueness if we go n-1
   // should never be '0'
 

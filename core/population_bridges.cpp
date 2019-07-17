@@ -3,7 +3,7 @@
 //
 // bridge information over a population to find candidates
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 // TO DO

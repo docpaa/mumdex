@@ -3,7 +3,7 @@
 //
 // test the MUMdex format
 //
-// Copyright Peter Andrews 2015 CSHL
+// Copyright Peter Andrews 2015 @ CSHL
 //
 
 #include <array>

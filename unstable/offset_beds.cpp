@@ -3,7 +3,7 @@
 //
 // Intended to display tracks over a read
 //
-// Copyright 2019 Peter Andrews
+// Copyright 2019 Peter Andrews @ CSHL
 //
 
 #include <fstream>

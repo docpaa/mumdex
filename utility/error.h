@@ -3,7 +3,7 @@
 //
 // exception class for reporting errors
 //
-// Copyright 2012 Peter Andrews
+// Copyright 2012 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_UTILITY_ERROR_H_

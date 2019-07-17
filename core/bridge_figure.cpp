@@ -3,7 +3,7 @@
 //
 // look for a specific bridge in one or more samples, make pretty pictures
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

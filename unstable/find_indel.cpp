@@ -3,7 +3,7 @@
 //
 // Try to find a specific indel, with some slop allowed
 //
-// Copyright 2018 Peter Andrews CSHL
+// Copyright 2018 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

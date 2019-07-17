@@ -3,7 +3,7 @@
 //
 // utility functions and classes
 //
-// Copyright 2015 Peter Andrews
+// Copyright 2015 Peter Andrews @ CSHL
 //
 
 #include "utility.h"

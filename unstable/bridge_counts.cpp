@@ -4,7 +4,7 @@
 // look for a specific bridge in one or more samples
 // output bridge and coverage counts
 //
-// Copyright 2017 Peter Andrews CSHL
+// Copyright 2017 Peter Andrews @ CSHL
 //
 
 #include <exception>

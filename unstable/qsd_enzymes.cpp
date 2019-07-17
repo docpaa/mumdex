@@ -4,7 +4,7 @@
 // Design enzyme cutting experiment for QSD
 //   Not completed
 //
-// Copyright 2019 Peter Andrews
+// Copyright 2019 Peter Andrews @ CSHL
 //
 
 #include <fstream>

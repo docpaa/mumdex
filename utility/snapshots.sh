@@ -16,6 +16,7 @@ dest=${2%/}
 
 if [ -e $dest/running ] ; then
     echo backup appears to be running from yesterday - quitting 1>&2
+    echo remove file $dest/running to fix this message 1>&2
     exit 1
 fi
 

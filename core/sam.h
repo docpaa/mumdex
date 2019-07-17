@@ -3,7 +3,7 @@
 //
 // sam info
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_SAM_H

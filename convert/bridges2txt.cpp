@@ -3,7 +3,7 @@
 //
 // convert bridge information to text format
 //
-// Copyright 2016 Peter Andrews CSHL
+// Copyright 2016 Peter Andrews @ CSHL
 //
 
 #include <algorithm>

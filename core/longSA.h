@@ -3,7 +3,7 @@
 //
 // suffix array mapping
 //
-// Modifications of sparseMEM Copyright Peter Andrews 2013-2017 CSHL
+// Modifications of sparseMEM Copyright Peter Andrews 2013-2017 @ CSHL
 //
 
 #ifndef LONGMEM_LONGSA_H_
