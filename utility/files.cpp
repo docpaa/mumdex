@@ -93,7 +93,7 @@ void MappedFile::load(const std::string & file_name_,
     if (input == -1) {
       throw Error("could not open input") << file_name << "for reading";
     }
-    file_begin = static_cast<char * const>(
+    file_begin = static_cast<char *>(
         mmap(nullptr, input_size, PROT_READ, MAP_SHARED |
                (read_ahead ? MAP_POPULATE : 0), input, 0));
     if (file_begin == MAP_FAILED) {

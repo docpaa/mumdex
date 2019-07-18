@@ -139,7 +139,6 @@ int main(int argc, char * argv[]) try {
            << mum.read_2() << endl;
     }
   }
-#endif
 
   return 0;
 
@@ -188,6 +187,7 @@ int main(int argc, char * argv[]) try {
     }
   }
   cerr << "retrieved and verified info" << endl;
+#endif
 
   return 0;
 } catch (Error & e) {

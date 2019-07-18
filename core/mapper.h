@@ -104,6 +104,7 @@ std::pair<int, void *> mmap_create_file(const std::string & file_name,
   return std::make_pair(file, memory);
 }
 
+#if 0
 class MUMdexMerger {
  public:
   explicit MUMdexMerger(const std::string & mumdex_name,
@@ -339,6 +340,7 @@ class MUMdexMerger {
     }
   }
 };
+#endif
 
 class MUMdexMergerNew {
  public:
@@ -366,7 +368,7 @@ class MUMdexMergerNew {
     const time_t start_time{time(nullptr)};
     std::vector<std::string> sort_files;
 
-    {  // In a block so mumdexs are freed before directories are removed
+    {  // In a block so mumdexes are freed before directories are removed
       // Load mumdex parts
       const std::string reference_name{saved_ref_name(part_names.front())};
       const Reference ref{reference_name};
@@ -671,7 +673,7 @@ class Mapper {
       longReadPairs pairs(args, sa_, readers);
     }
     // Merge mumdex and output
-    const MUMdexMerger merger{"mumdex", n_threads, true};
+    const MUMdexMergerNew merger{"mumdex", 2, n_threads, true};
 
     // std::cerr << "Done" << std::endl;
 

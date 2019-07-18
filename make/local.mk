@@ -1,10 +1,9 @@
 
-# If a special compiler is needed, set PATH and LD_LIBRARY_PATH appropriately
-# either in your environment with export or here in a special section for you
-SGE_ROOT ?= NOT
-SGE_CLUSTER_NAME ?= NOT
-ifeq ($(shell hostname -s | perl -pe 's/\d+//'), wigtopX)
+ifdef GCC_DIR
+	PATH := $(GCC_DIR)/bin:/data/software/local/bin:/bin:/usr/bin
+endif
 
+ifeq ($(shell hostname -s | perl -pe 's/\d+//'), wigtop)
   # Test code on various compiler versions for warnings and errors
   test_compilers :
 	@ unset GCC_DIR && ./make/test_compilers.sh
@@ -13,16 +12,20 @@ ifeq ($(shell hostname -s | perl -pe 's/\d+//'), wigtopX)
   publish : zip
 	scp ~/mumdex.zip mumdex.com:/paa/mumdex.com/
 	ssh mumdex.com 'cd /paa/mumdex.com && [ -e mumdex.zip ] && rm -Rf mumdex/ && unzip mumdex.zip'
+  FAST += -march=native -flto
+endif
+
+# If a special compiler is needed, set PATH and LD_LIBRARY_PATH appropriately
+# either in your environment with export or here in a special section for you
+SGE_ROOT ?= NOT
+SGE_CLUSTER_NAME ?= NOT
+ifeq ($(shell hostname -s | perl -pe 's/\d+//'), wigtopX)
 
   ifndef GCC_DIR
     FAST += -march=native -flto
   endif
   # wigler cluster at CSHL special definitions
   GCC_DIR ?= /data/software/gcc/4.9.2/rtf
-  # GCC_DIR := /data/software/gcc/4.9.4
-  # GCC_DIR := /data/software/gcc/5.5.0
-  # GCC_DIR := /data/software/gcc/6.4.0
-  # GCC_DIR := /data/software/gcc/7.2.0
   PATH := $(GCC_DIR)/bin:/data/software/local/bin:/bin:/usr/bin
   LD_LIBRARY_PATH := $(GCC_DIR)/lib64
   tcmalloc := defined

@@ -52,7 +52,7 @@ int main(int argc, char* argv[])  try {
   }
 
   // Process command line arguments
-  const Reference & ref{argv[1]};
+  const Reference ref{argv[1]};
   const ChromosomeIndexLookup chr_lookup{ref};
   const string bridges_dir{argv[2]};
   const Population pop{argv[3]};

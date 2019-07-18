@@ -62,7 +62,7 @@ int main(int argc, char* argv[])  try {
   }
 
   // Process command line arguments
-  const Reference & ref{argv[1]};
+  const Reference ref{argv[1]};
   const string chr1s{argv[2]};
   const unsigned int pos1{static_cast<unsigned int>(atoi(argv[3]))};
   const bool high1{static_cast<bool>(atoi(argv[4]))};

@@ -1,21 +1,15 @@
 DEVELOPMENT_PROGRAMS := \
 	add_abspos \
-	afterburner \
 	analyze_transmission \
 	anchor_reads \
 	anchor_mismatches \
 	anchor_repeatness \
-	animate \
 	annotate_candidates \
 	annotate_repeats \
 	assembler \
 	assembly_index \
-	assess_haha \
-	assess_hahaha \
 	assess_known_cn_events \
 	averages \
-	a2ds \
-	bad_haha_loci \
 	bam_genotyper \
 	bin_events \
 	bridge_counts \
@@ -51,7 +45,6 @@ DEVELOPMENT_PROGRAMS := \
 	explore_coverage \
 	family_count \
 	family_figure \
-	fastplot \
 	fastq_kmer_counter \
 	fastq_mapper \
 	fastq_sequences \
@@ -62,36 +55,24 @@ DEVELOPMENT_PROGRAMS := \
 	find_microsatellite \
 	find_repeats \
 	gene_view \
-	haha \
-	hahaha \
-	haplothreads \
-	haplothreads2a2ds \
-	haplothread_sharing \
-	haplothread_summary \
 	hists \
 	hist_compare \
 	ihists \
 	jackpot \
 	karyotype \
-	kenny_positions \
 	local_similarity \
 	lookup_bridge \
-	luria \
 	make_reference \
 	male_cn_stats \
 	mapper \
-	kenny_matrix \
 	mismatches \
 	missing_chromosome \
 	model_transmission \
 	mumdex_examples \
 	mumdex_sequences \
-	museq_primers \
-	nlaIII_bsrsI \
 	offset_beds \
 	optional_test \
 	pair_view \
-	phase_correlation \
 	pie \
 	pivot_table \
 	plot_cn_detailed \
@@ -108,8 +89,6 @@ DEVELOPMENT_PROGRAMS := \
 	position_coverage \
 	primers \
 	print_invariants \
-	process_bisulfite_rna \
-	qsd_enzymes \
 	random_mumdex_sequences \
 	random_position \
 	random_uniform_distances \
@@ -117,7 +96,6 @@ DEVELOPMENT_PROGRAMS := \
 	repeatness \
 	repeats \
 	sam_mapper \
-	sd_errors \
 	show_all_counts \
 	show_counts \
 	show_counts_special \
@@ -134,9 +112,6 @@ DEVELOPMENT_PROGRAMS := \
 	snp_report \
 	subsample \
 	table_stats \
-	talk2018 \
-	talk2018dec \
-	talk2019july \
 	test_args \
 	test_hmm \
 	test_mumdex \
@@ -159,11 +134,9 @@ all : $(DEVELOPMENT_PROGRAMS)
 
 # Only list programs which need extra object files, or nonstandard linking
 anchor_reads : genes.o utility.o
-afterburner: afterburner.gslo
 anchor_repeatness : files.o
 animate: animate.x11o
 assess_known_cn_events : assess_known_cn_events.gslo
-assess_haha : assess_haha.gslo
 bam_genotyper : utility.o
 bridge_effect : genes.o utility.o
 bridge_gene : genes.o utility.o
@@ -191,21 +164,15 @@ fastq_vt_mapper : files.o utility.o
 find_bridge : utility.o
 find_indel : utility.o
 gene_view : genes.o utility.o
-haha: haha.gslo
-hahaha: hahaha.gslo
 lookup_bridge : utility.o
 mapper : files.o utility.o
 mumdex_examples : utility.o
-museq_primers : utility.o
 optional_test : files.o
-phase_correlation: phase_correlation.gslo
-process_bisulfite_rna : files.o utility.o
 primers : files.o
 print_invariants : utility.o
 rare : genes.o utility.o
 repeatness : files.o
 sam_mapper : files.o utility.o
-sd_errors : files.o
 show_all_counts : files.o utility.o
 show_counts : files.o utility.o
 show_counts_special : files.o utility.o

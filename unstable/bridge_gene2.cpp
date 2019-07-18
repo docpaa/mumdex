@@ -68,7 +68,7 @@ int main(int argc, char* argv[])  try {
   }
 
   // Process command line arguments
-  const Reference & ref{argv[1]};
+  const Reference ref{argv[1]};
   const ChromosomeIndexLookup chr_lookup{ref};
 
   // sout << chr1s << pos1 << high1 << chr2s << pos2 << high2 << invariant;

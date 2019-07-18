@@ -330,6 +330,7 @@ class AnchorCountsCreator {
  private:
   class LowhighInfo {
    public:
+    LowhighInfo() noexcept {}
     uint16_noo_t reference{0};
     uint16_noo_t anchor{0};
 #if USE_ZERO

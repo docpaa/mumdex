@@ -46,7 +46,7 @@ int main(int argc, char* argv[])  try {
   }
 
   // Process command line arguments
-  const Reference & ref{argv[1]};
+  const Reference ref{argv[1]};
   const Mappability mappability{ref};
   const ChromosomeIndexLookup chr_lookup{ref};
   const string samples_dir{argv[2]};

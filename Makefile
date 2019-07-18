@@ -93,12 +93,13 @@ WARN := -Wpedantic -Wall -Wextra -Weffc++ -Wc++11-compat \
 # OS determination and special compilation stuff for each particular OS
 UNAME = $(shell sh -c 'uname -s 2> /dev/null || echo NO_UNAME_FOUND')
 
+# -Wnoexcept 
 ifeq ($(UNAME),Linux)
 	WARN += -Wstrict-null-sentinel -Wdouble-promotion \
 		-Wsync-nand -Wtrampolines \
 		-Wlogical-op -Wzero-as-null-pointer-constant \
 		-Wvector-operation-performance -Wuseless-cast \
-		-Wnoexcept -Wconditionally-supported
+		-Wconditionally-supported
 	LDFLAGS += -pthread
 	ifdef LD_LIBRARY_PATH
 		LDFLAGS += -Xlinker -rpath=$(LD_LIBRARY_PATH)

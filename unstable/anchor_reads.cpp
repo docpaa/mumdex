@@ -69,7 +69,7 @@ int main(int argc, char* argv[]) try {
 
   const Mappability map{ref_name, true};
 
-  const Reference & ref{ref_name};
+  const Reference ref{ref_name};
   const ChromosomeIndexLookup chr_lookup{ref};
 
   const KnownGenes genes{genes_name, isoforms_name, chr_lookup, ref};

@@ -968,10 +968,9 @@ class FinestBinsT {
                 << std::endl;
       std::vector<unsigned int> chr_bin_starts(chr_bins[c].second);
       std::vector<unsigned int> chr_bin_counts(chr_bin_starts.size());
-      chr_bin_starts.push_back(
-          c + 1 == chromosomes.size() ?
-          static_cast<unsigned int>(cn_abspos.n_positions()) :
-          chr_bins[c + 1].second[0]);
+      chr_bin_starts.push_back(c + 1 == chromosomes.size() ?
+                               cn_abspos.n_positions() :
+                               chr_bins[c + 1].second[0]);
 
       // Calculate bin counts
       for (unsigned int b{0}; b != chr_bin_counts.size(); ++b) {

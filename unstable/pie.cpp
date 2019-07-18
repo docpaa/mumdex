@@ -61,33 +61,33 @@ class PSPie {
   void output(const std::string output_prefix,
               bool pdf = true, bool png = true) const {
     const string output_name{output_prefix + ".ps"};
-    ofstream output{output_name.c_str()};
-    if (!output) throw Error("Could not open output file") << output_name;
+    ofstream outputf{output_name.c_str()};
+    if (!outputf) throw Error("Could not open output file") << output_name;
     const double width{792};
     const double height{612};
     const double radius{0.3 * height};
     const double min_edge{width / 2 - radius};
     const double auto_font{min(40.0, 2 * min_edge / max_length)};
-    output << "%!PS-Adobe-3.0 EPSF-3.0\n"
+    outputf << "%!PS-Adobe-3.0 EPSF-3.0\n"
            << "%%BoundingBox: 0 0 " << width << " " << height << "\n";
     const double light_gray{0.9375};
-    output << "gsave " << light_gray << " "
+    outputf << "gsave " << light_gray << " "
            << light_gray << " " << light_gray
            << " setrgbcolor newpath 0 0 moveto " << width << " 0 rlineto "
            << "0 " << height << " rlineto " << -width << " 0 rlineto closepath "
            << " fill stroke grestore\n";  // does nothing????
-    output << "2 setlinewidth\n";
+    outputf << "2 setlinewidth\n";
     double actual_height{height};
     if (title.size()) {
       const double title_font{50};
       actual_height -= title_font * 1.5;
-      output << "/Helvetica findfont " << title_font << " scalefont setfont\n";
-      output << width / 2 << " " << height - 1.25 * title_font
+      outputf << "/Helvetica findfont " << title_font << " scalefont setfont\n";
+      outputf << width / 2 << " " << height - 1.25 * title_font
              << " moveto (" << title
              << ") dup stringwidth pop 2 div neg 0 rmoveto show\n";
     }
     const double pie_center_height{actual_height / 2.0};
-    output << "/Helvetica findfont " << auto_font << " scalefont setfont\n";
+    outputf << "/Helvetica findfont " << auto_font << " scalefont setfont\n";
 
     const vector<string> colors{[]() {
         const vector<string> test_colors{
@@ -124,7 +124,7 @@ class PSPie {
       const double center_angle{(start_angle + stop_angle) / 2};
       const double small_angle{0.3};
       cout << value << '\t' << description << '\t' << percent << endl;
-      output << "newpath "
+      outputf << "newpath "
              << width  << " 2 div " << pie_center_height << " moveto "
              << width  << " 2 div " << pie_center_height << " "
              << radius << " " << start_angle << " "
@@ -138,15 +138,15 @@ class PSPie {
              << center_angle + small_angle << " arc "
              << "(" << description << ")";
       if (center_angle > 90 && center_angle < 270) {
-        output << " dup stringwidth pop neg 3 sub 0 rmoveto";
+        outputf << " dup stringwidth pop neg 3 sub 0 rmoveto";
       }
       if (center_angle > 180) {
-        output << " 0 -" << 0.7 * ceil(auto_font) << " rmoveto";
+        outputf << " 0 -" << 0.7 * ceil(auto_font) << " rmoveto";
       }
-      output << " show stroke\n";
+      outputf << " show stroke\n";
       start_angle = stop_angle;
     }
-    output.close();
+    outputf.close();
     if (pdf || png) {
       ostringstream command;
       command << "ps2pdf -dDEVICEWIDTHPOINTS=" << width
@@ -164,7 +164,7 @@ class PSPie {
  private:
   std::string title;
   double total{0};
-  uint64_t max_length{0};
+  size_t max_length{0};
   std::vector<Item> items{};
 };
 
