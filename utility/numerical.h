@@ -21,7 +21,8 @@ template <class F>
 void find_bracket(const F & func, double & a, double & b) {
   double scale{2.0};
   while (true) {
-    if (a > b) std::swap(a, b);
+    using std::swap;
+    if (a > b) swap(a, b);
     const double fa{func(a)};
     const double fb{func(b)};
     const double step{scale * (b - a)};

@@ -1,9 +1,11 @@
 UTILITY_PROGRAMS := column_split \
+	echoe \
 	even \
 	even_columns \
 	lines_at_pos \
 	randomize_order \
-	stats
+	stats \
+	table_summary
 
 PROGRAMS += $(UTILITY_PROGRAMS)
 all : $(UTILITY_PROGRAMS)

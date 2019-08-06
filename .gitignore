@@ -1,3 +1,4 @@
+# cat .gitignore | grep -v -e '*' -e python/ | while read file ; do if [ ! -e $file ] ; then echo $file ; fi ; done
 *~
 *.o
 *.gslo
@@ -20,7 +21,6 @@ averages
 bad_cn_bins
 bam_genotyper
 bin_events
-bin_p
 bridge_counts
 bridge_effect
 bridge_figure
@@ -54,6 +54,7 @@ determine_cn_sex
 determine_sex
 distinct_colors
 dsDNAvt
+echoe
 empirical_bins
 encode
 even
@@ -80,7 +81,6 @@ ggraph
 hist_compare
 hists
 ihists
-incidental
 jackpot
 karyotype
 lines_at_pos
@@ -100,7 +100,6 @@ mumdex2txt_fast
 mumdex_cn
 mumdex_examples
 mumdex_finebin
-mumdex_poster
 mumdex_sequences
 mummer
 mview
@@ -125,7 +124,6 @@ pop2txt
 population_bridges
 population_database
 population_denovos
-population_denovos2
 pop_cn
 position_coverage
 primers
@@ -157,10 +155,10 @@ smash_ip_fig
 smash_qc
 smooth_data
 snp_report
-sssa
 stats
 subsample
 table_stats
+table_summary
 test_args
 test_hmm
 test_mumdex

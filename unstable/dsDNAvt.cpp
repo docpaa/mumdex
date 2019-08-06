@@ -125,7 +125,8 @@ int main(int argc, char * argv[]) try {
     info.tag[0] = vt1;
     info.tag[1] = vt2;
     if (vt2 < vt1) {
-      std::swap(vt1, vt2);
+      using std::swap;
+      swap(vt1, vt2);
       const string rcr2{reverse_complement(read2)};
       read2 = reverse_complement(read1);
       read1 = rcr2;

@@ -1328,6 +1328,10 @@ std::string("\ncbs.segment(sample=sample, alpha=") +
     // Quantal copy number plots
     PSDoc profiles_ps{out_name + "_profiles"};
     profiles_ps.pdf(create_pdf);
+
+    const bool do_chr_graphs{false};
+#define QUANTAL 0
+#if QUANTAL
     PSCNGraph quantal_graph{profiles_ps, ref, used_chrs, title};
     // quantal_graph.eps(title + "_profile");
     PSXYSeries quantal_series{quantal_graph, light_circle_marker};
@@ -1345,7 +1349,6 @@ std::string("\ncbs.segment(sample=sample, alpha=") +
       seg_quantal_hist_graph, 1000};
 
     // Quantal graphs by chromosome
-    const bool do_chr_graphs{false};
     std::vector<std::unique_ptr<PSCNGraph>> chr_quantal_graphs(chrs.size());
     std::vector<std::unique_ptr<PSXYSeries>> chr_quantal_series(chrs.size());
     std::vector<std::unique_ptr<PSXYSeries>> chr_segmented_quantal_series(
@@ -1361,14 +1364,24 @@ std::string("\ncbs.segment(sample=sample, alpha=") +
         chr_segmented_quantal_series[chr]->do_lines(true);
       }
     }
-
-#define NORM 0
+#endif
+#define NORM 1
 #if NORM
     // Regular copy number plots
     PSCNGraph ratio_graph{profiles_ps, ref, used_chrs, title};
     PSXYSeries ratio_series{ratio_graph, light_circle_marker};
     PSXYSeries segmented_ratio_series{ratio_graph, dark_circle_marker};
     segmented_ratio_series.do_lines(true);
+
+    // Histograms
+    PSGraph ratio_hist_graph{profiles_ps, "Ratio results;CN value;N",
+          Bounds{0, 5}};
+    PSHSeries<double, unsigned int> ratio_hist{ratio_hist_graph, 1000};
+    PSGraph seg_ratio_hist_graph{profiles_ps,
+          // "Segmented ratio results;CN value;N", Bounds{0.5, 4.0}};
+          "Segmented ratio results;CN value;N", Bounds{0.9, 1.1}};
+    PSHSeries<double, unsigned int> seg_ratio_hist{
+      seg_ratio_hist_graph, 1000};
 
     // Regular copy number plots by chromosome
     std::vector<std::unique_ptr<PSCNGraph>> chr_ratio_graphs(chrs.size());
@@ -1377,13 +1390,12 @@ std::string("\ncbs.segment(sample=sample, alpha=") +
         chrs.size());
     if (do_chr_graphs) {
       for (const unsigned int chr : used_chrs) {
-        chr_ratio_graphs[chr] = std::move(std::make_unique<PSCNGraph>(
-            profiles_ps, ref, chr, title));
-        chr_ratio_series[chr] = std::move(std::make_unique<PSXYSeries>(
-            *chr_ratio_graphs[chr], light_circle_marker));
-        chr_segmented_ratio_series[chr] =
-            std::move(std::make_unique<PSXYSeries>(
-            *chr_ratio_graphs[chr], dark_circle_marker));
+        chr_ratio_graphs[chr] = std::make_unique<PSCNGraph>(
+            profiles_ps, ref, chr, title);
+        chr_ratio_series[chr] = std::make_unique<PSXYSeries>(
+            *chr_ratio_graphs[chr], light_circle_marker);
+        chr_segmented_ratio_series[chr] = std::make_unique<PSXYSeries>(
+            *chr_ratio_graphs[chr], dark_circle_marker);
         chr_segmented_ratio_series[chr]->do_lines(true);
       }
     }
@@ -1454,6 +1466,7 @@ std::string("\ncbs.segment(sample=sample, alpha=") +
       if (!seg_in) throw Error("Problem parsing file") << segmented_name;
 
       // Quantal profiles
+#if QUANTAL
       quantal_series.add_point(abspos, quantal_ratio);
       quantal_hist.add_point(quantal_ratio);
       seg_quantal_hist.add_point(segmented_quantal_ratio);
@@ -1463,10 +1476,14 @@ std::string("\ncbs.segment(sample=sample, alpha=") +
         chr_segmented_quantal_series[chr]->add_point(
             chrpos, segmented_quantal_ratio);
       }
+#endif
 #if NORM
       // Regular profiles
       ratio_series.add_point(abspos, ratio);
       segmented_ratio_series.add_point(abspos, segmented_ratio);
+      ratio_hist.add_point(ratio);
+      seg_ratio_hist.add_point(segmented_ratio);
+
       if (do_chr_graphs) {
         chr_ratio_series[chr]->add_point(chrpos, ratio);
         chr_segmented_ratio_series[chr]->add_point(chrpos, segmented_ratio);

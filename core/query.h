@@ -275,7 +275,8 @@ class ReadPair : public ReadPairArgs {
           read.bad = flag & sam::is_bad_vendor_quality;
         } else {
           // read.query = move(line);
-          std::swap(read.query, line);
+          using std::swap;
+          swap(read.query, line);
           read.bad = false;
         }
         ++n_queries;

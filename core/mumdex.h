@@ -947,7 +947,8 @@ class Pair {
       if (!ordered[0] ||
           ordered[1]->lessReadPos(*ordered[0],
                                   read_2_length(), read_1_length())) {
-        std::swap(ordered[0], ordered[1]);
+        using std::swap;
+        swap(ordered[0], ordered[1]);
       }
     }
     return std::array<const MUM * const, 2>{{ordered[0], ordered[1]}};

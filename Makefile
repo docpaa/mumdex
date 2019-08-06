@@ -60,25 +60,25 @@ WARN := -Wpedantic -Wall -Wextra -Weffc++ -Wc++11-compat \
 	-Wfloat-equal -Wundef -Wshadow -Wlarger-than=10000 -Wdate-time \
 	-Wframe-larger-than=50000 -Wcast-qual -Wcast-align \
 	-Wenum-compare -Wpacked -Wredundant-decls -Winvalid-pch -Wlong-long \
-	-Wvla -Wdisabled-optimization -Wmissing-braces 
+	-Wvla -Wdisabled-optimization -Wmissing-braces
 #
 # Unused warnings to potentially add later:
 #
-#
-# -Wfloat-conversion 
+# -Wnoexcept
+# -Wfloat-conversion
 # -Wconversion
-# -Wsign-conversion 
+# -Wsign-conversion
 # -Wstrict-aliasing=1
 # -Wstrict-overflow=5
 # -Wsuggest-attribute=pure
-# -Wsuggest-attribute=noreturn 
-# -Wsuggest-attribute=const 
+# -Wsuggest-attribute=noreturn
+# -Wsuggest-attribute=const
 # -Waggregate-return --- no big deal if so, now in c++14
 # -Winline --- no big deal if not inlinable
 # -Wpadded --- lots of uncorrectable false positives from lambda structs
 # -Wabi --- incompatibilities, not useful
 # -Wstack-usage=50000 --- standard headers report unbounded usage
-# -Wunsafe-loop-optimizations --- pretty useless?  standard usage triggers it	
+# -Wunsafe-loop-optimizations --- pretty useless?  standard usage triggers it
 
 # Explicit suffix list : files like these will not be targets in "% :" for speed
 .SUFFIXES :
@@ -93,7 +93,7 @@ WARN := -Wpedantic -Wall -Wextra -Weffc++ -Wc++11-compat \
 # OS determination and special compilation stuff for each particular OS
 UNAME = $(shell sh -c 'uname -s 2> /dev/null || echo NO_UNAME_FOUND')
 
-# -Wnoexcept 
+# 
 ifeq ($(UNAME),Linux)
 	WARN += -Wstrict-null-sentinel -Wdouble-promotion \
 		-Wsync-nand -Wtrampolines \

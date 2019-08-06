@@ -6,12 +6,8 @@
 // Copyright 2019 Peter Andrews @ CSHL
 //
 
-#include <fstream>
 #include <iostream>
-#include <memory>
 #include <string>
-#include <vector>
-#include <climits>
 
 #include "error.h"
 #include "utility.h"
@@ -21,12 +17,7 @@ using std::cin;
 using std::cout;
 using std::endl;
 using std::exception;
-using std::ifstream;
-using std::istream;
-using std::make_unique;
 using std::string;
-using std::unique_ptr;
-using std::vector;
 
 using paa::Error;
 
@@ -37,51 +28,71 @@ struct Size {
   double value;
 };
 
+// Probably a bad idea - inefficient to create members and then set them later
 class FlexArgs {
  public:
   template <class ... Args>
   explicit FlexArgs(Args && ... args) {
-    process(std::forward<Args>(args)...);
-    cout << color.value << " " << size.value << " " << truth << endl;
+    cout << endl <<  __PRETTY_FUNCTION__ << endl;
+    process_args(std::forward<Args>(args)...);
+    cout << color.value << " " << size.value
+         << " " << (truth ? "true" : "false") << endl;
   }
+#if 0
+  template <class Arg1>
+  void process_args(Arg1 && arg1) {
+    cout << __PRETTY_FUNCTION__ << endl;
+    process_arg(std::forward<Arg1>(arg1));
+  }
+#endif
   template <class Arg1, class ... Args>
-  void process(Arg1 && arg1, Args && ... args) {
-    process(arg1);
-    process(std::forward<Args>(args)...);
+  void process_args(Arg1 && arg1, Args && ... args) {
+    cout << __PRETTY_FUNCTION__ << endl;
+    process_arg(std::forward<Arg1>(arg1));
+    process_args(std::forward<Args>(args)...);
   }
-  void process(const Color & color_) {
+  void process_arg(const Color & color_) {
+    cout << __PRETTY_FUNCTION__ << endl;
     color = color_;
     return;
   }
-  void process(const Size & size_) {
+  // template <class SIZE>
+  void process_arg(const Size & size_) {
+    cout << __PRETTY_FUNCTION__ << endl;
     size = size_;
     return;
   }
-  void process(const bool truth_) {
+  void process_arg(Size && size_) {
+    cout << __PRETTY_FUNCTION__ << endl;
+    size = std::move(size_);
+    return;
+  }
+  void process_arg(const bool truth_) {
+    cout << __PRETTY_FUNCTION__ << endl;
     truth = truth_;
     return;
   }
-  void process() const { }
+  void process_args() const {
+    cout << __PRETTY_FUNCTION__ << endl;
+  }
 
  private:
   Color color{"blue"};
-  Size size{3.0};
+  Size size{1.0};
   bool truth{false};
 };
 
 int main(int argc, char ** argv) try {
-  paa::exit_on_pipe_close();
-  std::ios_base::sync_with_stdio(false);
-  cin.tie(nullptr);
-
   if (--argc != 0) throw Error("usage: test_args") << argv[1];
 
   const Color red{"red"};
-  const Size big{20.0};
+  Size big{2.0};
+  const Size bigger{3.0};
   const FlexArgs test1{};
   const FlexArgs test2(big, red);
   const FlexArgs test3(true, big);
-  const FlexArgs test4{red, big, true};
+  const FlexArgs test4{red, big, true, bigger};
+  const FlexArgs test5{red, big, true, Size{0.5}};
 
   return 0;
 } catch (Error & e) {

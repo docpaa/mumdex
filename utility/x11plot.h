@@ -301,6 +301,7 @@ class X11WindowT {  // : public Geometry {
     XSetFont(display(), fill_gc, font);
     radio_gc = create_gc(app.black, app.white, radio_width,
                          LineSolid, CapButt, JoinMiter);
+    grey_gc = create_gc(app.grey, app.white);
 
     // Maximum request size for draw events (for points; divide for arcs, etc)
     max_request = XMaxRequestSize(display()) - 3;
@@ -523,7 +524,7 @@ class X11WindowT {  // : public Geometry {
 
   X11Font * text_box_font{nullptr};
 
-  GC gc{}, fill_gc{}, radio_gc{};
+  GC gc{}, fill_gc{}, radio_gc{}, grey_gc{};
   uint64_t max_request{};
   bool destroyed{false};
   mutable bool just_configured{true};
@@ -929,9 +930,7 @@ class Radio {
 
   void draw() const {
     const Point point{location()};
-    static GC grey_gc{[this]() {
-        return win->create_gc(win->app.grey, win->app.white);
-      }()};
+    GC & grey_gc{win->grey_gc};
     if (win->inside) {
       erase(point);
       draw_centered_oval(win->display(), win->window,
@@ -1217,7 +1216,8 @@ class X11Colors : public X11Win {
               best = second;
             }
           }
-          std::swap(*next(first), *best);
+          using std::swap;
+          swap(*next(first), *best);
         }
 
         // Impose snake pattern on grid
@@ -1461,6 +1461,32 @@ std::pair<Line, bool> line_within_range(
   return {line, false};  // Fix
 }
 
+class ArrayHandle {
+ public:
+  ArrayHandle() { }
+  ArrayHandle(const double * const data_, const uint64_t size__) :
+      data{data_}, size_{size__} { }
+  explicit ArrayHandle(const std::vector<double> & vec) :
+      data{&vec[0]}, size_{vec.size()} { }
+  ArrayHandle & operator=(const std::vector<double> & vec) {
+    data = &vec[0];
+    size_ = vec.size();
+    return *this;
+  }
+  void set_data(const double * const data_, const uint64_t size__) {
+    data = data_;
+    size_ = size__;
+  }
+  uint64_t size() const { return size_; }
+  const double * begin() const { return data; }
+  const double * end() const { return data + size_; }
+  double operator[](const uint64_t index) const { return data[index]; }
+
+ private:
+  const double * data{nullptr};
+  uint64_t size_{0};
+};
+
 class X11Graph : public X11Win, public SavedConfig {
  public:
   // Graph constants
@@ -1473,7 +1499,7 @@ class X11Graph : public X11Win, public SavedConfig {
   using String = std::string;
   using Strings = std::vector<String>;
   using Values = std::vector<double>;
-  using XYSeries = std::vector<const Values *>;
+  using XYSeries = std::vector<ArrayHandle>;
   using Data = std::vector<XYSeries>;
   using OneColInfo = std::pair<String, String>;
   using XColInfo = std::vector<OneColInfo>;
@@ -1636,6 +1662,7 @@ class X11Graph : public X11Win, public SavedConfig {
   std::vector<int> steps{};
   bool help_shown{false};
   bool output_{false};
+  bool exit_immediately{false};
   double y_cn_scale{1.0};
 
   //
@@ -1666,7 +1693,7 @@ class X11Graph : public X11Win, public SavedConfig {
     {"Toggle X axis logarithmic scale", this, {6.5, -1},
       {[this]() { prepare_log(); prepare_draw(); }}, true},
     {"Choose Y axis linear, logarithmic or atan scale", this, {1, -6.5},
-      {[this]() { prepare_log(); prepare_draw(); }}, true, 0, nullptr, 1.0, 4}};
+      {[this]() { prepare_log(); prepare_draw(); }}, true, 0, nullptr, 1.0, 3}};
   Radio grid_radios[2][2]{
     {{"Toggle X axis major grid lines", this, {4.25, -1},
         {[this]() { draw(); }}, true, true},
@@ -1813,8 +1840,8 @@ X11Graph::~X11Graph() {
 template <class ... Input>
 void X11Graph::add_input(Values & x__, Values & y__, Input && ... input) {
   input_data.emplace_back(0);
-  input_data.back().push_back(&x__);
-  input_data.back().push_back(&y__);
+  input_data.back().emplace_back(x__);
+  input_data.back().emplace_back(y__);
   add_input(x__, y__, std::forward<Input>(input)...);
 }
 
@@ -2047,7 +2074,7 @@ inline void X11Graph::get_range(const unsigned int a) {
     }
     for (unsigned int s{0}; s != data->size(); ++s) {
       if (!series_radios[s]) continue;
-      for (const double val : *(*data)[s][y]) {
+      for (const double val : (*data)[s][y]) {
         if (!std::isfinite(val)) continue;
         if (range[y][0] > val) range[y][0] = val;
         if (range[y][1] < val) range[y][1] = val;
@@ -2695,8 +2722,8 @@ void X11Graph::prepare() {
 
     const XYSeries & series{(*data)[s]};
     bool first_line_point{true};
-    for (unsigned int p{0}; p != series[0]->size(); ++p) {
-      const dPoint vals{(*series[0])[p], (*series[1])[p]};
+    for (unsigned int p{0}; p != series[0].size(); ++p) {
+      const dPoint vals{series[0][p], series[1][p]};
       if (std::isfinite(vals[0]) && std::isfinite(vals[1])) {
         if (in_range(vals) && do_arcs(s)) {
           arc.x = coord(0, vals[0]) - radius;;
@@ -2708,7 +2735,7 @@ void X11Graph::prepare() {
           if (vals.x < erange[0][0]) continue;
           if (first_line_point) {
             if (p) {
-              const dPoint last{(*series[0])[p - 1], (*series[1])[p - 1]};
+              const dPoint last{series[0][p - 1], series[1][p - 1]};
               points[s].push_back(xymap(last.x, last.y));
             }
             first_line_point = false;
@@ -2828,6 +2855,9 @@ void X11Graph::draw() {
     save_image(plot_name);
     app.close_window(window);
   }
+  if (exit_immediately) {
+    app.close_window(window);
+  }
 }
 
 //
@@ -2878,11 +2908,11 @@ void X11Graph::prepare_log() {
     for (unsigned int s{0}; s != input_data.size(); ++s) {
       for (const bool y : {false, true}) {
         log_series.emplace_back(
-            std::make_unique<Values>(input_data[s][y]->size()));
+            std::make_unique<Values>(input_data[s][y].size()));
         Values & log_values{*log_series.back()};
-        for (unsigned int p{0}; p != input_data[s][y]->size(); ++p)
-          log_values[p] = log10((*input_data[s][y])[p]);
-        log_data[s].push_back(&log_values);
+        for (unsigned int p{0}; p != input_data[s][y].size(); ++p)
+          log_values[p] = log10(input_data[s][y][p]);
+        log_data[s].emplace_back(log_values);
       }
       log_x_data[s][0] = log_data[s][0];
       log_y_data[s][1] = log_data[s][1];
@@ -2895,12 +2925,12 @@ void X11Graph::prepare_log() {
       atan_data = Data(input_data.size());
       for (unsigned int s{0}; s != input_data.size(); ++s) {
         atan_series.emplace_back(
-            std::make_unique<Values>(input_data[s][1]->size()));
+            std::make_unique<Values>(input_data[s][1].size()));
         Values & atan_values{*atan_series.back()};
-        for (unsigned int p{0}; p != input_data[s][1]->size(); ++p)
-          atan_values[p] = atanlog((*input_data[s][1])[p]);
+        for (unsigned int p{0}; p != input_data[s][1].size(); ++p)
+          atan_values[p] = atanlog(input_data[s][1][p]);
         atan_data[s].push_back(input_data[s][0]);
-        atan_data[s].push_back(&atan_values);
+        atan_data[s].emplace_back(atan_values);
       }
     }
     data = &atan_data;
@@ -3589,7 +3619,6 @@ class X11TextGrid : public X11Win {
       font = &fonts[fonts.size() / 2];
 
       XSync(display(), False);
-      grey_gc = create_gc(app.grey, app.white);
 
       prepare();
       shrink_window_to_fit();
@@ -3785,8 +3814,6 @@ class X11TextGrid : public X11Win {
   std::vector<unsigned int> exclusive_rows{};
   CellStatus cell_status_{};
 
-  GC grey_gc{};
-
   static constexpr unsigned int max_font_size{60};
   std::vector<unsigned int> font_sizes{};
   std::vector<X11Font> fonts{};
@@ -3863,7 +3890,10 @@ class X11Plotter {
         status[1].begin(), status[1].end(), 1) - status[1].begin() - 1]};
     for (unsigned int n{0}; n != names.size(); ++n) {
       if (status[2][n + 1]) {
-        info.first.emplace_back(X11Graph::XYSeries{xs, &data[n]});
+        X11Graph::XYSeries series;
+        series.emplace_back(*xs);
+        series.emplace_back(data[n]);
+        info.first.push_back(series);  // X11Graph::XYSeries{*xs, data[n]});
         info.second.second.emplace_back(names[n], "p");
       }
     }

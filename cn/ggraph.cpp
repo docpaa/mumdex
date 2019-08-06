@@ -1251,8 +1251,8 @@ int main(int argc, char * argv[]) try {
   Data data(n_sets * n_y, XYSeries(2));
   for (int r{0}; r != n_sets; ++r)
     for (int y{0}; y != n_y; ++y) {
-      data[n_sets * y + r][0] = &input_data[r][0];
-      data[n_sets * y + r][1] = &input_data[r][y + 1];
+      data[n_sets * y + r][0] = input_data[r][0];
+      data[n_sets * y + r][1] = input_data[r][y + 1];
     }
   using Info = std::pair<Strings, AbsposColumns::XColInfo>;
   using DataInfo = std::pair<Data, Info>;

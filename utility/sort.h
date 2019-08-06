@@ -167,7 +167,8 @@ inline void selection_sort(T begin, T end) {
   for (T to_search = to_check + 1; to_search < end; ++to_search, ++to_check) {
     auto min = std::min_element(to_search, end);
     if (*min < *to_check) {
-      std::swap(*min, *to_check);
+      using std::swap;
+      swap(*min, *to_check);
     }
   }
 }

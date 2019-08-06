@@ -89,6 +89,11 @@ class MADT {
         throw Error("MAD input is not sorted");
     calculate(values);
   }
+  class is_sorted {};
+  template <class Cont>
+  MADT(const Cont & values, const is_sorted &) {  // NOLINT
+    calculate(values);
+  }
   void calculate() {
     std::sort(values_.begin(), values_.end());
     calculate(values_);

@@ -67,7 +67,8 @@ class AreaObjFun {
       area{area_},
     r{r_},
     R{R_} {
-      if (R < r) std::swap(r, R);
+      using std::swap;
+      if (R < r) swap(r, R);
     }
 #if 1
   double operator()(const double d) const {

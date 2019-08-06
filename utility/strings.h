@@ -24,7 +24,7 @@ inline void replace_inplace(std::string & input, const char a, const char b) {
   }
 }
 inline std::string replace(const std::string & input,
-                                  const char a, const char b) {
+                           const char a, const char b) {
   size_t pos = 0;
   std::string copy{input};
   while ((pos = copy.find(a, pos)) != std::string::npos) {
@@ -35,8 +35,8 @@ inline std::string replace(const std::string & input,
 }
 
 inline std::string replace_substring(const std::string & str,
-                                            const std::string & oldstr,
-                                            const std::string & newstr) {
+                                     const std::string & oldstr,
+                                     const std::string & newstr) {
   std::string result{str};
   const size_t pos = result.find(oldstr);
   if (pos != std::string::npos) {

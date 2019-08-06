@@ -773,17 +773,27 @@ class GrowingVector {
   // deleted
   GrowingVector(const GrowingVector &) = delete;
   GrowingVector & operator=(const GrowingVector &) = delete;
-  GrowingVector & operator=(GrowingVector &&) = delete;
 
-  // construction
-  GrowingVector() : GrowingVector{initial_size} {}
-  explicit GrowingVector(const uint64_t start_size) : capacity{start_size},
-    data{static_cast<Type *>(::operator new(sizeof(Type) * capacity))} { }
+  // construction, etc
+  GrowingVector() noexcept(false) : GrowingVector{initial_size} {}
+  explicit GrowingVector(const uint64_t start_size) noexcept(false) :
+      capacity{start_size},
+      data{static_cast<Type *>(::operator new(sizeof(Type) * capacity))} { }
   GrowingVector(GrowingVector && other) :
       n_elem{other.n_elem}, capacity{other.capacity}, data{other.data} {
     other.n_elem = 0;
     other.capacity = 0;
     other.data = nullptr;
+  }
+  GrowingVector & operator=(GrowingVector && other) noexcept(true) {
+    if (capacity) delete data;
+    n_elem = other.n_elem;
+    capacity = other.capacity;
+    data = other.data;
+    other.n_elem = 0;
+    other.capacity = 0;
+    other.data = nullptr;
+    return *this;
   }
 
   // expansion

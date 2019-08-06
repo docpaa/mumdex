@@ -2,7 +2,7 @@
 // even.cpp
 //
 // simpler version of even_columns.cpp
-//   displays tabular data as text with even columns
+// displays tabular data as text with even column spacing
 //
 // Copyright 2019 Peter Andrews @ CSHL
 //
