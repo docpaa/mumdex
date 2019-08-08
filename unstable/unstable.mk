@@ -17,7 +17,6 @@ DEVELOPMENT_PROGRAMS := \
 	bridge_gene2 \
 	bridge_gene \
 	bridge_properties \
-	cancer_pop \
 	candidate_stats \
 	check_bridges \
 	check_bridges_result \
@@ -28,7 +27,6 @@ DEVELOPMENT_PROGRAMS := \
 	colsplit \
 	combine_finebins \
 	compare_segmentation \
-	compare_yoonha \
 	control_mview \
 	count_anchors \
 	count_genes \
@@ -39,7 +37,6 @@ DEVELOPMENT_PROGRAMS := \
 	determine_cn_sex \
 	determine_sex \
 	distinct_colors \
-	dsDNAvt \
 	encode \
 	event_histogram \
 	explore_coverage \
@@ -67,7 +64,6 @@ DEVELOPMENT_PROGRAMS := \
 	mapper \
 	mismatches \
 	missing_chromosome \
-	model_transmission \
 	mumdex_examples \
 	mumdex_sequences \
 	offset_beds \
@@ -105,14 +101,11 @@ DEVELOPMENT_PROGRAMS := \
 	simulate_cn \
 	simulate_events2 \
 	simulate_events \
-	simulate_seating \
-	skbr3_in_skn1 \
 	smash_ip_fig \
 	smooth_data \
 	snp_report \
 	subsample \
 	table_stats \
-	test_args \
 	test_hmm \
 	test_mumdex \
 	test_numerical \
@@ -121,9 +114,7 @@ DEVELOPMENT_PROGRAMS := \
 	test_threads \
 	test_x11 \
 	transmission \
-	transmission_old \
 	unequal_bridges \
-	validate_leukemia \
 	validate_mumdex \
 	venn \
 	wg_smash_comparison \
@@ -147,7 +138,6 @@ check_cand_cn : check_cand_cn.gslo
 check_for_pseudogene : genes.o
 check_mappability : files.o
 compare_segmentation : compare_segmentation.gslo
-compare_yoonha : utility.o
 control_mview : control_mview.x11o
 count_anchors : files.o
 count_genes : genes.o utility.o
@@ -185,7 +175,6 @@ smash_ip_fig: files.o utility.o
 sssa : files.o
 test_x11 : test_x11.x11o
 transmission : genes.o utility.o
-transmission_old : genes.o utility.o
 x11plot : x11plot.x11o
 
 

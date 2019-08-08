@@ -10,7 +10,8 @@ CN_PROGRAMS := \
 	pop_cn \
 	recurrent_cn \
 	smash \
-	smash_qc
+	smash_qc \
+	theoretical_bins
 
 PROGRAMS += $(CN_PROGRAMS)
 all : $(CN_PROGRAMS)

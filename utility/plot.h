@@ -347,7 +347,7 @@ inline double float_round(const double val, const double mul) {
     return mul * pow(10, round(log10(val)));
   }
 }
-#ifdef __APPLE__
+#ifdef __clang__
 #define CONSTEXPR
 #else
 #define CONSTEXPR constexpr

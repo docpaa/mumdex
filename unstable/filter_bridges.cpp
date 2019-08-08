@@ -45,7 +45,7 @@ int main(int argc, char* argv[])  try {
     throw Error("Problem opening output file") << bridges_out_name;
 
   for (const BridgeInfo & bridge : bridges) {
-    if (bridge.invariant() == 0 || abs(bridge.invariant()) > 1000000 ||
+    if (bridge.invariant() == 0 || labs(bridge.invariant()) > 1000000 ||
         bridge.chr1() != bridge.chr2() || bridge.high1() == bridge.high2())
       continue;
     bridges_out.write(reinterpret_cast<const char *>(&bridge),

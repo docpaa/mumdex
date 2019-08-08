@@ -3,21 +3,22 @@
 #
 # Makefile for Peter Andrews' source code
 #
-# Copyright 2017 by Peter Andrews @ CSHL
+# Copyright 2019 by Peter Andrews @ CSHL
 #
 
 # What to make by default - targets are added below and in module Makefiles
 all :
 
 # Shell to use throughout
-SHELL := bash
+# SHELL = $(warning [$@])bash
+SHELL = bash
 
 # Which modules to compile and where to find source files
 include project.mk
 VPATH := $(MODULES) $(INCLUDES)
 include $(wildcard $(addsuffix /*.mk,$(MODULES)))
 
-# Automatic dependency file creation
+# Automatic dependency file creation and inclusion
 DEPDIR := .dep
 DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$*.temp_dep
 POSTCOMPILE = @ mv -f $(DEPDIR)/$*.temp_dep $(DEPDIR)/$*.dep && touch $@
@@ -26,105 +27,58 @@ $(DEPDIR)/%.dep: ;
 .PRECIOUS: $(DEPDIR)/%.dep
 include $(wildcard $(DEPDIR)/*.dep)
 
-# Compile command and flags
-CXX :=  g++
+# Compilation variables
 STD := -std=c++11
-# -DNO_IMPLICIT_EXTERN_C=1
 
 # debug = 1
 ifdef debug
-  FAST := # -Ofast # -Ofast -DNDEBUG
-  DEBUG := -g -ggdb
+  FAST :=  -g -ggdb
 else
-  FAST := -Ofast -DNDEBUG 
-# -g -pg
-  DEBUG := # -g -ggdb
+  FAST := -Ofast -march=native -DNDEBUG
+  # For gcc under cygwin
+  ifneq (,$(findstring /cygdrive/,$(PATH)))
+    FAST += -Wa,-mbig-obj
+  else
+    LTO := -flto
+    FAST += $(LTO)
+  endif
 endif
-
-LDFLAGS	:= $(FAST)
-LIBS :=
+WARN := -Wall
+LIBS := -pthread
 INCFLAGS := $(addprefix -I ,$(INCLUDES))
+LDFLAGS := $(LTO)
 
-# For precompiled binaries... need different flags etc.
-# precompiled = defined
-ifdef precompiled
-  FAST := -Ofast
-  LDFLAGS := -static-libstdc++
+# OS determination and special compilation stuff for each particular OS
+UNAME := $(shell sh -c 'uname -s 2> /dev/null || echo NO_UNAME_FOUND')
+ifeq ($(UNAME),Darwin)
+  CXX := clang++
+  INCFLAGS += -I /opt/X11/include
+  LDFLAGS += -L /opt/X11/lib
+else
+  CXX ?= g++
 endif
 
-# Excessive compiler warnings are a good thing...
-WARN := -Wpedantic -Wall -Wextra -Weffc++ -Wc++11-compat \
-	-Wctor-dtor-privacy -Wnarrowing -Wold-style-cast -Woverloaded-virtual \
-	-Wsign-promo -Wformat=2 -Wmissing-include-dirs -Wswitch-default \
-	-Wswitch-enum -Wunused-parameter -Wuninitialized -Wunknown-pragmas \
-	-Wfloat-equal -Wundef -Wshadow -Wlarger-than=10000 -Wdate-time \
-	-Wframe-larger-than=50000 -Wcast-qual -Wcast-align \
-	-Wenum-compare -Wpacked -Wredundant-decls -Winvalid-pch -Wlong-long \
-	-Wvla -Wdisabled-optimization -Wmissing-braces
-#
-# Unused warnings to potentially add later:
-#
-# -Wnoexcept
-# -Wfloat-conversion
-# -Wconversion
-# -Wsign-conversion
-# -Wstrict-aliasing=1
-# -Wstrict-overflow=5
-# -Wsuggest-attribute=pure
-# -Wsuggest-attribute=noreturn
-# -Wsuggest-attribute=const
-# -Waggregate-return --- no big deal if so, now in c++14
-# -Winline --- no big deal if not inlinable
-# -Wpadded --- lots of uncorrectable false positives from lambda structs
-# -Wabi --- incompatibilities, not useful
-# -Wstack-usage=50000 --- standard headers report unbounded usage
-# -Wunsafe-loop-optimizations --- pretty useless?  standard usage triggers it
+# Local machine configuration definitions (possibly edit to fit your setup)
+-include make/local.mk
+
+# Build library paths into the executables, if needed
+ifeq ($(CXX),g++)
+  ifdef LD_LIBRARY_PATH
+    LDFLAGS += -Xlinker -rpath=$(LD_LIBRARY_PATH)
+  endif
+endif
+
+# Compile
+CXXFLAGS = $(STD) $(FAST) $(WARN) $(INCFLAGS)
+COMPILE.cpp = $(CXX) $(CXXFLAGS) -c
 
 # Explicit suffix list : files like these will not be targets in "% :" for speed
 .SUFFIXES :
+#.SUFFIXES : .cpp .h .o .x11o .gslo .eo .lint .dep
 .SUFFIXES : .cpp .h .o .ox .lint .dep
 
 # Do not use shortcut rule - always build .o file (using implicit chaining)
 % : %.cpp
-
-# Local machine configuration definitions (edit to fit your setup)
--include make/local.mk
-
-# OS determination and special compilation stuff for each particular OS
-UNAME = $(shell sh -c 'uname -s 2> /dev/null || echo NO_UNAME_FOUND')
-
-# 
-ifeq ($(UNAME),Linux)
-	WARN += -Wstrict-null-sentinel -Wdouble-promotion \
-		-Wsync-nand -Wtrampolines \
-		-Wlogical-op -Wzero-as-null-pointer-constant \
-		-Wvector-operation-performance -Wuseless-cast \
-		-Wconditionally-supported
-	LDFLAGS += -pthread
-	ifdef LD_LIBRARY_PATH
-		LDFLAGS += -Xlinker -rpath=$(LD_LIBRARY_PATH)
-	endif
-endif
-
-ifeq ($(UNAME),Darwin)
-	WARN += $(COMMON_WARN) -Wno-variadic-macros -Wint-to-void-pointer-cast \
-		-Wshorten-64-to-32 -Wno-unknown-pragmas \
-		-Wno-unknown-warning-option
-	INCFLAGS += -I /opt/X11/include
-	LIBFLAGS += -L /opt/X11/lib
-endif
-
-# For gcc under cygwin
-ifneq (,$(findstring /cygdrive/,$(PATH)))
-	FAST += -Wa,-mbig-obj
-	LIBS += -pthread
-endif
-
-LDFLAGS += $(LIBFLAGS)
-
-# Compile
-CXXFLAGS = $(SPECIAL) $(STD) $(FAST) $(DEBUG) $(WARN) $(INCFLAGS)
-COMPILE.cpp = $(CXX) $(CXXFLAGS) -c
 
 # Normal compilation and linking pattern rules
 %.o : %.cpp
@@ -151,16 +105,11 @@ COMPILE.cpp = $(CXX) $(CXXFLAGS) -c
 # give .gslo prerequisite if eigen headers are needed
 %.eo : %.cpp $(DEPDIR)/%.dep
 	$(COMPILE.cpp) $(DEPFLAGS) $< -o $@
-	$(POSTCOMPILE)% : %.eo ; $(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
-
-# Do not compile gsl programs under Mac OS (remove if gsl available)
-ifeq ($(UNAME),Darwin)
-# %.gslo : %.cpp ; touch $@ && echo skipping compilation of gsl $@ on mac
-# % : %.gslo ; touch $@ && echo skipping compilation of gsl $@ on mac
-endif
+	$(POSTCOMPILE)
+% : %.eo ; $(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
 
 # Do not delete .o files when a chain is used
-.PRECIOUS : %.o %.gslo %.x11o
+.PRECIOUS : %.o %.gslo %.x11o %.eo
 
 # Automatic linting of all source code in all subdirectories
 LINTDIR := .lint
@@ -175,13 +124,13 @@ $(LINTDIR)/%.lint : % ; @ $(LINT) $< 2>&1 | tee >($(LINTGREP) 1>&2) > $@
 
 # Clean all compiled files
 clean :
-	rm -f *.x11o *.gslo *.o $(PROGRAMS)
+	rm -f *.x11o *.gslo *.eo *.o $(PROGRAMS)
 	rm -Rf $(DEPDIR)/ $(LINTDIR)/ python/build python/dist
 spotless : clean
 	rm -f *~ */*~
 
 # Package code as zip in home directory
-CODEDIR	= $(notdir $(PWD))
+CODEDIR = $(notdir $(PWD))
 zip :  spotless
 	rm -f ~/$(CODEDIR).zip
 	(cd .. ; zip -r ~/$(CODEDIR) $(CODEDIR) -x\*.git\* > /dev/null)

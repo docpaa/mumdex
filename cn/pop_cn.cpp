@@ -828,7 +828,7 @@ h1, h2, h3, p { clear:left; }
   vector<EventInfo> samples_samples;
 
   mutex list_mutex;
-  mutex html_mutex;
+  // mutex html_mutex;
   mutex hist_mutex;
   mutex file_mutex;
   bool first_out{true};

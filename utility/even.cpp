@@ -129,8 +129,10 @@ int main(int argc, char ** argv) try {
     }
   }
   if (!running) {
-    for (unsigned int r = 0; r != rows.size(); ++r) {
-      print_row(r);
+    if (rows.size() != 1 || rows[0].size() != 1 || rows[0][0].size() != 0) {
+      for (unsigned int r = 0; r != rows.size(); ++r) {
+        print_row(r);
+      }
     }
   }
 

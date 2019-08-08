@@ -29,7 +29,6 @@ bridge_gene2
 bridge_properties
 bridges
 bridges2txt
-cancer_pop
 candidate_stats
 char2int
 check_bridges
@@ -42,7 +41,6 @@ colsplit
 column_split
 combine_finebins
 compare_segmentation
-compare_yoonha
 control_mview
 count_anchors
 count_genes
@@ -53,7 +51,6 @@ denovo_pseudogenes
 determine_cn_sex
 determine_sex
 distinct_colors
-dsDNAvt
 echoe
 empirical_bins
 encode
@@ -93,7 +90,6 @@ mapper
 merge_mumdex
 mismatches
 missing_chromosome
-model_transmission
 mumdex2sam
 mumdex2txt
 mumdex2txt_fast
@@ -148,8 +144,6 @@ similar_bridge
 simulate_cn
 simulate_events
 simulate_events2
-simulate_seating
-skbr3_in_skn1
 smash
 smash_ip_fig
 smash_qc
@@ -159,7 +153,6 @@ stats
 subsample
 table_stats
 table_summary
-test_args
 test_hmm
 test_mumdex
 test_numerical
@@ -167,11 +160,10 @@ test_psplot
 test_psshade
 test_threads
 test_x11
+theoretical_bins
 transmission
-transmission_old
 uint2int
 unequal_bridges
-validate_leukemia
 validate_mumdex
 venn
 wg_smash_comparison

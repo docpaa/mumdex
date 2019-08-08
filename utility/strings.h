@@ -15,7 +15,7 @@ namespace paa {
 
 std::string to_lower(const std::string & in);
 std::string to_upper(const std::string & in);
-void remove(std::string & input, const std::string & search);
+// void remove(std::string & input, const std::string & search);
 inline void replace_inplace(std::string & input, const char a, const char b) {
   size_t pos = 0;
   while ((pos = input.find(a, pos)) != std::string::npos) {
