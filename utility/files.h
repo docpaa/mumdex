@@ -319,10 +319,12 @@ class FileVector {
 #endif
 }
 
-  FileVector(FileVector && other) : file{other.file}, n_elem{other.n_elem} {
-    other.file = nullptr;
-    other.n_elem = 0;
-  }
+  FileVector(FileVector && other) noexcept :
+      file{other.file},
+      n_elem{other.n_elem} {
+        other.file = nullptr;
+        other.n_elem = 0;
+      }
 
   // size
   uint64_t size() const { return n_elem; }
@@ -381,7 +383,7 @@ class MemoryVectorBase {
 
   // construction
   MemoryVectorBase() { }
-  MemoryVectorBase(MemoryVectorBase && other) :
+  MemoryVectorBase(MemoryVectorBase && other) noexcept :
       data{other.data}, n_elem{other.n_elem} {
     other.data = nullptr;
     other.n_elem = 0;
@@ -416,7 +418,7 @@ class MemoryVector : public MemoryVectorBase<Type> {
   using Base::n_elem;
 
   // construction
-  MemoryVector(MemoryVector && other) : Base{std::move(other)} { }
+  MemoryVector(MemoryVector && other) noexcept : Base{std::move(other)} { }
   explicit MemoryVector(const std::string & file_name,
                          const bool warn_empty = true) {
     const int input{open(file_name.c_str(), O_RDONLY)};
@@ -485,7 +487,7 @@ class TMappedVector : public MemoryVectorBase<Type> {
 
   // construction
   TMappedVector() : Base{} { }
-  TMappedVector(TMappedVector && other) : Base{std::move(other)} { }
+  TMappedVector(TMappedVector && other) noexcept : Base{std::move(other)} { }
   explicit TMappedVector(const std::string & file_name,
                          const bool warn_empty = true) {
     const int input{open(file_name.c_str(), O_RDONLY)};
@@ -629,7 +631,7 @@ class FlexVector : public MemoryVectorBase<Type> {
   FlexVector & operator=(const FlexVector &) = delete;
   FlexVector & operator=(FlexVector &&) = delete;
   FlexVector() : Base{} { }
-  FlexVector(FlexVector && other) : Base{std::move(other)},
+  FlexVector(FlexVector && other) noexcept : Base{std::move(other)},
     mapped_{other.mapped_} { other.mapped_ = false; }
   explicit FlexVector(const uint64_t new_n_elem) : Base{} {
     clear_and_resize(new_n_elem);
@@ -779,13 +781,13 @@ class GrowingVector {
   explicit GrowingVector(const uint64_t start_size) noexcept(false) :
       capacity{start_size},
       data{static_cast<Type *>(::operator new(sizeof(Type) * capacity))} { }
-  GrowingVector(GrowingVector && other) :
+  GrowingVector(GrowingVector && other) noexcept :
       n_elem{other.n_elem}, capacity{other.capacity}, data{other.data} {
     other.n_elem = 0;
     other.capacity = 0;
     other.data = nullptr;
   }
-  GrowingVector & operator=(GrowingVector && other) noexcept(true) {
+  GrowingVector & operator=(GrowingVector && other) noexcept {
     if (capacity) delete data;
     n_elem = other.n_elem;
     capacity = other.capacity;
@@ -874,7 +876,7 @@ class MappedFile {
   MappedFile();
   explicit MappedFile(const std::string & file_name_,
                       const bool warn_empty = true);
-  MappedFile(MappedFile && other);
+  MappedFile(MappedFile && other) noexcept;
   ~MappedFile();
   void load(const std::string & file_name_,
             const bool warn_empty = true);
@@ -1024,7 +1026,7 @@ class OldMappedVector {
   OldMappedVector() : OldMappedVector{initial_size} {}
   explicit OldMappedVector(const uint64_t start_size) : capacity{start_size},
     data{static_cast<Type *>(::operator new(sizeof(Type) * capacity))} { }
-  OldMappedVector(OldMappedVector && old) :
+  OldMappedVector(OldMappedVector && old) noexcept :
       file{std::move(old.file)}, mapped{old.mapped},
     n_elem{old.n_elem}, capacity{old.capacity}, data{old.data} {
       old.mapped = false;
@@ -1119,7 +1121,7 @@ class OlderMappedVector {
   OlderMappedVector() : OlderMappedVector{initial_size} {}
   explicit OlderMappedVector(const uint64_t start_size) : capacity{start_size},
     data{static_cast<Type *>(::operator new(sizeof(Type) * capacity))} { }
-  OlderMappedVector(OlderMappedVector && old) :
+  OlderMappedVector(OlderMappedVector && old) noexcept :
       file{std::move(old.file)}, mapped{old.mapped},
     n_elem{old.n_elem}, capacity{old.capacity}, data{old.data} {
       old.mapped = false;
@@ -1215,7 +1217,7 @@ class CompressedInts {
     small_position{small_start},
     big_position{lookup[lookup_start]} {}
 #if 0
-  CompressedInts(CompressedInts && other) {
+  CompressedInts(CompressedInts && other) noexcept {
     lookup = move(other.lookup);
     small = move(other.small);
     big = move(other.big);

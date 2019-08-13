@@ -1937,7 +1937,7 @@ class TMUMdex : public TMUMdex_base<VECTOR> {
     own_ref{ref_arg ? false : true} {}
   TMUMdex(const std::string & name_arg, const Reference & ref_arg) :
       TMUMdex_base<VECTOR>{name_arg}, ref_{&ref_arg} {}
-  TMUMdex(TMUMdex && other) : TMUMdex_base<VECTOR>{std::move(other)},
+  TMUMdex(TMUMdex && other) noexcept : TMUMdex_base<VECTOR>{std::move(other)},
     ref_{other.ref_}, own_ref{other.own_ref} {
     other.own_ref = false;
   }

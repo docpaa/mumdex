@@ -73,7 +73,8 @@ class X11Font {
   X11Font(X11Font &) = delete;
   X11Font & operator=(const X11Font &) = delete;
   X11Font & operator=(X11Font &&) = delete;
-  X11Font(X11Font && other) : display{other.display}, font{other.font} {
+  X11Font(X11Font && other) noexcept :
+      display{other.display}, font{other.font} {
     other.display = nullptr;
     other.font = nullptr;
   }

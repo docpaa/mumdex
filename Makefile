@@ -102,7 +102,7 @@ COMPILE.cpp = $(CXX) $(CXXFLAGS) -c
 % : %.gslo ; $(CXX) $(LDFLAGS) $^ -o $@ -lgsl -lgslcblas $(LIBS)
 
 # Special rules for eigen compilation and linking
-# give .gslo prerequisite if eigen headers are needed
+# give .eo prerequisite if eigen headers are needed
 %.eo : %.cpp $(DEPDIR)/%.dep
 	$(COMPILE.cpp) $(DEPFLAGS) $< -o $@
 	$(POSTCOMPILE)

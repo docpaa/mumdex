@@ -3,13 +3,16 @@
 //
 // simpler version of even_columns.cpp
 // displays tabular data as text with even column spacing
+// and auto-determines the delimeter where feasible
 //
 // Copyright 2019 Peter Andrews @ CSHL
 //
 
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <climits>
@@ -24,7 +27,9 @@ using std::endl;
 using std::exception;
 using std::ifstream;
 using std::istream;
+using std::istringstream;
 using std::make_unique;
+using std::map;
 using std::string;
 using std::unique_ptr;
 using std::vector;
@@ -63,9 +68,9 @@ int main(int argc, char ** argv) try {
 
   const string usage{"usage: even [-d D] [-r] [input_files ...]"};
 
-  // process optional arguments
+  // Process optional arguments
   --argc;
-  char delimeter_{'\t'};
+  char delimeter_{0};
   bool running_{false};
   while (argc) {
     bool acted{false};
@@ -82,9 +87,9 @@ int main(int argc, char ** argv) try {
     }
     if (!acted) break;
   }
-  const char delimeter{delimeter_};
   const bool running{running_};
 
+  // Open inputs
   vector<unique_ptr<ifstream>> input_files;
   vector<istream *> inputs;
   if (argc) {
@@ -98,12 +103,44 @@ int main(int argc, char ** argv) try {
   } else {
     inputs.push_back(&cin);
   }
+
+  // Determine delimeter automatically, if one was not specified on command line
+  unique_ptr<istringstream> first_line;
+  const char delimeter{[delimeter_, &inputs, &first_line]() {
+      if (delimeter_) {
+        return delimeter_;
+      } else {
+        string line;
+        getline(*inputs.front(), line);
+        map<char, size_t> spaces;
+        for (const char c : line) {
+          if (isspace(c) || c == ',') {
+            ++spaces[c];
+          }
+        }
+        line += '\n';
+        first_line = make_unique<istringstream>(line.c_str());
+        inputs.insert(inputs.begin(), first_line.get());
+        if (spaces.size() == 1) {
+          return spaces.begin()->first;
+        } else if (spaces.find('\t') != spaces.end()) {
+          return '\t';
+        } else if (spaces.find(',') != spaces.end()) {
+          return ',';
+        } else if (spaces.find(' ') != spaces.end()) {
+          return ' ';
+        } else {
+          return '\t';
+        }
+      }
+    }()};
+
+  // Process inputs character by character
   char latest;
   unsigned int column = 0;
   for (istream * in : inputs) {
     while (in->get(latest)) {
       auto & row = rows.back();
-      // cerr << "got (" << latest << ")" << endl;
       if (latest == delimeter || latest == '\n') {
         if (row.back().size() > max_column_widths[column]) {
           max_column_widths[column] = static_cast<unsigned int>(
@@ -128,6 +165,8 @@ int main(int argc, char ** argv) try {
       }
     }
   }
+
+  // Output lines, if not done already
   if (!running) {
     if (rows.size() != 1 || rows[0].size() != 1 || rows[0][0].size() != 0) {
       for (unsigned int r = 0; r != rows.size(); ++r) {

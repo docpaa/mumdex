@@ -129,7 +129,7 @@ MappedFile::~MappedFile() {
     }
   }
 }
-MappedFile::MappedFile(MappedFile && other) :
+MappedFile::MappedFile(MappedFile && other) noexcept :
     file_name{other.file_name}, file_begin{other.file_begin},
   file_end{other.file_end}, page{other.page}
 {
