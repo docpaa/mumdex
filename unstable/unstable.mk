@@ -103,6 +103,7 @@ DEVELOPMENT_PROGRAMS := \
 	simulate_events \
 	smash_ip_fig \
 	smooth_data \
+	snp_counts \
 	snp_report \
 	subsample \
 	table_stats \

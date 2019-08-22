@@ -1,11 +1,3 @@
-# Test code on various compiler versions for warnings and errors
-test_compilers :
-	@ ./make/test_compilers.sh
-
-# Put online for download
-publish : zip
-	scp ~/mumdex.zip mumdex.com:/paa/mumdex.com/
-	ssh mumdex.com 'cd /paa/mumdex.com && [ -e mumdex.zip ] && rm -Rf mumdex/ && unzip mumdex.zip'
 
 # Special definitions for special places
 ifeq ($(USER), pandrews)
@@ -16,10 +8,23 @@ ifdef COMPILER_DIR
   LD_LIBRARY_PATH := $(COMPILER_DIR)/lib64:$(LD_LIBRARY_PATH)
 endif
 
-# Special compiler warnings for user paa
+# Add special compiler warnings and commands for user paa
 ifeq ($(USER), paa)
+
+# Test code on various compiler versions for warnings and errors
+  test_compilers :
+	@ ./make/test_compilers.sh
+
+# Put online for download
+  publish : zip
+	scp ~/mumdex.zip mumdex.com:/paa/mumdex.com/
+	ssh mumdex.com 'cd /paa/mumdex.com && [ -e mumdex.zip ] && rm -Rf mumdex/ && unzip mumdex.zip'
+
+  # Linting of all code by default
+  all : lint
+
   # Excessive compiler warnings are a good thing...
-  WARN := -Wpedantic -Wall -Wextra -Weffc++ -Wc++11-compat \
+  WARN += -Wpedantic -Wextra -Weffc++ -Wc++11-compat \
           -Wctor-dtor-privacy -Wnarrowing -Wold-style-cast \
           -Woverloaded-virtual -Wsign-promo -Wformat=2 -Wmissing-include-dirs \
           -Wswitch-default -Wswitch-enum -Wunused-parameter \

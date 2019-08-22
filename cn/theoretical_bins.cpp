@@ -60,7 +60,7 @@ using paa::Reference;
 int main(int argc, char* argv[]) try {
   --argc;
   if (argc != 2 && argc != 3)
-    throw Error("usage: bad_cn_bins ref n_bins [existing_bins]");
+    throw Error("usage: theoretical_bins ref n_bins [existing_bins]");
 
   // Process arguments
   const string ref_name{argv[1]};
@@ -135,14 +135,6 @@ int main(int argc, char* argv[]) try {
     cerr << "Average absolute bin position difference is "
          << aadiff << " or " << aadiff / cn_abspos.n_positions() << endl;
   }
-
-#if 0
-  // Output bins
-  for (unsigned int b{0}; b != all_bins.size(); ++b) {
-    const Bin & bin{all_bins[b]};
-    bin.output(cout, ref);
-  }
-#endif
 
   return 0;
 } catch (Error & e) {

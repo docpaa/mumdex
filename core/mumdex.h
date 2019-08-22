@@ -1064,6 +1064,7 @@ class MUM {
     return read_position0(read_length) + 1;
   }
   unsigned int offset() const { return offset_; }
+  unsigned int stop_offset() const { return offset_ + length_; }
   unsigned int length() const { return length_; }
   bool flipped() const { return flipped_; }
   bool read(const bool read_2_arg) const { return read_2_ == read_2_arg; }
@@ -1316,6 +1317,10 @@ class MUMindex {
 
   operator uint64_t() const { return pair_index_; }
   uint64_t pair_index() const { return pair_index_; }
+  template <class MUMDEX>
+  uint64_t mum_index(const MUMDEX & mumdex) const {
+    return mumdex.mums_start(pair_index_) + mum_index_;
+  }
   unsigned int mum_in_pair_index() const { return mum_index_; }
   unsigned int second_mum_in_pair_index() const { return second_mum_index_; }
   bool index_less(const MUMindex rhs) const {
@@ -1527,6 +1532,9 @@ class TMUMdex_base {
   MUM mum(const uint64_t m) const { return mums_[m]; }
   MUM mum(const MUMindex m) const {
     return mums_[pairs_[m.pair_index()].mums_start() + m.mum_in_pair_index()];
+  }
+  uint64_t mum_index(const MUMindex m) const {
+    return pairs_[m.pair_index()].mums_start() + m.mum_in_pair_index();
   }
   MUM sorted_mum(const uint64_t m) const { return mums_[index_[m]]; }
   const MUM * mums_begin() const { return mums_.begin(); }
@@ -2226,12 +2234,12 @@ class TMUMdex : public TMUMdex_base<VECTOR> {
     const std::string extra_bases_{bases_.bases(p)};
     unsigned int extra_i{0};
     const Pair & pair_{pairs_[p]};
-    uint64_t mum_index{pair_.mums_start()};
+    uint64_t mum_index_{pair_.mums_start()};
     const uint64_t mum_stop_index{this->mums_stop(p)};
     for (const bool read_2 : {false, true}) {
       unsigned int read_i{0};
-      for (; mum_index != mum_stop_index; ++mum_index) {
-        const MUM mum_{mums_[mum_index]};
+      for (; mum_index_ != mum_stop_index; ++mum_index_) {
+        const MUM mum_{mums_[mum_index_]};
         if (mum_.read_2() != read_2) break;
         const unsigned int offset{mum_.offset()};
         while (read_i < offset) {

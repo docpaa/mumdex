@@ -252,6 +252,10 @@ class Timer {
     reset();
     return temp;
   }
+  double operator-(const Timer & rhs) const {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        start - rhs.start).count() / 1000000000.0;
+  }
   double minutes() const { return seconds() / 60; }
   double minutes_interval() { return seconds_interval() / 60; }
   double hours() const { return seconds() / 3600; }

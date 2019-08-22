@@ -148,6 +148,7 @@ smash
 smash_ip_fig
 smash_qc
 smooth_data
+snp_counts
 snp_report
 stats
 subsample

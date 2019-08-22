@@ -1,5 +1,5 @@
 #! /bin/bash
 
 command="$@"
-perl -e "print 0 + (${command// /}) . "'"\n"'
+perl -e "use Math::Trig ; print 0 + (${command// /}) . "'"\n"'
 

@@ -559,9 +559,10 @@ struct MergeHelperCompare {
   }
 };
 
+template <class MUMDEX>
 class MUMsupport {
  public:
-  MUMsupport(const MUMdex & mumdex, const Pair pair,
+  MUMsupport(const MUMDEX & mumdex, const Pair pair,
              const uint64_t main_mum_index,
              const uint64_t mums_start,
              const uint64_t read_2_start,
@@ -625,7 +626,8 @@ class MUMsupport {
   unsigned int n_bases_mate[2]{0, 0};
 };
 
-void pair_bridges(const MUMdex & mumdex,
+template <class MUMDEX>
+void pair_bridges(const MUMDEX & mumdex,
                   const uint64_t pair_index,
                   std::vector<OneBridgeInfo> & output,
                   const bool skip_dupes = true) {
@@ -649,7 +651,7 @@ void pair_bridges(const MUMdex & mumdex,
     }()};
 
   // gather support info for each mum in pair
-  static thread_local std::vector<MUMsupport> support;
+  static thread_local std::vector<MUMsupport<MUMDEX>> support;
   support.clear();
   for (uint64_t mum_index{mums_start}; mum_index != mums_stop; ++mum_index) {
     support.emplace_back(mumdex, pair, mum_index,
@@ -664,7 +666,7 @@ void pair_bridges(const MUMdex & mumdex,
     const MUM mum1{mumdex.mum(mum1_index)};
     if (pair.bad(mum1.read_2())) continue;
 
-    const MUMsupport & mum1_support{support[mum1_index - mums_start]};
+    const MUMsupport<MUMDEX> & mum1_support{support[mum1_index - mums_start]};
     if (mum1_support.n_bases_read[0] < min_support_length &&
         mum1_support.n_bases_read[1] < min_support_length) {
       continue;
@@ -676,7 +678,7 @@ void pair_bridges(const MUMdex & mumdex,
       const MUM mum2{mumdex.mum(mum2_index)};
       if (mum2.read_2() != mum1.read_2()) continue;
 
-      const MUMsupport & mum2_support{support[mum2_index - mums_start]};
+      const MUMsupport<MUMDEX> & mum2_support{support[mum2_index - mums_start]};
       if (mum2_support.n_bases_read[0] < min_support_length &&
           mum2_support.n_bases_read[1] < min_support_length) {
         continue;

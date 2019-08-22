@@ -1,35 +1,24 @@
 #
 # Makefile
 #
-# Makefile for Peter Andrews' source code
+# Common Makefile for all source code packages
 #
 # Copyright 2019 by Peter Andrews @ CSHL
 #
 
-# What to make by default - targets are added below and in module Makefiles
-all :
-
-# Shell to use throughout
-# SHELL = $(warning [$@])bash
+# Shell to use throughout, or for very verbose try: SHELL = $(warning [$@])bash
 SHELL = bash
 
 # Which modules to compile and where to find source files
 include project.mk
-VPATH := $(MODULES) $(INCLUDES)
+VPATH := $(MODULES)
 include $(wildcard $(addsuffix /*.mk,$(MODULES)))
 
-# Automatic dependency file creation and inclusion
-DEPDIR := .dep
-DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$*.temp_dep
-POSTCOMPILE = @ mv -f $(DEPDIR)/$*.temp_dep $(DEPDIR)/$*.dep && touch $@
-$(shell mkdir -p $(DEPDIR) > /dev/null)
-$(DEPDIR)/%.dep: ;
-.PRECIOUS: $(DEPDIR)/%.dep
-include $(wildcard $(DEPDIR)/*.dep)
-
-# Compilation variables
+# Compilation flags
 STD := -std=c++11
-
+WARN := -Wall
+LIBS := -pthread
+INCFLAGS := $(addprefix -I ,$(MODULES))
 # debug = 1
 ifdef debug
   FAST :=  -g -ggdb
@@ -43,9 +32,6 @@ else
     FAST += $(LTO)
   endif
 endif
-WARN := -Wall
-LIBS := -pthread
-INCFLAGS := $(addprefix -I ,$(INCLUDES))
 LDFLAGS := $(LTO)
 
 # OS determination and special compilation stuff for each particular OS
@@ -55,6 +41,7 @@ ifeq ($(UNAME),Darwin)
   INCFLAGS += -I /opt/X11/include
   LDFLAGS += -L /opt/X11/lib
 else
+  # Use clang++ instead by defining CXX environment variable
   CXX ?= g++
 endif
 
@@ -69,41 +56,38 @@ ifeq ($(CXX),g++)
 endif
 
 # Compile
-CXXFLAGS = $(STD) $(FAST) $(WARN) $(INCFLAGS)
-COMPILE.cpp = $(CXX) $(CXXFLAGS) -c
+COMPILE.cpp = $(CXX) $(STD) $(FAST) $(WARN) $(INCFLAGS) -c
 
-# Explicit suffix list : files like these will not be targets in "% :" for speed
+# Clear implicit suffix rules
 .SUFFIXES :
-#.SUFFIXES : .cpp .h .o .x11o .gslo .eo .lint .dep
-.SUFFIXES : .cpp .h .o .ox .lint .dep
 
 # Do not use shortcut rule - always build .o file (using implicit chaining)
 % : %.cpp
 
 # Normal compilation and linking pattern rules
 %.o : %.cpp
-%.o : %.cpp $(DEPDIR)/%.dep
+%.o : %.cpp .dep/%.dep
 	$(COMPILE.cpp) $(DEPFLAGS) $< -o $@
 	$(POSTCOMPILE)
 % : %.o ; $(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
 
 # Special rules for X11 compilation and linking
 # give .x11o prerequisite if X library needed
-%.x11o : %.cpp $(DEPDIR)/%.dep
+%.x11o : %.cpp .dep/%.dep
 	$(COMPILE.cpp) $(DEPFLAGS) $< -o $@
 	$(POSTCOMPILE)
 % : %.x11o ; $(CXX) $(LDFLAGS) $^ -o $@ -lX11 $(LIBS)
 
 # Special rules for gsl compilation and linking
 # give .gslo prerequisite if gsl library needed
-%.gslo : %.cpp $(DEPDIR)/%.dep
+%.gslo : %.cpp .dep/%.dep
 	$(COMPILE.cpp) $(DEPFLAGS) $< -o $@
 	$(POSTCOMPILE)
 % : %.gslo ; $(CXX) $(LDFLAGS) $^ -o $@ -lgsl -lgslcblas $(LIBS)
 
 # Special rules for eigen compilation and linking
 # give .eo prerequisite if eigen headers are needed
-%.eo : %.cpp $(DEPDIR)/%.dep
+%.eo : %.cpp .dep/%.dep
 	$(COMPILE.cpp) $(DEPFLAGS) $< -o $@
 	$(POSTCOMPILE)
 % : %.eo ; $(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
@@ -111,26 +95,15 @@ COMPILE.cpp = $(CXX) $(CXXFLAGS) -c
 # Do not delete .o files when a chain is used
 .PRECIOUS : %.o %.gslo %.x11o %.eo
 
-# Automatic linting of all source code in all subdirectories
-LINTDIR := .lint
-LINTCODE := $(wildcard $(addsuffix /*.h,$(MODULES))) $(wildcard $(addsuffix /*.cpp,$(MODULES)))
-LINT := ./make/cpplint.py --filter=-readability/streams,-runtime/printf,-build/header_guard,-build/c++11,-runtime/references
-LINTGREP := grep -v -e 'Done process' -e 'Total err'
-$(shell mkdir -p $(LINTDIR) > /dev/null)
-all : lint
-lint : $(addprefix $(LINTDIR)/,$(notdir $(LINTCODE:=.lint)))
-$(LINTDIR)/%.lint : % ; @ $(LINT) $< 2>&1 | tee >($(LINTGREP) 1>&2) > $@
-.PRECIOUS: $(LINTDIR)/%.lint
-
 # Clean all compiled files
 clean :
 	rm -f *.x11o *.gslo *.eo *.o $(PROGRAMS)
-	rm -Rf $(DEPDIR)/ $(LINTDIR)/ python/build python/dist
+	rm -Rf .dep/ .lint/ python/build python/dist
 spotless : clean
 	rm -f *~ */*~
 
 # Package code as zip in home directory
-CODEDIR = $(notdir $(PWD))
+CODEDIR := $(notdir $(PWD))
 zip :  spotless
 	rm -f ~/$(CODEDIR).zip
 	(cd .. ; zip -r ~/$(CODEDIR) $(CODEDIR) -x\*.git\* > /dev/null)
@@ -146,3 +119,23 @@ fbin :
 	@rsync $(shell find $(shell pwd)/ -perm -u=x -type f | \
 		grep -v -e \.git -e /python/ -e '\'~$\'') ~/bin/
 	@echo bin transfer done
+
+# Automatic dependency file creation and inclusion
+DEPFLAGS = -MT $@ -MMD -MP -MF .dep/$*.temp_dep
+POSTCOMPILE = @ mv -f .dep/$*.temp_dep .dep/$*.dep && touch $@
+$(shell mkdir -p .dep > /dev/null)
+.dep/%.dep: ;
+.PRECIOUS: .dep/%.dep
+include $(wildcard .dep/*.dep)
+
+# Optional linting of all source code in all subdirectories
+LINTCODE := $(wildcard $(addsuffix /*.h,$(MODULES))) $(wildcard $(addsuffix /*.cpp,$(MODULES)))
+LINT := ./make/cpplint.py --filter=-readability/streams,-runtime/printf,-build/header_guard,-build/c++11,-runtime/references
+LINTGREP := grep -v -e 'Done process' -e 'Total err'
+$(shell mkdir -p .lint > /dev/null)
+lint : $(addprefix .lint/,$(notdir $(LINTCODE:=.lint)))
+.lint/%.lint : % ; @ $(LINT) $< 2>&1 | tee >($(LINTGREP) 1>&2) > $@
+.PRECIOUS: .lint/%.lint
+# uncomment the following line to enable automatic linting
+# all : lint
+

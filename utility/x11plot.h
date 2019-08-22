@@ -502,7 +502,22 @@ class X11WindowT {  // : public Geometry {
   virtual void draw() {
     clear_window();
   }
-  void prepare_draw() { prepare(); draw(); }
+  void prepare_draw() {
+#define USE_TIMER_PD 0
+#if USE_TIMER_PD
+    Timer timer;
+    static Timer last_timer;
+#endif
+    prepare();
+    draw();
+#if USE_TIMER_PD
+    std::cerr << "Time to redraw was "
+              << 1000 * timer.seconds() << " milliseconds and "
+              << 1000 * (timer - last_timer)
+              << " since previous redraw" << std::endl;
+    last_timer = timer;
+#endif
+  }
 
   // Get rid of?
   int x_offset() const { return geometry_.x_offset(); }
@@ -2748,6 +2763,7 @@ void X11Graph::prepare() {
     }
   };
 
+  constexpr bool multithreaded{true};
   std::vector<std::future<void>> futures;
   for (unsigned int s{0}; s != data->size(); ++s) {
     XRectangle clip_rectangle(
@@ -2763,9 +2779,13 @@ void X11Graph::prepare() {
       XSetClipRectangles(display(), series_line_gcs[s], 0, 0,
                          &clip_rectangle, 1, YXBanded);
     }
-    futures.emplace_back(pool.run(series_fun, s));
+    if (multithreaded) {
+      futures.emplace_back(pool.run(series_fun, s));
+    } else {
+      series_fun(s);
+    }
   }
-  for (std::future<void> & result : futures) result.get();
+  if (multithreaded) for (std::future<void> & result : futures) result.get();
 }
 
 void X11Graph::draw() {

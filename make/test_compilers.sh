@@ -15,7 +15,7 @@ nproc=$(nproc)
 mkdir -p ~/.compile
 unset COMPILER_DIR
 
-for compiler in 9.1.0 8.3.0 7.4.0 6.5.0 5.5.0 ; do
+for compiler in 9.2.0 8.3.0 7.4.0 6.5.0 5.5.0 ; do
     if [ -z "$one_compiler" ] || [ $compiler = "$one_compiler" ] ; then
         echo -n Compiler $compiler:' '
         start=$(date +%s)
