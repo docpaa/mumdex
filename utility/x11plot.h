@@ -4442,10 +4442,20 @@ class TabularData {
     X11Graph::DataInfo info{{}, X11Graph::Info{{name()}, {}}};
     const uint64_t x_col{columns.front()};
     if (x_col >= n_cols()) throw Error("Bad X column");
+    if (!is_real(x_col)) {
+      std::cerr << "Selected X axis " << name(x_col) << " is not numeric"
+                << std::endl;
+      return;
+    }
     std::ostringstream graph_name;
     for (uint64_t c{1}; c != columns.size(); ++c) {
       const uint64_t y_col{columns[c]};
       if (y_col >= n_cols()) throw Error("Bad Y column") << y_col << n_cols();
+      if (!is_real(y_col)) {
+        std::cerr << "Selected Y axis " << name(y_col) << " is not numeric"
+                  << std::endl;
+        return;
+      }
       X11Graph::XYSeries series;
       series.emplace_back(reals(x_col));
       series.emplace_back(reals(y_col));
