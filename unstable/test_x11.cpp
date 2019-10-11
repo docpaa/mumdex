@@ -10,6 +10,7 @@
 #include <exception>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "error.h"
@@ -111,7 +112,10 @@ int main(int argc, char*[]) try {
     {"hello", "there", "my", "friend"},
     {"World", "there", "mistake", "me"}, {"1", "2", "", "4"}};
   using Vec = std::vector<unsigned int>;
-  app.create<X11TextGrid>(text, Vec{0}, Vec{0}, Vec{1});
+  using Cells = std::vector<std::pair<unsigned int, unsigned int>>;
+  app.create<X11TextGrid>(text, Cells{}, Cells{},
+                          Vec{0}, Vec{0}, Vec{1}, Vec{},
+                          nullptr, nullptr, nullptr);
   app.run();
 
   return 0;

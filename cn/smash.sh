@@ -94,7 +94,7 @@ echo running smash on sample $name in fastq files $fastq1, $fastq2 using referen
 echo $mumdex_dir/smash "$ref" '<('zcat "$fastq1"')' '<('zcat "$fastq2"')' 20 4 1000 $n_threads "$name" "$bin_files" "$bad_pos" '>' "$name".out.txt '2>' "$name".err.txt
 
 if $mumdex_dir/smash "$ref" <(zcat "$fastq1") <(zcat "$fastq2") 20 4 1000 $n_threads "$name" "$bin_files" "$bad_pos" > "$name".out.txt 2> "$name".err.txt ; then
-    echo done with smash.sh for sample $name
+    echo done with smash for sample $name
 else
     echo smash failed
     exit 1

@@ -3,7 +3,7 @@
 //
 // Plot on X11
 //
-// Copyright 2016 - 2018 Peter Andrews @ CSHL
+// Copyright 2016 - 2019 Peter Andrews @ CSHL
 //
 
 #ifndef PAA_X11PLOT_H
@@ -22,12 +22,14 @@
 #include <list>
 #include <functional>
 #include <fstream>
+#include <future>
 #include <map>
 #include <memory>
 #include <numeric>
 #include <set>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -45,7 +47,7 @@ namespace paa {
 using void_fun = std::function<void ()>;
 using bool_fun = std::function<bool ()>;
 using void_uint_fun = std::function<void (const unsigned int)>;
-
+#if 1
 class X11Font {
  public:
   X11Font(Display * display_,
@@ -54,32 +56,34 @@ class X11Font {
           const std::string font_weight = "bold",
           const unsigned int x_ppi = 100,
           const unsigned int y_ppi = 100,
-          const bool fallback = false) : display{display_} {
-    const std::vector<std::string> font_name_trials{
-      font_name, "*sans*", "utopia", "*"};
-    for (const std::string & trial_name : font_name_trials) {
-      if (trial_name.empty()) continue;
-      const std::string font_spec{std::string("-*-") + trial_name +
-            "-" + font_weight + "-r-normal-*-*-" +
-            std::to_string(point_size) + "-" +
-            std::to_string(x_ppi) + "-" + std::to_string(y_ppi) +
-            "-p-0-iso8859-1"};
-      font = XLoadQueryFont(display, font_spec.c_str());
-      if (font) break;
-    }
-    if (fallback && !font) font = XLoadQueryFont(display, "fixed");
-  }
+          const bool fallback = false) : display{display_}, size_{point_size} {
+            const std::vector<std::string> font_name_trials{
+              font_name, "*sans*", "utopia", "*"};
+            for (const std::string & trial_name : font_name_trials) {
+              if (trial_name.empty()) continue;
+              const std::string font_spec{std::string("-*-") + trial_name +
+                    "-" + font_weight + "-r-normal-*-*-" +
+                    std::to_string(point_size * 10) + "-" +
+                    std::to_string(x_ppi) + "-" + std::to_string(y_ppi) +
+                    "-p-0-iso8859-1"};
+              font = XLoadQueryFont(display, font_spec.c_str());
+              if (font) break;
+            }
+            if (fallback && !font) font = XLoadQueryFont(display, "fixed");
+          }
 
   X11Font(X11Font &) = delete;
   X11Font & operator=(const X11Font &) = delete;
   X11Font & operator=(X11Font &&) = delete;
   X11Font(X11Font && other) noexcept :
-      display{other.display}, font{other.font} {
+      display{other.display}, size_{other.size_}, font{other.font} {
     other.display = nullptr;
+    other.size_ = 0;
     other.font = nullptr;
   }
 
   operator bool() const { return font != nullptr; }
+  unsigned int size() const { return size_; }
   Font id() const { return font->fid; }
   int width() const {
     return font->max_bounds.rbearing - font->max_bounds.lbearing;
@@ -107,22 +111,95 @@ class X11Font {
         font->per_char[static_cast<int>(text[0])].lbearing + 1;
   }
 
-  ~X11Font() {
-    if (true && font) {
-      XFreeFont(display, font);
-    }
-  }
+  ~X11Font() { if (font) XFreeFont(display, font); }
 
   Display * display{nullptr};
+  unsigned int size_{0};
   XFontStruct * font{nullptr};
 };
+#else
+class X11Font {
+ public:
+  X11Font(Display * display_,
+          const unsigned int point_size,
+          const std::string font_name = "",
+          const std::string font_weight = "bold",
+          const unsigned int x_ppi = 100,
+          const unsigned int y_ppi = 100,
+          const bool fallback = false) : display{display_}, size_{point_size} {
+            const std::vector<std::string> font_name_trials{
+              font_name, "*sans*", "utopia", "*"};
+            for (const std::string & trial_name : font_name_trials) {
+              if (trial_name.empty()) continue;
+              const std::string font_spec{std::string("-*-") + trial_name +
+                    "-" + font_weight + "-r-normal-*-*-" +
+                    std::to_string(point_size * 10) + "-" +
+                    std::to_string(x_ppi) + "-" + std::to_string(y_ppi) +
+                    "-p-0-iso8859-1"};
+              font_ptr = XLoadQueryFont(display, font_spec.c_str());
+              if (font_ptr) break;
+            }
+            if (fallback && !font_ptr) font_ptr =
+                                           XLoadQueryFont(display, "fixed");
+            font = *font_ptr;
+          }
+
+  X11Font(X11Font &) = delete;
+  X11Font & operator=(const X11Font &) = delete;
+  X11Font & operator=(X11Font &&) = delete;
+  X11Font(X11Font && other) noexcept :
+      display{other.display}, size_{other.size_},
+      font_ptr{other.font_ptr}, font{other.font} {
+    other.display = nullptr;
+    other.size_ = 0;
+    other.font_ptr = nullptr;
+  }
+
+  operator bool() const { return font_ptr != nullptr; }
+  unsigned int size() const { return size_; }
+  Font id() const { return font.fid; }
+  int width() const {
+    return font.max_bounds.rbearing - font.max_bounds.lbearing;
+  }
+  int ascent() const { return font.max_bounds.ascent; }
+  int descent() const { return font.max_bounds.descent; }
+  int height() const {
+    return font.max_bounds.ascent + font.max_bounds.descent;
+  }
+  int origin_height() const { return -font.max_bounds.descent; }
+  int string_width(const std::string & text) const {
+    return XTextWidth(font_ptr, text.c_str(),  // Fix this?
+                      static_cast<unsigned int>(text.size()));
+  }
+  int centered_y(const int y) const {
+    return y + (font.max_bounds.ascent - font.max_bounds.descent) / 2;
+  }
+  int below_y(const int y) const { return y + font.max_bounds.ascent; }
+  int centered_x(const std::string & text, const int x) const {
+    return x - (string_width(text) + 1) / 2 -
+        font.per_char[static_cast<int>(text[0])].lbearing;
+  }
+  double d_centered_x(const std::string & text, const double x) const {
+    return x - (string_width(text) + 1) / 2.0 -
+        font.per_char[static_cast<int>(text[0])].lbearing + 1;
+  }
+
+  ~X11Font() { if (font_ptr) XFreeFont(display, font_ptr); }
+
+  Display * display{nullptr};
+  unsigned int size_{0};
+  XFontStruct * font_ptr{nullptr};
+  XFontStruct font{};
+};
+#endif
 
 class X11Fonts {
  public:
-  static constexpr unsigned int max_font_size{500};
+  static constexpr unsigned int max_font_size{1000};
 
   template <class App>
   explicit X11Fonts(const App & app,
+                    const bool bold = true,
                     const std::string & font_name = "") {
     Display * display{app.display};
     fonts.reserve(max_font_size);
@@ -130,16 +207,26 @@ class X11Fonts {
     std::vector<unsigned int> widths;
     std::vector<X11Font> temp_fonts;
     std::vector<unsigned int> temp_sizes;
-    for (unsigned int tenth_points{40}; tenth_points <= max_font_size;
-         tenth_points += 10) {
-      X11Font font{display, tenth_points, font_name, "bold",
+    unsigned int increment{1};
+    for (unsigned int points{4}; points <= max_font_size;
+         points += increment) {
+      if (points >= 500) {
+        increment = 50;
+      } else if (points >= 100) {
+        increment = 10;
+      } else if (points >= 50) {
+        increment = 5;
+      } else if (points >= 10) {
+        increment = 2;
+      }
+      X11Font font{display, points, font_name, bold ? "bold" : "medium",
             app.pixels_per_inch(0), app.pixels_per_inch(1),
-            tenth_points == max_font_size && fonts.empty()};
+            points == max_font_size && fonts.empty()};
       if (font) {
         indexes.push_back(temp_fonts.size());
         widths.push_back(font.string_width("A test string to measure width"));
         temp_fonts.push_back(std::move(font));
-        temp_sizes.push_back(tenth_points);
+        temp_sizes.push_back(points);
       }
     }
     sort(indexes.begin(), indexes.end(),
@@ -148,24 +235,23 @@ class X11Fonts {
          });
     for (const uint64_t fi : indexes) {
       fonts.push_back(std::move(temp_fonts[fi]));
-      lookup[temp_sizes[fi]] = static_cast<unsigned int>(sizes.size());
-      sizes.push_back(temp_sizes[fi]);
+      lookup[temp_sizes[fi]] = static_cast<unsigned int>(sizes_.size());
+      sizes_.push_back(temp_sizes[fi]);
     }
     if (fonts.empty()) throw Error("No fonts loaded");
   }
-
   X11Font * size(const unsigned int points) const {
     return &fonts[lookup.at(points)];  // can throw exception
   }
   X11Font * at_least(const unsigned int points) const {
-    auto found = lower_bound(sizes.begin(), sizes.end(), points);
-    if (found == sizes.end()) --found;
-    return &fonts[found - sizes.begin()];
+    auto found = lower_bound(sizes_.begin(), sizes_.end(), points);
+    if (found == sizes_.end()) --found;
+    return &fonts[found - sizes_.begin()];
   }
   X11Font * at_most(const unsigned int points) const {
-    auto found = upper_bound(sizes.begin(), sizes.end(), points);
-    if (found == sizes.begin()) ++found;
-    return &fonts[found - 1 - sizes.begin()];
+    auto found = upper_bound(sizes_.begin(), sizes_.end(), points);
+    if (found == sizes_.begin()) ++found;
+    return &fonts[found - 1 - sizes_.begin()];
   }
   X11Font * fits(const std::string text,
                  const int width, const int height) const {
@@ -176,10 +262,19 @@ class X11Fonts {
     }
     return &fonts[0];
   }
+  X11Font * smaller(X11Font * font) const {
+    if (font != &fonts[0]) return font - 1;
+    return font;
+  }
+  X11Font * bigger(X11Font * font) const {
+    if (font != &fonts[fonts.size() - 1]) return font + 1;
+    return font;
+  }
   void clear() { fonts.clear(); }
+  const std::vector<unsigned int> & sizes() const { return sizes_; }
 
   std::map<unsigned int, unsigned int> lookup{};
-  std::vector<unsigned int> sizes{};
+  std::vector<unsigned int> sizes_{};
   mutable std::vector<X11Font> fonts{};
 };
 
@@ -253,6 +348,36 @@ bool operator!=(const XPoint lhs, const XPoint & rhs) {
   return lhs.x != rhs.x || lhs.y != rhs.y;
 }
 
+//
+// special message codes
+//
+static constexpr int first_code{383492373};
+static constexpr int table_code{876429587};
+static constexpr int graph_code{764376543};
+static constexpr int share_code{273475694};
+static constexpr int close_code{443877525};
+static constexpr int  exit_code{589348934};
+void send_message(Display * display, Window window, const int code0 = 0,
+                  const int code1 = 0, const int code2 = 0,
+                  const int code3 = 0, const int code4 = 0) {
+  XEvent event;
+  XClientMessageEvent & message{event.xclient};
+  message.type = ClientMessage;
+  message.serial = 0;
+  message.send_event = true;
+  message.display = display;
+  message.window = window;
+  message.message_type = 0;
+  message.format = 32;
+  message.data.l[0] = code0;
+  message.data.l[1] = code1;
+  message.data.l[2] = code2;
+  message.data.l[3] = code3;
+  message.data.l[4] = code4;
+  XSendEvent(display, window, False, 0, &event);
+  XFlush(display);
+}
+
 // Window class in an app
 template <class X11App>
 class X11WindowT {  // : public Geometry {
@@ -290,7 +415,7 @@ class X11WindowT {  // : public Geometry {
       XSetNormalHints(display(), window, &hints);
     }
 
-    const Font font{app.fonts.at_most(300)->id()};
+    const Font font{app.fonts.at_most(30)->id()};
 
     // Colors
     XSync(display(), False);
@@ -303,6 +428,7 @@ class X11WindowT {  // : public Geometry {
     radio_gc = create_gc(app.black, app.white, radio_width,
                          LineSolid, CapButt, JoinMiter);
     grey_gc = create_gc(app.grey, app.white);
+    ltgrey_gc = create_gc(app.ltgrey, app.white);
 
     // Maximum request size for draw events (for points; divide for arcs, etc)
     max_request = XMaxRequestSize(display()) - 3;
@@ -314,9 +440,11 @@ class X11WindowT {  // : public Geometry {
   X11WindowT & operator=(const X11WindowT &) = delete;
 
   virtual ~X11WindowT() {
-    for (GC g : {gc, fill_gc, radio_gc}) XFreeGC(display(), g);
+    for (GC g : {gc, fill_gc, radio_gc, grey_gc, ltgrey_gc})
+      XFreeGC(display(), g);
     if (pixmap_used) XFreePixmap(display(), pixmap);
     XDestroyWindow(display(), window);
+    XFlush(display());
   }
 
   // Window information
@@ -373,9 +501,35 @@ class X11WindowT {  // : public Geometry {
   virtual void motion(const XMotionEvent &) { }
   virtual void button_release(const XButtonEvent &) { }
   virtual void leave(const XCrossingEvent &) { }
+
+  void send_message(const int code0, const int code1 = 0, const int code2 = 0) {
+    std::ostringstream command;
+    command << "~/ggraph/send_message " << window
+            << " " << code0 << " " << code1 << " " << code2;
+    if (system(command.str().c_str()) != 0)
+      throw Error("Problem sending message");
+    return;
+  }
+  void close() { send_message(first_code, close_code); }
+  void close_all() { send_message(first_code, exit_code); }
   virtual void client_message(const XClientMessageEvent & event) {
     if (static_cast<uint64_t>(event.data.l[0]) == *app.wmDeleteMessage()) {
       app.close_window(window);
+      return;
+    }
+    if (event.data.l[0] == first_code) {
+      switch (event.data.l[1]) {
+        case close_code:
+          app.close_window(window);
+          break;
+        case exit_code:
+          app.close_all();
+          break;
+        default:
+          std::cerr << "Unrecognized code in client_message "
+                    << event.data.l[1] << std::endl;
+          break;
+      }
     }
   }
 
@@ -383,13 +537,13 @@ class X11WindowT {  // : public Geometry {
     bounds[y][2] = (bounds[y][1] = h) - (bounds[y][0] = l);
   }
   void set_bounds(const int xl, const int xh, const int yl, const int yh) {
-    const bool valid_initial_bounds{bounds.size() > 0};
-    if (!valid_initial_bounds) bounds.assign(2, std::vector<int>(3));
+    // const bool valid_initial_bounds{bounds.size() > 0};
+    // if (!valid_initial_bounds) bounds.assign(2, std::vector<int>(3));
     const iBounds last_bounds = bounds;
     set_bounds(0, xl, xh);
     set_bounds(1, yl, yh);
-    if (bounds != last_bounds) {
-      if (valid_initial_bounds) XFreePixmap(display(), pixmap);
+    if (use_pixmap && bounds != last_bounds) {
+      if (pixmap_used) XFreePixmap(display(), pixmap);
       pixmap = XCreatePixmap(display(), window, width(), height(), app.depth);
       pixmap_used = true;
     }
@@ -421,14 +575,6 @@ class X11WindowT {  // : public Geometry {
     return get_char_and_keysym(event).second;
   }
 
-#if 0
-  void show_text_box(const std::string & text, const Point location,
-                     const uint64_t height_px = 20,
-                     const uint64_t min_chars = 5) {
-    return;
-  }
-#endif
-
   void save_image(const std::string & base_name,
                   const uint64_t max_colors = 256,
                   void_fun call_back = [] () {}) {
@@ -453,6 +599,9 @@ class X11WindowT {  // : public Geometry {
                   const unsigned int w, const unsigned int h,
                   void_fun call_back = [] () {},
                   const uint64_t max_colors = 256) {
+    static const std::string good_chars{"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+          "abcdefghijklmnopqrstuvwxyz{|}~ !#$%&'()*+,-./[]^_`:;<=>?@"};
+
     XImage * image{
       XGetImage(display(), d, xp, yp, w, h, XAllPlanes(), XYPixmap)};
     if (!image) throw Error("Could not get image");
@@ -461,15 +610,15 @@ class X11WindowT {  // : public Geometry {
     XColor color;
     std::ostringstream color_string;
     std::ostringstream image_string;
-    const bool two_chars{max_colors > app.good_chars.size()};
+    const bool two_chars{max_colors > good_chars.size()};
     for (unsigned int y{0}; y != h; ++y) {
       image_string << '"';
       for (unsigned int x{0}; x != w; ++x) {
         color.pixel = XGetPixel(image, x, y);
         std::string color_code{""};
         if (two_chars)
-          color_code += app.good_chars[colors.size() / app.good_chars.size()];
-        color_code += app.good_chars[colors.size() % app.good_chars.size()];
+          color_code += good_chars[colors.size() / good_chars.size()];
+        color_code += good_chars[colors.size() % good_chars.size()];
         auto inserted = colors.emplace(color.pixel, color_code);
         if (inserted.second == true) {
           XQueryColor(display(), app.colormap, &color);
@@ -499,9 +648,7 @@ class X11WindowT {  // : public Geometry {
 
   // Data preparation and drawing functions (just an empty window here)
   virtual void prepare() { }
-  virtual void draw() {
-    clear_window();
-  }
+  virtual void draw() { clear_window(); }
   void prepare_draw() {
 #define USE_TIMER_PD 0
 #if USE_TIMER_PD
@@ -531,8 +678,9 @@ class X11WindowT {  // : public Geometry {
 
   Geometry geometry_;
   X11App & app;
-  iBounds bounds{};
+  iBounds bounds{iBounds(2, std::vector<int>(3))};
   Window window{};
+  bool use_pixmap{false};
   Pixmap pixmap{};
   bool pixmap_used{false};
   std::vector<std::string> image_names{};
@@ -540,7 +688,7 @@ class X11WindowT {  // : public Geometry {
 
   X11Font * text_box_font{nullptr};
 
-  GC gc{}, fill_gc{}, radio_gc{}, grey_gc{};
+  GC gc{}, fill_gc{}, radio_gc{}, grey_gc{}, ltgrey_gc{};
   uint64_t max_request{};
   bool destroyed{false};
   mutable bool just_configured{true};
@@ -567,7 +715,8 @@ class X11App {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wold-style-cast"
 
-  X11App() : display{open_default_display()},
+  explicit X11App(ThreadPool * pool_ = nullptr) :
+      pool{pool_}, display{open_default_display()},
     root{DefaultRootWindow(display)},
     screen{DefaultScreen(display)},
     display_size{DisplayWidth(display, screen),
@@ -580,6 +729,7 @@ class X11App {
     black{BlackPixel(display, screen)},
     white{WhitePixel(display, screen)},
     grey{get_color("rgb:cc/cc/cc")},
+    ltgrey{get_color("rgb:ee/ee/ee")},
     red{get_color("rgb:cc/00/00")},
     wmDeleteMessage_{XInternAtom(display, "WM_DELETE_WINDOW", False)} { }
 
@@ -596,14 +746,6 @@ class X11App {
   }
 
   // Construct a child window
-#if 0
-  class PrivateX11App {
-   public:
-    explicit PrivateX11App(X11App & app_) : app{app_} { }
-    operator X11App & () { return app; }
-    X11App & app;
-  };
-#endif
   template <class Win, class ... WinArgs>
   Win & create(WinArgs && ... win_args) {
     return reinterpret_cast<Win &>(add(
@@ -617,9 +759,7 @@ class X11App {
     return **win;
   }
 
-  X11Win & window(const Window win) {
-    return **window_lookups[win];
-  }
+  X11Win & window(const Window win) { return **window_lookups[win]; }
 
   unsigned int pixels_per_inch(const bool y) const {
     return 25.4 * display_size[y] / display_mm[y];
@@ -656,10 +796,12 @@ class X11App {
     // Event loop
     XEvent event{};
     const bool debug{false};
+    running = true;
     while (windows.size()) {
-      // Configure only when no events are pending
+      // Configure or do other things only when no events are pending
       if (!XPending(display)) {
         for (auto pair : configures) {
+          if (debug) std::cerr << "Do delayed configure" << std::endl;
           window(pair.first).configure(pair.second);
         }
         configures.clear();
@@ -671,7 +813,20 @@ class X11App {
       // Process event based on type
       switch (event.type) {
         case ConfigureNotify:
-          if (debug) std::cerr << "ConfigureNotify" << std::endl;
+          if (debug) {
+            std::cerr << "ConfigureNotify" << std::endl;
+            std::cerr << event.xconfigure.serial
+                      << " " << event.xconfigure.event
+                      << " " << event.xconfigure.window
+                      << " " << event.xconfigure.x
+                      << " " << event.xconfigure.y
+                      << " " << event.xconfigure.width
+                      << " " << event.xconfigure.height
+                      << " " << event.xconfigure.border_width
+                      << " " << event.xconfigure.above
+                      << " " << event.xconfigure.override_redirect
+                      << std::endl;
+          }
           {
             X11Win & win{window(event.xconfigure.window)};
             if (win.slow()) {
@@ -692,8 +847,8 @@ class X11App {
           break;
 
         case Expose:
-          if (debug) std::cerr << "Expose" << std::endl;
-          window(event.xcrossing.window).expose(event.xexpose);
+          if (debug) std::cerr << "Expose " << event.xexpose.count << std::endl;
+          window(event.xexpose.window).expose(event.xexpose);
           break;
 
         case EnterNotify:
@@ -742,13 +897,18 @@ class X11App {
 
         case DestroyNotify:
           if (debug) std::cerr << "DestroyNotify" << std::endl;
+          // windows.erase(window_lookups[event.xdestroywindow.window]);
+          // window_lookups.erase(event.xdestroywindow.window);
           break;
 
         default:
-          if (debug) std::cerr << "IgnoredEvent" << std::endl;
+          if (debug)
+            std::cerr << "IgnoredEvent " << event_names.at(event.type)
+                      << std::endl;
           break;
       }
     }
+    running = false;
   }
 
   void close_window(const Window win) {
@@ -759,15 +919,23 @@ class X11App {
     windows.erase(window_lookups[win]);
     window_lookups.erase(win);
   }
+  void close_all(const bool in_app = true) {
+    if (in_app) {
+      while (windows.size()) close_window(windows.front()->window);
+    } else if (windows.size()) {
+      windows.back()->send_message(first_code, exit_code);
+      XFlush(display);
+      XSync(display, false);
+    }
+  }
 
   Atom * wmDeleteMessage() const {  // Allows proper pass of window kill
     return const_cast<Atom *>(&wmDeleteMessage_);
   }
 
-  bool exists(const Window & win) const {
-    return window_lookups.count(win);
-  }
+  bool exists(const Window & win) const { return window_lookups.count(win); }
 
+  ThreadPool * pool;
   Display * display{};
   Window root{};
   int screen{};
@@ -779,16 +947,51 @@ class X11App {
   uint64_t black{};
   uint64_t white{};
   uint64_t grey{};
+  uint64_t ltgrey{};
   uint64_t red{};
-  std::string good_chars{"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz{|}~ !#$%&'()*+,-./[]^_`:;<=>?@"};
+  bool running{false};
 
  private:
   Atom wmDeleteMessage_{};
   WinList windows{};
   std::map<Window, WinIter> window_lookups{};
   std::map<GC, X11Font *> font_lookups{};
-  Point last_position{-1, -1};
+  std::map<int, std::string> event_names{
+    {2, "KeyPress"},
+    {3, "KeyRelease"},
+    {4, "ButtonPress"},
+    {5, "ButtonRelease"},
+    {6, "MotionNotify"},
+    {7, "EnterNotify"},
+    {8, "LeaveNotify"},
+    {9, "FocusIn"},
+    {10, "FocusOut"},
+    {11, "KeymapNotify"},
+    {12, "Expose"},
+    {13, "GraphicsExpose"},
+    {14, "NoExpose"},
+    {15, "VisibilityNotify"},
+    {16, "CreateNotify"},
+    {17, "DestroyNotify"},
+    {18, "UnmapNotify"},
+    {19, "MapNotify"},
+    {20, "MapRequest"},
+    {21, "ReparentNotify"},
+    {22, "ConfigureNotify"},
+    {23, "ConfigureRequest"},
+    {24, "GravityNotify"},
+    {25, "ResizeRequest"},
+    {26, "CirculateNotify"},
+    {27, "CirculateRequest"},
+    {28, "PropertyNotify"},
+    {29, "SelectionClear"},
+    {30, "SelectionRequest"},
+    {31, "SelectionNotify"},
+    {32, "ColormapNotify"},
+    {33, "ClientMessage"},
+    {34, "MappingNotify"},
+    {35, "GenericEvent"},
+    {36, "LASTEvent"}};
 };
 using X11Win = X11App::X11Win;
 
@@ -1477,31 +1680,126 @@ std::pair<Line, bool> line_within_range(
   return {line, false};  // Fix
 }
 
+template <class Type>
 class ArrayHandle {
  public:
   ArrayHandle() { }
-  ArrayHandle(const double * const data_, const uint64_t size__) :
+  ArrayHandle(const Type * const data_, const uint64_t size__) :
       data{data_}, size_{size__} { }
-  explicit ArrayHandle(const std::vector<double> & vec) :
+  explicit ArrayHandle(const std::vector<Type> & vec) :
       data{&vec[0]}, size_{vec.size()} { }
-  ArrayHandle & operator=(const std::vector<double> & vec) {
+  ArrayHandle & operator=(const std::vector<Type> & vec) {
     data = &vec[0];
     size_ = vec.size();
     return *this;
   }
-  void set_data(const double * const data_, const uint64_t size__) {
+  void set_data(const Type * const data_, const uint64_t size__) {
     data = data_;
     size_ = size__;
   }
   uint64_t size() const { return size_; }
-  const double * begin() const { return data; }
-  const double * end() const { return data + size_; }
-  double operator[](const uint64_t index) const { return data[index]; }
+  const Type * begin() const { return data; }
+  const Type * end() const { return data + size_; }
+  typename
+  std::conditional<std::is_fundamental<Type>::value, Type, const Type &>::type
+  operator[](const uint64_t index) const { return data[index]; }
 
  private:
-  const double * data{nullptr};
+  const Type * data{nullptr};
   uint64_t size_{0};
+};  // Matches vector<Type> layout?
+
+class SharedPoints {
+ public:
+  using Vec = std::vector<uint64_t>;
+  using SVec = std::shared_ptr<Vec>;
+  using CallBack = std::function<void ()>;
+  using Map = std::map<uint64_t, CallBack>;
+  using SMap = std::shared_ptr<Map>;
+  using This = std::map<uint64_t, SharedPoints *>;
+  using SThis = std::shared_ptr<This>;
+
+  SharedPoints() { selfs->emplace(id, this); }
+  explicit SharedPoints(CallBack call_back_) {
+    call_backs->emplace(id, call_back_);
+    selfs->emplace(id, this);
+  }
+  SharedPoints(const SharedPoints & other, CallBack call_back_) :
+      points{other.points},
+      call_backs{other.call_backs},
+      selfs{other.selfs} {
+        call_backs->emplace(id, call_back_);
+        selfs->emplace(id, this);
+      }
+  SharedPoints(const SharedPoints &) = delete;
+  SharedPoints(SharedPoints &&) = delete;
+  SharedPoints & operator=(const SharedPoints &) = delete;
+  SharedPoints & operator=(SharedPoints &&) = delete;
+
+  ~SharedPoints() {
+    auto iter = call_backs->find(id);
+    if (iter != call_backs->end()) call_backs->erase(iter);
+    selfs->erase(id);
+  }
+  void add(const Vec & points_) {
+    points->insert(points->end(), points_.begin(), points_.end());
+    share();
+  }
+  void share() {
+    simplify();
+    for (const auto & item : *call_backs) item.second();
+  }
+  void share(const Vec & points_) {
+    *points = points_;
+    share();
+  }
+  void share(Vec && points_) {
+    *points = std::move(points_);
+    share();
+  }
+  void join(SharedPoints & other) {
+    if (selfs.get() == other.selfs.get())
+      throw Error("Attempt to self-join or repeat a join failed");
+    points->insert(points->end(), other.points->begin(), other.points->end());
+    simplify();
+    call_backs->insert(other.call_backs->begin(), other.call_backs->end());
+    selfs->insert(other.selfs->begin(), other.selfs->end());
+    for (auto elem : *other.selfs) {
+      elem.second->points = points;
+      elem.second->call_backs = call_backs;
+      elem.second->selfs = selfs;
+    }
+  }
+  void clear() {
+    points->clear();
+    share();
+  }
+  void follow(const SharedPoints & other) {
+    points = other.points;
+    for (const auto & item : *call_backs)
+      other.call_backs->emplace(item.first, item.second);
+    call_backs = other.call_backs;
+  }
+
+  Vec::const_iterator begin() const { return points->begin(); }
+  Vec::const_iterator end() const { return points->end(); }
+  bool empty() const { return points->empty(); }
+  uint64_t size() const { return points->size(); }
+  uint64_t operator[](const uint64_t i) const { return (*points)[i]; }
+
+ private:
+  void simplify() {
+    sort(points->begin(), points->end());
+    points->erase(unique(points->begin(), points->end()), points->end());
+  }
+
+  static uint64_t next_id;
+  uint64_t id{++next_id};
+  SVec points{std::make_shared<Vec>(0)};
+  SMap call_backs{std::make_shared<Map>()};
+  SThis selfs{std::make_shared<This>()};
 };
+uint64_t SharedPoints::next_id{0};
 
 class X11Graph : public X11Win, public SavedConfig {
  public:
@@ -1515,7 +1813,7 @@ class X11Graph : public X11Win, public SavedConfig {
   using String = std::string;
   using Strings = std::vector<String>;
   using Values = std::vector<double>;
-  using XYSeries = std::vector<ArrayHandle>;
+  using XYSeries = std::vector<ArrayHandle<double>>;
   using Data = std::vector<XYSeries>;
   using OneColInfo = std::pair<String, String>;
   using XColInfo = std::vector<OneColInfo>;
@@ -1526,11 +1824,8 @@ class X11Graph : public X11Win, public SavedConfig {
 
   // Graph constructors and destructors and copying
   X11Graph(X11App & app__, const DataInfo & data__,
-           const Geometry & geometry_ =
-           Geometry{{default_width, default_height}, {0, 0}},
+           const Geometry & geometry_ = default_geometry(),
            const std::string & title_ = default_title,
-           const unsigned int n_threads__ =
-           std::thread::hardware_concurrency(),
            SpecialFeatures add_special_features =
            SpecialFeatures{[](X11Graph &) {}});
   template <class ... Input>
@@ -1618,7 +1913,7 @@ class X11Graph : public X11Win, public SavedConfig {
   bool can_do_lines() const;
   void prepare_log();
   void draw_border(Drawable d) const;
-  static std::string long_status(const bool in, const bool y);
+  std::string long_status(const bool in, const bool y);
   void draw_status(const bool force = false) const;
   void draw_controls();
   void draw_grid() const;
@@ -1771,44 +2066,50 @@ class X11Graph : public X11Win, public SavedConfig {
   const uint64_t n_radios_to_write{saved_radios.size()};
   void read_config();
 
-  // Number of threads to use
-  unsigned int n_threads() const;
-  void n_threads(const unsigned int n_threads__);
-#ifdef __CYGWIN__
-  unsigned int n_threads_{1};
-#else
-  unsigned int n_threads_{std::thread::hardware_concurrency()};
-#endif
-  ThreadPool pool{n_threads()};
-
   // Movement directions
   bool x_movement{true};
   bool y_movement{false};
 
   SpecialFeatures add_special_features{};
 
+  // Point selection
+  // Add / remove series
+  bool can_select() const { return n_files() == 1 && n_cols() == 1; }
+  template <class VEC>
+  void add_series(const VEC & selected,
+                  const std::string & series_name);
+  void remove_series();
+  void update_selected();
+  void follow_selected(SharedPoints & shared);
+  bool select_points{false};
+  bool added_series{false};
+  SharedPoints selected_rows{std::bind(&X11Graph::update_selected, this)};
+  std::vector<double> selected_xs{};
+  std::vector<double> selected_ys{};
+
   // Graph title
   static constexpr const char * default_title{"G-Graph"};
   const std::string title{default_title};
-  const std::string plot_name{title == default_title ? "cn" : title};
+  const std::string plot_name{
+    title == default_title ? "cn" : replace(title, ' ', '_')};
 };
 
 // Construct from data in exact format needed
 X11Graph::X11Graph(
     X11App & app__, const DataInfo & data__, const Geometry & geometry__,
-    const std::string & title_, const unsigned int n_threads__,
+    const std::string & title_,
     SpecialFeatures add_special_features__) :
     X11Win{app__, geometry__, true, title_}, data_info{data__},
-  data{&data_info.first}, n_threads_{n_threads__},
-  add_special_features{add_special_features__},
-  title{title_} {
-    initialize();
-  }
+    data{&data_info.first},
+    add_special_features{add_special_features__},
+    title{title_} {
+      initialize();
+    }
 
 // Construct from a bunch of vectors x1, y1, x2, y2, ...
 template <class ... Input>
-X11Graph::X11Graph(X11App & app__, Values & x__, Values & y__,
-                   Input && ... input) :
+X11Graph::X11Graph(X11App & app__,
+                   Values & x__, Values & y__, Input && ... input) :
     X11Win{app__, {{default_width, default_height}, {0, 0}}, true} {
   add_input(x__, y__, std::forward<Input>(input)...);
   data = &input_data;
@@ -1913,11 +2214,12 @@ void X11Graph::initialize() {
       series_names[c] = std::to_string(c + 1) + " " +
           data_info.second.first[file_index(c)] + " " +
           data_info.second.second[col_index(c)].first;
+    } else if (c == input_data.size()) {
+      series_names[c] = "user selected points";
     }
     std::string & color_name{color_names[c]};
     XColor & color{series_colors[c]};
     current_colors[c] = c;
-    // std::cerr << c << " " << color_name << std::endl;
     if (!XAllocNamedColor(display(), app.colormap, color_name.c_str(),
                           &color, &color))
       throw Error("Could not get color") << color_name;
@@ -1936,7 +2238,7 @@ void X11Graph::initialize() {
   }
 
   // Create series radios, and add to master radio list, adjust properties
-  series_radios.reserve(data->size());
+  series_radios.reserve(data->size() + 1);
   const double mr{12};
   const double radio_scale{data->size() <= mr ? 1.0 : mr / data->size()};
   const double radius_scale{pow(radio_scale, 0.6)};
@@ -2025,9 +2327,9 @@ void X11Graph::initialize() {
     {&series_radios, &unnamed_radios})
     for (Radio & radio : (*radio_vec)) radios.push_back(&radio);
 
+  use_pixmap = true;
   // Map the window
   // XMapWindow(display(), window);
-
   read_config();
   add_special_features(*this);
 }
@@ -2234,7 +2536,7 @@ inline int X11Graph::min_border() const {
 
 // Call-back functions
 void X11Graph::expose(const XExposeEvent & event) {
-  if (bounds.size() == 0) {
+  if (bounds[0][2] == 0) {
     get_range();
     prepare();
   }
@@ -2343,23 +2645,43 @@ inline void X11Graph::key(const XKeyEvent & event) {
       case '_':
         do_zoom = true;
         break;
+      case 'Q':
+        app.close_all();
+        return;
       case 'q':
         app.close_window(window);
         return;
       case 'd':
         // Duplicate graph! (most features)
+        remove_series();
         app.create<X11Graph>(
             data_info,
             Geometry{{width(), height()}, {x_offset() + 100, y_offset() + 100}},
-            std::string{"G-Graph"}, n_threads(), [this](X11Graph & graph) {
+            std::string{"G-Graph"}, [this](X11Graph & graph) {
               add_special_features(graph);
               graph.restore_config(current_config());
+              graph.follow_selected(selected_rows);
               graph.prepare();
             });
+        if (selected_rows.size()) selected_rows.share();
         break;
       case 'l':
         read_config();
         prepare_draw();
+        return;
+      case 's':
+        if (can_select()) {
+          select_points = !select_points;
+          status = select_points ?
+              "Select points mode is on (press s to turn off)" :
+              "Select points mode is off";
+        } else {
+          status = "Select points mode only works for one data series";
+        }
+        draw_controls();
+        draw_status(true);
+        XFlush(display());
+        break;
       default:
         return;
     }
@@ -2503,9 +2825,9 @@ inline void X11Graph::motion(const XMotionEvent & event) {
   const bool y_press{(quadrant % 2) == 1};
   const Range old_range(range);
 
-  const bool do_scroll{click == 2};
-  const bool do_zoom{click == 3};
-  const bool do_select{click == 1};
+  const bool do_scroll{click == 2 && !select_points};
+  const bool do_zoom{click == 3 && !select_points};
+  const bool do_select{click == 1 || select_points};
 
   if (do_scroll) {
     for (const bool y : {false, true}) {
@@ -2590,6 +2912,29 @@ void color_change_callback(
   graph.draw();
 }
 
+void selected_click_share(SharedPoints & selected_rows,
+                          std::vector<uint64_t> & new_selected,
+                          const Click click) {
+  if (click == 1) {
+    selected_rows.share(new_selected);
+  } else if (click == 2) {
+    selected_rows.add(new_selected);
+  } else {
+    sort(new_selected.begin(), new_selected.end(), std::greater<uint64_t>());
+    std::vector<uint64_t> final_selected;
+    for (const uint64_t row : selected_rows) {
+      while (new_selected.size() && row > new_selected.back())
+        new_selected.pop_back();
+      if (new_selected.empty() || row < new_selected.back()) {
+        final_selected.push_back(row);
+      } else {
+        new_selected.pop_back();
+      }
+    }
+    selected_rows.share(final_selected);
+  }
+}
+
 inline void X11Graph::button_release(const XButtonEvent & event) {
   Click::Resetter resetter{click};
   if (click == 0) return;
@@ -2628,14 +2973,38 @@ inline void X11Graph::button_release(const XButtonEvent & event) {
   const Range old_range(range);
 
   if (moved) {
-    if (click == 1) {
-      // Drag event defines an x, y zoom
-      for (const bool y : {false, true}) {
-        if (!in_bounds(click) && y_press != y) continue;
-        if ((in_bounds(click) || y) && tiled_radio) continue;
-        const double min_c{icoord(y, std::min(release[y], click[y]))};
-        const double max_c{icoord(y, std::max(release[y], click[y]))};
-        set_range(y, (y ? max_c : min_c), (y ? min_c : max_c));
+    if (select_points && click > 0) {
+      const double min_x{icoord(false, std::min(release[0], click[0]))};
+      const double max_x{icoord(false, std::max(release[0], click[0]))};
+      const double max_y{icoord(true, std::min(release[1], click[1]))};
+      const double min_y{icoord(true, std::max(release[1], click[1]))};
+      const XYSeries & series{data->front()};
+      std::vector<uint64_t> new_selected;
+      if (in_bounds(click)) {
+        for (unsigned int p{0}; p != series[0].size(); ++p)
+          if (series[0][p] >= min_x && series[0][p] <= max_x &&
+              series[1][p] >= min_y && series[1][p] <= max_y)
+            new_selected.push_back(p);
+      } else if (y_press) {
+        for (unsigned int p{0}; p != series[0].size(); ++p)
+          if (series[1][p] >= min_y && series[1][p] <= max_y)
+            new_selected.push_back(p);
+      } else {
+        for (unsigned int p{0}; p != series[0].size(); ++p)
+          if (series[0][p] >= min_x && series[0][p] <= max_x)
+            new_selected.push_back(p);
+      }
+      selected_click_share(selected_rows, new_selected, click);
+    } else {
+      if (click == 1) {
+        // Drag event defines an x, y zoom
+        for (const bool y : {false, true}) {
+          if (!in_bounds(click) && y_press != y) continue;
+          if ((in_bounds(click) || y) && tiled_radio) continue;
+          const double min_c{icoord(y, std::min(release[y], click[y]))};
+          const double max_c{icoord(y, std::max(release[y], click[y]))};
+          set_range(y, (y ? max_c : min_c), (y ? min_c : max_c));
+        }
       }
     }
     moved = false;
@@ -2780,7 +3149,7 @@ void X11Graph::prepare() {
                          &clip_rectangle, 1, YXBanded);
     }
     if (multithreaded) {
-      futures.emplace_back(pool.run(series_fun, s));
+      futures.emplace_back(app.pool->run(series_fun, s));
     } else {
       series_fun(s);
     }
@@ -2875,6 +3244,7 @@ void X11Graph::draw() {
   if (output_) {
     save_image(plot_name);
     app.close_window(window);
+    return;
   }
   if (exit_immediately) {
     app.close_window(window);
@@ -2974,6 +3344,8 @@ void X11Graph::draw_border(Drawable d) const {
 }
 
 inline std::string X11Graph::long_status(const bool in, const bool y) {
+  if (select_points)
+    return "Select points mode is on (press s to turn off)";
   return std::string("Pointer (1 - 2/shift - 3/control) clicks ") +
       "(center - zoom in - zoom out) at point " +
       "and drags (select - scroll - zoom) for " +
@@ -3587,11 +3959,58 @@ inline void X11Graph::read_config() {
   }
 }
 
-inline unsigned int X11Graph::n_threads() const { return n_threads_; }
-
-inline void X11Graph::n_threads(const unsigned int n_threads__) {
-  n_threads_ = n_threads__;
+template <class VEC>
+inline void X11Graph::add_series(const VEC & selected,
+                                 const std::string & series_name) {
+  remove_series();
+  if (selected.size()) {
+    selected_xs.clear();
+    selected_ys.clear();
+    const XYSeries & series{data->front()};
+    for (const uint64_t p : selected) {
+      selected_xs.push_back(series[0][p]);
+      selected_ys.push_back(series[1][p]);
+    }
+    XYSeries selected_series;
+    selected_series.emplace_back(selected_xs);
+    selected_series.emplace_back(selected_ys);
+    data->push_back(selected_series);
+    const double radius_scale{pow(1.0, 0.6)};
+    const uint64_t c{series_radios.size()};
+    series_radios.push_back(Radio{"Toggle display or change "
+            "colors (pointer button 2 or 3) for series " +
+            series_name, this, dPoint{-1, 5.25},
+        {[this]() { prepare_draw(); }, [this]() { return inside; }},
+            true, true, &series_radio_gcs[c], radius_scale});
+    series_arcs.push_back(true);
+    series_lines.push_back(false);
+    series_order.push_back(static_cast<unsigned int>(series_order.size()));
+    radios.push_back(&series_radios.back());
+    added_series = true;
+  }
+  prepare_draw();
 }
+
+inline void X11Graph::remove_series() {
+  if (added_series) {
+    data->pop_back();
+    series_radios.pop_back();
+    series_arcs.pop_back();
+    series_lines.pop_back();
+    series_order.pop_back();
+    radios.pop_back();
+    added_series = false;
+  }
+}
+
+void X11Graph::update_selected() {
+  add_series(selected_rows, "selected points");
+}
+
+void X11Graph::follow_selected(SharedPoints & shared) {
+  selected_rows.follow(shared);
+}
+
 
 //
 // Text grid selector
@@ -3606,19 +4025,24 @@ class X11TextGrid : public X11Win {
 
   explicit X11TextGrid(
       X11App & app__, const Data & data_,
-      const std::vector<unsigned int> & inactive_cols_ = {},
-      const std::vector<unsigned int> & inactive_rows_ = {},
-      const std::vector<unsigned int> & exclusive_cols_ = {},
-      const std::vector<unsigned int> & exclusive_rows_ = {},
-      CallBack call_back_ = CallBack(),
-      CallBack cell_test_ = CallBack(),
-      const Geometry & geometry__ = Geometry{{1000, 800}, {0, 0}}) :
-      X11Win(app__, geometry__, false),
+      std::vector<std::pair<unsigned int, unsigned int>> selected_cells_,
+      std::vector<std::pair<unsigned int, unsigned int>> inactive_cells_,
+      const std::vector<unsigned int> & inactive_cols_,
+      const std::vector<unsigned int> & inactive_rows_,
+      const std::vector<unsigned int> & exclusive_cols_,
+      const std::vector<unsigned int> & exclusive_rows_,
+      CallBack call_back_, CallBack table_call_back_, CallBack cell_test_,
+      const Geometry & geometry__ =
+      Geometry{{1000, 1000}, {0, 0}},
+      const std::string & file_name = "") :
+      X11Win(app__, geometry__, false, file_name),
       data{data_.size() ? data_ : Data(1, Column{"Empty"})},
-    inactive_cols{inactive_cols_}, inactive_rows{inactive_rows_},
-    exclusive_cols{exclusive_cols_}, exclusive_rows{exclusive_rows_},
-    cell_status_(n_cols(), std::vector<unsigned char>(n_rows(), 0)),
-    max_widths(n_cols()), call_back{call_back_}, cell_test{cell_test_} {
+      selected_cells{selected_cells_}, inactive_cells{inactive_cells_},
+      inactive_cols{inactive_cols_}, inactive_rows{inactive_rows_},
+      exclusive_cols{exclusive_cols_}, exclusive_rows{exclusive_rows_},
+      cell_status_(n_cols(), std::vector<unsigned char>(n_rows(), 0)),
+      max_widths(n_cols()), call_back{call_back_},
+      table_call_back{table_call_back_}, cell_test{cell_test_} {
       // Events to watch out for
       XSelectInput(display(), window,
                    StructureNotifyMask | ExposureMask |
@@ -3626,9 +4050,9 @@ class X11TextGrid : public X11Win {
 
       // Fonts of various size
       fonts.reserve(max_font_size);
-      for (const unsigned int s : {60, 70, 80, 90, 100, 120, 130, 140,
-              150, 160, 170, 180, 190, 200, 230, 240, 250, 300, 400,
-              500, 600, 700, 1000}) {
+      for (const unsigned int s : {6, 7, 8, 9, 1, 12, 13, 14,
+              15, 16, 17, 18, 19, 20, 23, 24, 25, 30, 40,
+              50, 60, 70, 100}) {
         fonts.emplace_back(display(), s);
         if (fonts.back()) {
           font_sizes.push_back(s);
@@ -3640,7 +4064,7 @@ class X11TextGrid : public X11Win {
       font = &fonts[fonts.size() / 2];
 
       XSync(display(), False);
-
+      clear_status();
       prepare();
       shrink_window_to_fit();
       XMapWindow(display(), window);
@@ -3687,6 +4111,16 @@ class X11TextGrid : public X11Win {
     for (Radio * radio : radios) if (radio->release(click)) return;
   }
 
+  bool is_inactive(const unsigned int col, const unsigned int row) const {
+    if (find(inactive_cols.begin(), inactive_cols.end(), col) !=
+        inactive_cols.end()) return true;
+    if (find(inactive_rows.begin(), inactive_rows.end(), row) !=
+        inactive_rows.end()) return true;
+    if (find(inactive_cells.begin(), inactive_cells.end(),
+             std::pair<unsigned int, unsigned int>(col, row)) !=
+        inactive_cells.end()) return true;
+    return false;
+  }
   template <class POINT>
   Point inside_cell(const POINT & point) const {
     return Point(static_cast<unsigned int>(upper_bound(
@@ -3703,6 +4137,9 @@ class X11TextGrid : public X11Win {
   void toggle_cell_status(const Point cell) {
     cell_status_[cell.x][cell.y] = !cell_status(cell);
   }
+  void toggle_cell_status(const unsigned int x, const unsigned int y) {
+    cell_status_[x][y] = !cell_status(x, y);
+  }
   void set_column_status(const unsigned int col, bool status) {
     cell_status_[col].assign(cell_status_[col].size(), status);
   }
@@ -3713,6 +4150,8 @@ class X11TextGrid : public X11Win {
   }
   void clear_status() {
     for (unsigned int c{0}; c != data.size(); ++c) set_column_status(c, false);
+    for (const auto cell : selected_cells)
+      toggle_cell_status(cell.first, cell.second);
   }
   bool cells_selected() const {
     for (unsigned int c{0}; c != data.size(); ++c)
@@ -3800,6 +4239,7 @@ class X11TextGrid : public X11Win {
     std::vector<XRectangle> rectangles{
       rect(border_padding(), border_padding(), grid_width(), grid_height())};
     std::vector<XRectangle> fill_rectangles;
+    std::vector<XRectangle> inactive_fill_rectangles;
     for (unsigned int c{0}; c != data.size(); ++c) {
       for (unsigned int r{0}; r != data[c].size(); ++r) {
         XRectangle cell_rectangle(rect(column_offset(c), row_offset(r),
@@ -3810,6 +4250,8 @@ class X11TextGrid : public X11Win {
         cell_rectangle.width -= 1;
         cell_rectangle.height -= 1;
         if (cell_status(c, r)) fill_rectangles.push_back(cell_rectangle);
+        if (is_inactive(c, r))
+          inactive_fill_rectangles.push_back(cell_rectangle);
       }
     }
     XDrawRectangles(display(), window, gc, &rectangles[0],
@@ -3817,6 +4259,10 @@ class X11TextGrid : public X11Win {
     if (fill_rectangles.size())
       XFillRectangles(display(), window, grey_gc, &fill_rectangles[0],
                       static_cast<unsigned int>(fill_rectangles.size()));
+    if (inactive_fill_rectangles.size())
+      XFillRectangles(
+          display(), window, ltgrey_gc, &inactive_fill_rectangles[0],
+          static_cast<unsigned int>(inactive_fill_rectangles.size()));
     for (unsigned int c{0}; c != data.size(); ++c)
       for (unsigned int r{0}; r != data[c].size(); ++r)
         XDrawString(display(), window, gc, column_offset(c) + cell_padding(),
@@ -3829,6 +4275,8 @@ class X11TextGrid : public X11Win {
   virtual ~X11TextGrid() { }
 
   Data data{};
+  std::vector<std::pair<unsigned int, unsigned int>> selected_cells{};
+  std::vector<std::pair<unsigned int, unsigned int>> inactive_cells{};
   std::vector<unsigned int> inactive_cols{};
   std::vector<unsigned int> inactive_rows{};
   std::vector<unsigned int> exclusive_cols{};
@@ -3845,7 +4293,7 @@ class X11TextGrid : public X11Win {
   int cell_border_width{2};
   int grid_width_{0};
   std::vector<int> max_widths, column_offsets{};
-  CallBack call_back, cell_test{};
+  CallBack call_back, table_call_back, cell_test{};
 
   Point last_motion{};
   Click click{};
@@ -3861,76 +4309,824 @@ class X11TextGrid : public X11Win {
   Radio clear_radio{"Clear all selections", this, {1, 1},
     {[this]() { clear_status(); draw(); },
           [this]() { return cells_selected(); }}};
-  Radio plot_radio{"Plot selected data", this, {-1, 1},
+  Radio plot_radio{"Plot selected data", this, {100, 1},
     {[this]() { call_back(cell_status_); clear_status(); draw(); },
           [this]() { return call_back && cell_test &&
                 cell_test(cell_status_); }}};
-  std::vector<Radio *> radios{&clear_radio, &plot_radio};
+  Radio table_radio{"Make table for selected data", this, {-1, 1},
+    {[this]() { table_call_back(cell_status_); draw(); },
+          [this]() { return !!table_call_back; }}};
+  std::vector<Radio *> radios{&clear_radio, &plot_radio, &table_radio};
 };
 
-class X11Plotter {
-  using Names = std::vector<std::string>;
-  using Col = std::vector<double>;
-  using Data = std::vector<Col>;
-
+//
+// TabularData
+//
+class X11DataTable;
+class TabularData {
  public:
-  template <class TSV>
-  explicit X11Plotter(const TSV & tsv) : file_name_{tsv.file_name()} {
-    std::vector<std::vector<std::string>> text{
-      {"Data Field"}, {"Plot X"}, {"Plot Y"}};
-    for (unsigned int c{0}; c != tsv.n_cols(); ++c) {
-      const auto & col = tsv(c);
-      if (col.is_real()) {
-        names.push_back(col.name());
-        text[0].push_back(col.name());
-        text[1].push_back("");
-        text[2].push_back("");
-        data.emplace_back();
-        for (unsigned int r{0}; r != tsv.n_rows(); ++r)
-          if (tsv[c].is_integral()) {
-            data.back().push_back(tsv.as_jitter(c, r));
-          } else {
-            data.back().push_back(tsv.as_real(c, r));
-          }
+  using Strings = std::vector<std::string>;
+  using Reals = std::vector<double>;
+  using StringTableMaybe = std::vector<std::shared_ptr<Strings>>;
+  using RealTableMaybe = std::vector<std::shared_ptr<Reals>>;
+  using hStrings = ArrayHandle<std::string>;
+  using hReals = ArrayHandle<double>;
+  using StringTable = std::vector<hStrings>;
+  using RealTable = std::vector<hReals>;
+
+  using Ints = std::vector<int64_t>;
+  using uInts = std::vector<uint64_t>;
+  TabularData(const std::string & name__, const uint64_t n_rows__) :
+      name_{name__},
+      n_cols_{0},
+      n_rows_{n_rows__},
+      names_(n_cols()),
+      types_(n_cols()),
+      strings_(n_cols()),
+      reals_(n_cols()),
+      strings_maybe(n_cols()),
+      reals_maybe(n_cols()),
+      widths(0),
+      name2col{} { }
+  TabularData(const TabularData & other, const uInts & cols) :
+      name_{other.name_},
+      n_cols_{cols.size()},
+      n_rows_{other.n_rows()},
+      names_(n_cols()),
+      types_(n_cols()),
+      strings_(n_cols()),
+      reals_(n_cols()),
+      strings_maybe(n_cols()),
+      reals_maybe(n_cols()),
+      widths(n_cols()),
+      name2col{other.name2col} {
+        uint64_t col{0};
+        for (const uint64_t other_col : cols) {
+          names_[col] = other.name(other_col);
+          types_[col] = other.type(other_col);
+          strings_[col] = other.strings_[other_col];
+          reals_[col] = other.reals_[other_col];
+          strings_maybe[col] = other.strings_maybe[other_col];
+          reals_maybe[col] = other.reals_maybe[other_col];
+          widths[col] = other.widths[other_col];
+          ++col;
+        }
       }
+  template <class TSV>
+  explicit TabularData(const TSV & tsv) :
+      name_{tsv.file_name()},
+      n_cols_{tsv.n_cols()},
+      n_rows_{tsv.n_rows()},
+      names_(n_cols()),
+      types_(n_cols()),
+      strings_(n_cols()),
+      reals_(n_cols()),
+      strings_maybe(n_cols()),
+      reals_maybe(n_cols()),
+      widths(n_cols()) {
+        for (unsigned int c{0}; c != n_cols(); ++c) {
+          const auto & col = tsv(c);
+          names_[c] = col.name();
+          name2col[names_[c]] = c;
+          strings_[c] = tsv.strings(c);
+          for (unsigned int r{0}; r != n_rows(); ++r)
+            if (widths[c] < strings_[c][r].size())
+              widths[c] = strings_[c][r].size();
+          std::string col_type{"str"};
+          if (col.is_real()) {
+            col_type = "real";
+            reals_maybe[c] = std::make_shared<Reals>(n_rows());
+            for (unsigned int r{0}; r != n_rows(); ++r)
+              (*reals_maybe[c])[r] = tsv.as_real(c, r);
+            reals_[c] = *reals_maybe[c];
+          }
+          if (col.is_integral()) col_type = "int";
+          types_[c] = col_type;
+        }
+      }
+
+  const std::string name() const { return name_; }
+  uint64_t col_index(const std::string & name__) const {
+    return name2col.at(name__);
+  }
+  uint64_t n_cols() const { return n_cols_; }
+  uint64_t n_rows() const { return n_rows_; }
+  const Strings & names() const { return names_; }
+  const std::string & name(const uint64_t col) const { return names_[col]; }
+  const Strings & types() const { return types_; }
+  const std::string & type(const uint64_t col) const { return types_[col]; }
+  const hStrings & strings(const uint64_t col) const { return strings_[col]; }
+  bool is_real(const uint64_t col) const { return reals_[col].size(); }
+  const hReals & reals(const uint64_t col) const { return reals_[col]; }
+  std::string string(const uint64_t col, const uint64_t row) const {
+    if (is_real(col)) {
+      static std::ostringstream value_string{};
+      value_string.str("");
+      value_string << std::setprecision(10);
+      value_string << reals_[col][row];
+      return value_string.str();
+    } else {
+      return strings_[col][row];
     }
-    X11TextGrid::CallBack call_back{std::bind(&X11Plotter::launch_graph, this,
-                                              std::placeholders::_1)};
-    X11TextGrid::CallBack cell_test{std::bind(&X11Plotter::launch_ready, this,
-                                              std::placeholders::_1)};
-    using Vec = std::vector<unsigned int>;
-    app.create<X11TextGrid>(text, Vec{0}, Vec{0}, Vec{1}, Vec{},
-                            call_back, cell_test,
-                            Geometry{{1000, 800}, {0, 0}});
-    app.run();
+  }
+  double real(const uint64_t col, const uint64_t row) const {
+    return reals_[col][row];
+  }
+  uint64_t width(const uint64_t col) const { return widths[col]; }
+
+  void launch_graph(X11App & app,
+                    const uInts & columns,
+                    SharedPoints * shared_points = nullptr) const {
+    if (columns.size() < 2)
+      throw Error("Not enough columns in launch_graph");
+    X11Graph::DataInfo info{{}, X11Graph::Info{{name()}, {}}};
+    const uint64_t x_col{columns.front()};
+    if (x_col >= n_cols()) throw Error("Bad X column");
+    std::ostringstream graph_name;
+    for (uint64_t c{1}; c != columns.size(); ++c) {
+      const uint64_t y_col{columns[c]};
+      if (y_col >= n_cols()) throw Error("Bad Y column") << y_col << n_cols();
+      X11Graph::XYSeries series;
+      series.emplace_back(reals(x_col));
+      series.emplace_back(reals(y_col));
+      info.first.push_back(series);  //
+      info.second.second.emplace_back(name(y_col), "p");
+      if (c > 1) graph_name << " ";
+      graph_name << name(y_col);
+    }
+    graph_name << " vs " << name(x_col);
+
+    X11Graph & graph{app.create<X11Graph>(
+        info, X11Graph::default_geometry(), graph_name.str())};
+    graph.arc_radius = 3;
+    if (shared_points) graph.follow_selected(*shared_points);
+  }
+  void launch_graph(X11App & app,
+                    const Strings & columns,
+                    SharedPoints & shared_points) const {
+    std::vector<uint64_t> cols;
+    for (const std::string & col : columns) cols.push_back(col_index(col));
+    launch_graph(app, cols, &shared_points);
   }
 
-  bool launch_graph(const X11TextGrid::CellStatus & status) {
-    X11Graph::DataInfo info{{}, X11Graph::Info{{file_name_}, {}}};
-    X11Graph::Values * xs{&data[std::find(
-        status[1].begin(), status[1].end(), 1) - status[1].begin() - 1]};
-    for (unsigned int n{0}; n != names.size(); ++n) {
-      if (status[2][n + 1]) {
-        X11Graph::XYSeries series;
-        series.emplace_back(*xs);
-        series.emplace_back(data[n]);
-        info.first.push_back(series);  // X11Graph::XYSeries{*xs, data[n]});
-        info.second.second.emplace_back(names[n], "p");
+
+  X11DataTable & launch_table(X11App & app,
+                              const uInts & columns,
+                              SharedPoints & shared_points) const;
+  X11DataTable & launch_table(X11App & app,
+                              const Strings & columns,
+                              SharedPoints & shared_points) const {
+    std::vector<uint64_t> cols;
+    for (const std::string & col : columns) cols.push_back(col_index(col));
+    return launch_table(app, cols, shared_points);
+  }
+  X11DataTable & launch_table(X11App & app,
+                              SharedPoints & shared_points) const {
+    std::vector<uint64_t> cols;
+    for (uint64_t col{0}; col != n_cols(); ++col) cols.push_back(col);
+    return launch_table(app, cols, shared_points);
+  }
+
+  void add_column(const std::string & name__,
+                  const std::vector<double> & values) {
+    add_column(name__, &values[0]);
+  }
+  void add_column(const std::string & name__, const double * values) {
+    names_.push_back(name__);
+    types_.push_back("real");
+    strings_maybe.push_back(nullptr);
+    strings_.emplace_back();
+    reals_maybe.push_back(std::make_shared<Reals>(n_rows_));
+    reals_.emplace_back(*reals_maybe.back());
+    widths.push_back(0);
+    name2col[name__] = n_cols_++;
+    static std::ostringstream value_string{};
+    value_string << std::setprecision(10);
+    for (uint64_t r{0}; r != n_rows_; ++r) {
+      (*reals_maybe.back())[r] = values[r];
+      value_string.str("");
+      value_string << values[r];
+      if (widths.back() < value_string.str().size())
+        widths.back() = value_string.str().size();
+    }
+  }
+  void add_column(const std::string & name__,
+                  const char ** values) {
+    names_.push_back(name__);
+    types_.push_back("str");
+    strings_maybe.push_back(std::make_shared<Strings>(n_rows_));
+    strings_.emplace_back(*strings_maybe.back());
+    reals_maybe.push_back(nullptr);
+    reals_.emplace_back();
+    widths.push_back(0);
+    name2col[name__] = n_cols_++;
+    for (uint64_t r{0}; r != n_rows_; ++r) {
+      (*strings_maybe.back())[r] = values[r];
+      if (widths.back() < strings_.back()[r].size())
+        widths.back() = strings_.back()[r].size();
+    }
+  }
+
+ private:
+  std::string name_;
+  uint64_t n_cols_;
+  uint64_t n_rows_;
+  Strings names_;
+  Strings types_;
+  StringTable strings_;
+  RealTable reals_;
+  StringTableMaybe strings_maybe;
+  RealTableMaybe reals_maybe;
+  std::vector<uint64_t> widths;
+  std::map<std::string, uint64_t> name2col{};
+};
+
+//
+// Spreadsheet window
+//
+class X11DataTable : public X11Win {
+ public:
+  using X11Win::X11Win;
+  using Strings = std::vector<std::string>;
+  using Ints = std::vector<uint64_t>;
+  using ColStrings = std::vector<Strings>;
+  using PosIndex = std::pair<int, uint64_t>;
+
+  explicit X11DataTable(
+      X11App & app__,
+      const TabularData & data_,
+      SharedPoints & shared_,
+      const Geometry & geometry__ = Geometry{{1700, 1500}, {-1500, 0}}) :
+      X11Win(app__, geometry__, false, data_.name()),
+      data{data_},
+      n_rows{data_.n_rows() + 1},
+      n_cols{data_.n_cols() + 1},
+      selected_rows{shared_, std::bind(&X11DataTable::highlight, this)},
+      highlights(n_rows),
+      widths(n_cols),
+      order(data.n_rows()),
+      order_text(data.n_rows()) {
+        std::string wtext{std::to_string(data.n_rows())};
+        widths[0] = std::max(static_cast<int>(index_name.size()),
+                             static_cast<int>(wtext.size()));
+        for (uint64_t c{0}; c != data.n_cols(); ++c) {
+          widths[c + 1] = std::max(
+              static_cast<int>(data.name(c).size()),
+              static_cast<int>(data.width(c)));
+        }
+        for (uint64_t r{0}; r != data.n_rows(); ++r) {
+          std::string text{std::to_string(r + 1)};
+          order_text[r] = std::move(text);
+        }
+
+        bold_gc = create_gc(app.black, app.white, 4,
+                              LineSolid, CapButt, JoinMiter);
+        border_gc = create_gc(app.black, app.white, 2,
+                              LineSolid, CapButt, JoinMiter);
+        reset_all();
+
+        XSelectInput(display(), window,
+                     StructureNotifyMask | ExposureMask | KeyPressMask |
+                     ButtonPressMask | PointerMotionMask | ButtonReleaseMask);
+        XSync(display(), False);
+        XMapWindow(display(), window);
+      }
+
+
+  virtual void configure(const XConfigureEvent & event) {
+    this->X11Win::configure(event);
+    const int border_padding{std::min(width(), height()) / 30};
+    set_bounds(border_padding, width() - border_padding,
+               border_padding, height() - border_padding);
+  }
+
+  X11DataTable(const X11DataTable &) = delete;
+  X11DataTable & operator=(const X11DataTable &) = delete;
+  X11DataTable(X11DataTable &&) = delete;
+  X11DataTable & operator=(X11DataTable &&) = delete;
+  virtual ~X11DataTable() {
+    for (GC gc_ : {bold_gc, border_gc}) XFreeGC(display(), gc_);
+  }
+
+  virtual void prepare() { }
+
+  int grid_width() const { return bounds[0][2]; }
+  int grid_height() const { return bounds[1][2]; }
+  int grid_left() const { return bounds[0][0]; }
+  int grid_right() const { return bounds[0][1]; }
+  int grid_bottom() const { return bounds[1][1]; }
+  int grid_top() const { return bounds[1][0]; }
+  int row_height() const { return bold_font->height(); }
+  bool hit_right() const { return col_starts.back().first >= grid_right(); }
+  bool hit_bottom() const { return row_starts.back().first >= grid_bottom(); }
+  uint64_t cols_shown() const {
+    return col_starts.size() > 2 ? col_starts.size() - 2 - hit_right() : 0;
+  }
+  uint64_t rows_shown() const {
+    return row_starts.size() > 2 ? row_starts.size() - 2 - hit_bottom() : 0; }
+  uint64_t stop_col() const {
+    return col_starts[col_starts.size() - 1 - hit_right()].second;
+  }
+  uint64_t stop_row() const {
+    return row_starts[row_starts.size() - 1 - hit_bottom()].second;
+  }
+
+  virtual void draw() {
+    // White page
+    clear_window();
+    just_configured = false;
+
+    XRectangle clip_rectangle(rect(
+        grid_left(), grid_top(), grid_width(), grid_height()));
+    for (GC gc_ : {gc, bold_gc, grey_gc, ltgrey_gc})
+      XSetClipRectangles(display(), gc_, 0, 0,
+                         &clip_rectangle, 1, YXBanded);
+    XDrawRectangle(display(), window, border_gc,
+                   grid_left(), grid_top(), grid_width(), grid_height());
+    std::vector<XRectangle> rectangles{};
+    int col_start{grid_left()};
+    const int char_width{bold_font->string_width("0")};
+    row_starts.clear();
+    col_starts.clear();
+    uint64_t c{0};
+    for (; c != n_cols && col_start < grid_right(); ++c) {
+      if (c && c < start_col) continue;
+      const int col_width{(widths[c] + 2) * char_width};
+      int row_start{grid_top()};
+      uint64_t r{0};
+      for (; r != n_rows && row_start < grid_bottom(); ++r) {
+        const bool bold{!r};
+        if (r && only_highlights && !highlights[order[r - 1]]) continue;
+        rectangles.push_back(rect(
+            col_start, row_start, col_width, row_height()));
+        const std::string & text{cell_string(r, c)};
+        const int x_start{
+          col_start + (col_width - bold_font->string_width(text)) / 2};
+        if (r == 0 || c == 0 || highlights[order[r - 1]]) {
+          const bool dark{(r && highlights[order[r - 1]]) ||
+                (r == 0 && c == order_col)};
+          XFillRectangle(display(), window,
+                         dark ? grey_gc : ltgrey_gc,
+                         col_start, row_start,
+                         col_width, row_height());
+          if (c == 0) row_starts.emplace_back(row_start, r);
+          if (r == 0) r = start_row - 1;
+        }
+        XDrawString(display(), window, bold ? bold_gc : gc,
+                    x_start, row_start + row_height() * 8 / 10,
+                    text.c_str(), static_cast<unsigned int>(text.size()));
+        row_start += row_height();
+      }
+      col_starts.emplace_back(col_start, c);
+      col_start += col_width;
+      if (c == 0) row_starts.emplace_back(row_start, r);
+    }
+    col_starts.emplace_back(col_start, c);
+    XDrawRectangles(display(), window, gc, &rectangles[0],
+                    static_cast<unsigned int>(rectangles.size()));
+    if (0) {
+      const auto back = row_starts.back();
+      std::cerr << "hit_right " << hit_right()
+                << " back " << back.first << " " << back.second
+                << " right " << grid_right()
+                << " rows " << rows_shown()
+                << " stop " << cell_string(0, stop_col() - 1)
+                << " " << cell_string(stop_row() - 1, 0) << std::endl;
+    }
+    XFlush(display());
+    is_drawn = true;
+  }
+
+  virtual void key(const XKeyEvent & event) {
+    // Translate keypress
+    Event key_press(Event::X, &event);
+    const std::pair<char, KeySym> char_key{get_char_and_keysym(event)};
+    const KeySym & sym{char_key.second};
+    const char pressed{char_key.first};
+
+    // Ignore modifier key presses
+    if (sym >= XK_Shift_L && sym <= XK_Hyper_R)
+      return;
+
+    // Arrow key motion
+    const uint64_t increment(event.state & ControlMask ? 100 :
+                             (event.state & ShiftMask ? 10 : 1));
+    if (sym == XK_Down || sym == XK_Page_Down || sym == XK_End) {
+      const uint64_t max_row{n_rows - rows_shown()};
+      if (sym == XK_Down) start_row += increment;
+      if (sym == XK_Page_Down) start_row = start_row + increment * rows_shown();
+      if (sym == XK_End) start_row = max_row;
+      if (start_row > max_row) start_row = max_row;
+    }
+    if (sym == XK_Up || sym == XK_Page_Up || sym == XK_Home) {
+      if (sym == XK_Up && start_row > increment) start_row -= increment;
+      if (sym == XK_Page_Up)
+        start_row = start_row > increment * rows_shown() ?
+            start_row - increment * rows_shown() : 1;
+      if (sym == XK_Home) start_row = 1;
+    }
+    if (sym == XK_Right && hit_right()) ++start_col;
+    if (sym == XK_Left && start_col > 1) --start_col;
+
+    uint64_t stop_col_{stop_col()};
+    if (pressed >= XK_space && pressed < XK_asciitilde) {
+      switch (pressed) {
+        case 'Q':
+          app.close_all();
+          return;
+        case 'q':
+          app.close_window(window);
+          return;
+        case 's':
+          only_highlights = !only_highlights;
+          break;
+        case '+':
+          increase_font_size();
+          break;
+        case '-':
+          decrease_font_size();
+          break;
+        case '=':
+          reset_font_size();
+          break;
+        case '>':
+          if (order_col + 1 != n_cols) {
+            ++order_col;
+            while (hit_right() && order_col >= stop_col_) {
+              ++start_col;
+              ++stop_col_;
+            }
+            while (order_col && order_col < start_col) --start_col;
+          } else {
+            return;
+          }
+          reset_order(order_col);
+          break;
+        case '<':
+          if (order_col) {
+            --order_col;
+            while (hit_right() && order_col >= stop_col_) {
+              ++start_col;
+              ++stop_col_;
+            }
+            if (order_col)
+              while (start_col > 1 && order_col < start_col) --start_col;
+          } else {
+            return;
+          }
+          reset_order(order_col);
+          break;
+        case ',':
+          if (increasing) {
+            increasing = false;
+          } else {
+            return;
+          }
+          reverse(order.begin(), order.end());
+          break;
+        case '.':
+          if (!increasing) {
+            increasing = true;
+          } else {
+            return;
+          }
+          reverse(order.begin(), order.end());
+          break;
+        default:
+          break;
       }
     }
-    app.create<X11Graph>(info).arc_radius = 1;
+    prepare_draw();
+  }
+
+  virtual void button_press(const XButtonEvent & event) {
+    click = event;
+
+    // Mouse and trackpad scrolling
+    const uint64_t saved_start{start_row};
+    XEvent next_event;
+    XButtonEvent & this_event{next_event.xbutton};
+    this_event = event;
+    do {
+      const uint64_t increment(this_event.state & ControlMask ? 100 :
+                               (this_event.state & ShiftMask ? 10 : 1));
+      if (this_event.button == Button4) {
+        if (start_row > increment) {
+          start_row -= increment;
+        } else {
+          start_row = 1;
+        }
+      } else if (this_event.button == Button5) {
+        start_row += increment;
+        start_row = std::min(start_row, n_rows - rows_shown());
+      } else {
+        break;
+      }
+    } while (XCheckTypedWindowEvent(display(), window,
+                                    ButtonPressMask, &next_event));
+    if (start_row != saved_start) prepare_draw();
+  }
+
+  bool is_cell(const Point & cell) const {
+    if (cell.x != static_cast<int>(n_cols) &&
+        cell.y != static_cast<int>(n_rows)) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  Point get_grid_cell(const Point & point) const {
+    Point result;
+    if (point.x < grid_left() || point.x >= grid_right()) {
+      result.x = static_cast<int>(n_cols);
+    } else {
+      result.x = static_cast<int>(
+          (upper_bound(col_starts.begin(), col_starts.end(),
+                       PosIndex(point.x, -1)) - 1)->second);
+    }
+    if (point.y < grid_top() || point.y >= grid_bottom()) {
+      result.y = static_cast<int>(n_rows);
+    } else {
+      result.y = static_cast<int>(
+          (upper_bound(row_starts.begin(), row_starts.end(),
+                       PosIndex(point.y, -1)) - 1)->second);
+    }
+    // std::cerr << result.x << " " << result.y << std::endl;
+    return result;
+  }
+
+  virtual void button_release(const XButtonEvent & event) {
+    if (event.button == Button4 || event.button == Button5) return;
+    Click::Resetter resetter{click};
+    const Point pointer_release_pos{event};
+    if (0) std::cerr << "release"
+                     << " " << pointer_release_pos.x
+                     << " " << pointer_release_pos.y << std::endl;
+    const Point press_grid_cell{get_grid_cell(click)};
+    const Point release_grid_cell{get_grid_cell(pointer_release_pos)};
+    if (!is_cell(press_grid_cell) || !is_cell(release_grid_cell))
+      return;
+    if (press_grid_cell.y == 0 && release_grid_cell.y == 0) {
+      std::vector<uint64_t> graph_columns;
+      if (press_grid_cell == release_grid_cell) {
+        if (click > 1 && order_col != 0 && release_grid_cell.x != 0) {
+          graph_columns.push_back(order_col - 1);
+          graph_columns.push_back(release_grid_cell.x - 1);
+        } else {
+          if (press_grid_cell.x == static_cast<int>(order_col)) {
+            increasing = !increasing;
+          } else {
+            order_col = press_grid_cell.x;
+            increasing = click == 1;
+          }
+          reset_order(order_col);
+          prepare_draw();
+        }
+      } else if (press_grid_cell.x != 0 && release_grid_cell.x != 0) {
+        graph_columns.push_back(press_grid_cell.x - 1);
+        graph_columns.push_back(release_grid_cell.x - 1);
+      }
+      if (graph_columns.size())
+        data.launch_graph(app, graph_columns, &selected_rows);
+    } else if (press_grid_cell.x == 0 && release_grid_cell.x == 0) {
+      if (press_grid_cell.y != 0 && release_grid_cell.y != 0) {
+        if (0) std::cerr << "Press " << press_grid_cell.x << " "
+                         << press_grid_cell.y << std::endl;
+        const int low_row{std::min(press_grid_cell.y, release_grid_cell.y)};
+        const int high_row{std::max(press_grid_cell.y, release_grid_cell.y)};
+        std::vector<uint64_t> new_selected;
+        for (int r{low_row}; r <= high_row; ++r)
+          new_selected.push_back(order[r - 1]);
+        selected_click_share(selected_rows, new_selected, click);
+      }
+    } else {
+      selected_rows.clear();
+    }
+  }
+
+  void reset_order(uint64_t col = 0) {
+    order_col = col;
+    if (col == 0) {
+      if (increasing) {
+        for (uint64_t row{0}; row != order.size(); ++row) order[row] = row;
+      } else {
+        for (uint64_t row{0}; row != order.size(); ++row)
+          order[row] = order.size() - row - 1;
+      }
+    } else {
+      --col;
+      if (data.is_real(col)) {
+        std::vector<std::pair<double, uint64_t>> val_is;
+        if (increasing) {
+          for (uint64_t row{0}; row != data.n_rows(); ++row)
+            val_is.emplace_back(data.real(col, order[row]), order[row]);
+        } else {
+          for (uint64_t row{0}; row != data.n_rows(); ++row)
+            val_is.emplace_back(-data.real(col, order[row]), order[row]);
+        }
+        stable_sort(val_is.begin(), val_is.end());
+        for (uint64_t row{0}; row != data.n_rows(); ++row)
+          order[row] = val_is[row].second;
+      } else {
+        using ValI = std::pair<const std::string *, uint64_t>;
+        std::vector<ValI> val_is;
+        for (uint64_t row{0}; row != data.n_rows(); ++row)
+          val_is.emplace_back(&data.strings(col)[order[row]], order[row]);
+        stable_sort(val_is.begin(), val_is.end(),
+             [this](const ValI & lhs, const ValI & rhs){
+               return increasing ? *lhs.first < *rhs.first :
+                   *rhs.first < *lhs.first;
+             });
+        for (uint64_t row{0}; row != data.n_rows(); ++row)
+          order[row] = val_is[row].second;
+      }
+    }
+  }
+  void reset_scroll() {
+    start_row = 1;
+    start_col = 1;
+  }
+  void reset_font_size() {
+    normal_font = normal_fonts.at_least(default_font_size);
+    set_font();
+  }
+  void set_font() {
+    XSetFont(display(), gc, normal_font->id());
+    bold_font = bold_fonts.at_least(normal_font->size());
+    XSetFont(display(), bold_gc, bold_font->id());
+  }
+  void increase_font_size() {
+    normal_font = normal_fonts.bigger(normal_font);
+    set_font();
+  }
+  void decrease_font_size() {
+    normal_font = normal_fonts.smaller(normal_font);
+    set_font();
+  }
+  void reset_all() {
+    reset_order();
+    reset_scroll();
+    reset_font_size();
+  }
+  void list_fonts() const {
+    std::cerr << "Fonts: " << normal_font->size() << " in";
+    for (const unsigned int s : normal_fonts.sizes()) std::cerr << " " << s;
+    std::cerr << std::endl;
+  }
+  std::string cell_string(const uint64_t row,
+                          const uint64_t col) const {
+    if (row) {
+      if (col) {
+        return data.string(col - 1, order[row - 1]);
+      } else {
+        return order_text[order[row - 1]];
+      }
+    } else {
+      if (col) {
+        return data.name(col - 1);
+      } else {
+        return index_name;
+      }
+    }
+  }
+  void highlight() { highlight_points(selected_rows); }
+  template <class VEC>
+  void highlight_points(const VEC & selected) {
+    highlights.clear();
+    highlights.resize(data.n_rows());
+    for (const uint64_t r : selected) highlights[r] = 1;
+    prepare_draw();
+  }
+  void add_column() {
+    // assumes already added to TabularData separately!
+    int width_{static_cast<int>(data.name(n_cols).size())};
+    for (uint64_t row{0}; row != data.n_rows(); ++row)
+      width_ = std::max(width_,
+                       static_cast<int>(data.string(n_cols, row).size()));
+    widths.push_back(width_);
+    ++n_cols;
+  }
+  template <class COL>
+  void add_column(const std::string & name__, const COL & values) {
+    data.add_column(name__, values);
+    add_column();
+  }
+
+  volatile bool is_drawn{false};
+
+ private:
+  TabularData data;
+  uint64_t n_rows{0};  // can remove
+  uint64_t n_cols{0};  // can remove
+  SharedPoints selected_rows;  // can move to TabularData...
+  std::vector<unsigned char> highlights;  // can remove
+  bool only_highlights{false};  // can remove
+  const std::string index_name{"row"};  // can remove
+  uint64_t order_col{0};
+  bool increasing = true;  // can remove
+  std::vector<int> widths;
+  Ints order{};
+  Strings order_text{};
+  uint64_t start_row{1};
+  uint64_t start_col{1};
+  std::vector<PosIndex> col_starts{};
+  std::vector<PosIndex> row_starts{};
+  Click click{};
+  static constexpr uint64_t default_font_size{18};
+  X11Fonts normal_fonts{app, false};
+  X11Font * normal_font{nullptr};
+  X11Fonts & bold_fonts{app.fonts};
+  X11Font * bold_font{nullptr};
+  GC bold_gc{};
+  GC border_gc{};
+};
+
+X11DataTable & TabularData::launch_table(
+    X11App & app, const uInts & columns, SharedPoints & shared_points) const {
+  return app.create<X11DataTable>(TabularData{*this, columns}, shared_points);
+}
+
+
+//
+// Plot and Table launcher
+//
+class X11Plotter {
+ public:
+  template <class TSV>
+  explicit X11Plotter(const TSV & tsv, ThreadPool * pool_) :
+      data{tsv}, app{pool_} {
+    using Strings = std::vector<std::string>;
+    using ColStrings = std::vector<Strings>;
+    using Vec = std::vector<unsigned int>;
+    using Cells = std::vector<std::pair<unsigned int, unsigned int>>;
+    ColStrings text{
+      {"Data Field"}, {"Type"}, {"Plot X"}, {"Plot Y"}, {"Table"}};
+    Cells selected_cells{};
+    Cells inactive_cells{};
+    Vec inactive_cols{0, 1};
+    Vec inactive_rows{0};
+    Vec exclusive_cols{2};
+    Vec exclusive_rows{};
+    for (unsigned int c{0}; c != data.n_cols(); ++c) {
+      text[0].push_back(data.name(c));
+      text[1].push_back(data.type(c));
+      for (const uint64_t t : {2, 3, 4}) text[t].push_back("");
+      if (data.types()[c] == "str") {
+        inactive_cells.emplace_back(2, c + 1);
+        inactive_cells.emplace_back(3, c + 1);
+      }
+      selected_cells.emplace_back(4, c + 1);
+    }
+
+    X11TextGrid & grid{app.create<X11TextGrid>(
+        text, selected_cells, inactive_cells,
+        inactive_cols, inactive_rows,
+        exclusive_cols, exclusive_rows,
+        std::bind(&X11Plotter::launch_graph, this, std::placeholders::_1),
+        std::bind(&X11Plotter::launch_table, this, std::placeholders::_1),
+        std::bind(&X11Plotter::launch_ready, this, std::placeholders::_1),
+        Geometry{{1500, 1500}, {0, 0}},
+        data.name())};
+    launch_table(grid.cell_status_);
+    app.run();
+  }
+  X11Plotter(const X11Plotter &) = delete;
+  X11Plotter& operator=(const X11Plotter &) = delete;
+  X11Plotter(X11Plotter &&) = delete;
+  X11Plotter& operator=(X11Plotter &&) = delete;
+
+  bool launch_graph(const X11TextGrid::CellStatus & status) {
+    std::vector<uint64_t> subset_cols;
+    for (unsigned int n{0}; n != data.names().size(); ++n)
+      if (status[2][n + 1]) subset_cols.push_back(n);
+    for (unsigned int n{0}; n != data.names().size(); ++n)
+      if (status[3][n + 1]) subset_cols.push_back(n);
+    data.launch_graph(app, subset_cols, &selected_rows);
+    return true;
+  }
+  bool launch_table(const X11TextGrid::CellStatus & status) {
+    std::vector<uint64_t> subset_cols;
+    for (uint64_t n{0}; n != data.names().size(); ++n)
+      if (status[4][n + 1]) subset_cols.push_back(n);
+    data.launch_table(app, subset_cols, selected_rows);
     return true;
   }
   bool launch_ready(const X11TextGrid::CellStatus & status) const {
-    return std::find(status[1].begin(), status[1].end(), 1) != status[1].end()
-        && std::find(status[2].begin(), status[2].end(), 1) != status[2].end();
+    return std::find(status[2].begin(), status[2].end(), 1) != status[2].end()
+        && std::find(status[3].begin(), status[3].end(), 1) != status[3].end();
   }
 
-  std::string file_name_{};
-  X11App app{};
-  Data data{};
-  Names names{};
+ private:
+  // Data table structure
+  TabularData data;
+
+  // App
+  X11App app;
+
+  // SharedPoints
+  SharedPoints selected_rows{[](){}};
 };
+
 
 }  // namespace paa
 

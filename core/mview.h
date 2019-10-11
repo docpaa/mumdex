@@ -304,6 +304,7 @@ class X11MUMdexViewer : public X11Win {
     if (static_cast<uint64_t>(event.data.l[0]) == *app.wmDeleteMessage()) {
       return;
     }
+    // Note segmentation fault caused by this code somehow when exiting app
     const unsigned int c{static_cast<unsigned int>(event.data.l[1])};
     const unsigned int p{static_cast<unsigned int>(event.data.l[2])};
     std::cout << "Setting view to position "
@@ -914,8 +915,12 @@ class X11CandidateViewer : public Geometry {
       std::bind(&X11CandidateViewer::launch_ready, this,
                 std::placeholders::_1)};
     using Vec = std::vector<unsigned int>;
-    app.create<X11TextGrid>(text, Vec{0, 1, 3}, Vec{0}, Vec{0, 2},
-                        exclusive_rows, call_back, cell_test, *this);
+    using Cells = std::vector<std::pair<unsigned int, unsigned int>>;
+
+    app.create<X11TextGrid>(text, Cells{}, Cells{},
+                            Vec{0, 1, 3}, Vec{0}, Vec{0, 2},
+                            exclusive_rows, call_back, nullptr, cell_test,
+                            *this);
     launch_graph2(0);
     app.run();
   }

@@ -489,6 +489,10 @@ class TSV {
 
   uint64_t sample{1};
 
+  const std::vector<std::string> & strings(const uint64_t col) const {
+    return data[col];
+  }
+
  private:
   // Used to add series to tsv
   template<class result_type>

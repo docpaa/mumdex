@@ -23,7 +23,7 @@ if [ $uname = "Darwin" ] ; then
 fi
 
 abspos_left=2983775000
-geometry=2478x881+0+0
+geometry=2400x1300+0+0
 
 (cd ./mumdex ; make -j $n_threads ggraph > /dev/null) &&
 (
@@ -31,11 +31,12 @@ echo 'Note: to exactly reproduce the figure from the paper:'
 echo 'you need to run on a mac, to get the exact fonts and gui used in the paper'
 echo "you need a big enough screen to contain the image (${geometry%%+*} pixels min usable)"
 echo 'you need to manually turn on cytoband display (near top left)'
-echo 'you need to manually increase point display size by two levels (near bottom right)'
+echo 'you need to manually increase point display size by three levels (near bottom right)'
+echo 'you need to manually increase line display size by two levels (near bottom right)'
 echo 'have the mouse focus remain in the window, in the central graphing region'
 echo 'take a window-screenshot: command-shift-4 space, then click on window'
 ) &&
-./mumdex/ggraph --threads $n_threads --geometry $geometry --initial $abspos_left $((abspos_left+1000000)) 0 2.5 cn ./hg19.fa abspos,ratio,seg {m,f,d,s}.txt
+./mumdex/ggraph --linear --threads $n_threads --geometry $geometry --initial $abspos_left $((abspos_left+1000000)) 0 2.5 cn ./hg19.fa abspos,ratio,seg {m,f,d,s}.txt
 
 
 

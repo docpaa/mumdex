@@ -104,6 +104,7 @@ DEVELOPMENT_PROGRAMS := \
 	smash_ip_fig \
 	smooth_data \
 	snp_counts \
+	snp_hists \
 	snp_report \
 	subsample \
 	table_stats \

@@ -3,7 +3,7 @@
 //
 // CN view gui
 //
-// Copyright 2016-2018 Peter Andrews @ CSHL
+// Copyright 2016-2019 Peter Andrews @ CSHL
 //
 //
 // example command line:
@@ -1218,11 +1218,12 @@ int main(int argc, char * argv[]) try {
       return result;
     }()};
 
+  ThreadPool pool{n_threads};
+
   // Read in columns from multiple data files in parallel
   using InputData = vector<AbsposColumns>;
   const InputData input_data{
-    [&names, &columns, &ref_ptr, n_rows, x_jitter, percent] () {
-      ThreadPool pool(n_threads);
+    [&names, &columns, &ref_ptr, &pool, n_rows, x_jitter, percent] () {
       using Future = future<AbsposColumns>;
       vector<Future> futures;
       for (const string & name : names)
@@ -1239,7 +1240,7 @@ int main(int argc, char * argv[]) try {
     }()};
 
   // App to display multiple windows
-  X11App app;
+  X11App app{&pool};
   if (fullscreen)
     geometry = {{app.display_size[0], app.display_size[1]}, {0, 0}};
 
@@ -1314,12 +1315,12 @@ int main(int argc, char * argv[]) try {
   };
 
   // All individuals graph
-  X11Graph & graph{app.create<X11Graph>(info, geometry, display_name, n_threads,
+  X11Graph & graph{app.create<X11Graph>(info, geometry, display_name,
                                         add_special_features)};
 
   // Preload gene info to avoid wait time after zoom
   future<bool> gene_future;
-  if (do_genome) gene_future = graph.pool.run(
+  if (do_genome) gene_future = pool.run(
           add_genes, std::cref(*ref_ptr), std::ref(graph), Event());
 
   // Process initial view command line arguments
