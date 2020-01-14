@@ -46,7 +46,7 @@ int main(int argc, char * argv[]) try {
       random_device rd{};
       mt19937_64 mersenne{rd()};
       function<double()> gen{bind(uniform_real_distribution<double>(0, 1),
-                                  mersenne)};
+                                  std::ref(mersenne))};
       vector<unsigned int> result;
       for (unsigned int t{0}; t != n_coin_1; ++t) {
         result.push_back(gen() < p_tails_1);

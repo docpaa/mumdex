@@ -339,7 +339,7 @@ class Progress {
       if (n_ > 1 && n_ != n_total && minutes > 0) {
         fprintf(out, ", %.2f min remaining", (n_total - n_) * minutes / n_);
       }
-      if (status.size()) fprintf(out, ", %s", status.c_str());
+      if (status.size() && n_ != n_total) fprintf(out, ", %s", status.c_str());
       fprintf(out, "%sK", csi);  // clear to end of line
       fflush(out);
       if (n_ == n_total) finalize();
@@ -415,9 +415,18 @@ using uint16_noo_t = NoOverflowInt<uint16_t>;
 
 }  // namespace paa
 
-// Support make_unique in C++ 2011
+// Support size and make_unique in C++ 2011
 #if __cplusplus == 201103L
 namespace std {
+
+template <class C>
+constexpr auto size(const C & c) -> decltype(c.size()) {
+  return c.size();
+}
+template <class T, size_t N>
+constexpr size_t size(const T (&)[N]) noexcept {
+  return N;
+}
 
 template<class T> struct _Unique_if {
   typedef unique_ptr<T> _Single_object;

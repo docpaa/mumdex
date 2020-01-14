@@ -46,14 +46,24 @@ inline std::string replace_substring(const std::string & str,
 }
 
 inline std::string replace_all(std::string result,
-                                      const std::string & oldstr,
-                                      const std::string & newstr) {
+                               const std::string & oldstr,
+                               const std::string & newstr) {
   size_t pos = 0;
   while ((pos = result.find(oldstr, pos)) != std::string::npos) {
     result.replace(pos, oldstr.size(), newstr);
     pos += newstr.size();
   }
   return result;
+}
+
+inline void replace_all_inplace(std::string & result,
+                                const std::string & oldstr,
+                                const std::string & newstr) {
+  size_t pos = 0;
+  while ((pos = result.find(oldstr, pos)) != std::string::npos) {
+    result.replace(pos, oldstr.size(), newstr);
+    pos += newstr.size();
+  }
 }
 
 inline void replace_substring_inplace(std::string & str,

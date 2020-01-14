@@ -145,7 +145,7 @@ int main(int argc, char ** argv) try {
   std::mt19937_64 mersenne{rd()};
   std::function<double()> gen{
     std::bind(std::uniform_real_distribution<double>(
-        -scatter_amount, scatter_amount), mersenne)};
+        -scatter_amount, scatter_amount), std::ref(mersenne))};
 
   for (uint64_t p{0}; p != xy.size(); ++p) {
     const double x{xy[p].first};

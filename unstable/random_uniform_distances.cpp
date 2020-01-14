@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) try {
   // Set up uniform real random number generator
   random_device rd;
   auto mersenne = mt19937_64(rd());
-  auto gen = bind(uniform_real_distribution<double>(0, 1), mersenne);
+  auto gen = bind(uniform_real_distribution<double>(0, 1), std::ref(mersenne));
 
   // Plots
   PSDoc plots{"distances", "distances", 600, 600};

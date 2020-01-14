@@ -663,7 +663,7 @@ int main(int argc, char * argv[]) try {
   random_device rd;
   auto mersenne = mt19937_64(rd());
   using dist_real = uniform_real_distribution<double>;
-  function<double()> unit{bind(dist_real(0, 1), mersenne)};
+  function<double()> unit{bind(dist_real(0, 1), std::ref(mersenne))};
 
   PSGraph map_dist_graph{page, ";Normalized Inter-Map Distance;N",
         Bounds(0, 1, 0, nunset())};

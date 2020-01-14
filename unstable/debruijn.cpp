@@ -365,7 +365,7 @@ int main(int argc, char* argv[]) try {
   std::random_device rd;
   auto mersenne = mt19937_64(rd());
   auto dist = uniform_int_distribution<uint64_t>(33, 126);
-  auto rand_char = bind(dist, mersenne);
+  auto rand_char = bind(dist, std::ref(mersenne));
 
   // Controls and settings
   const bool show_input = false;

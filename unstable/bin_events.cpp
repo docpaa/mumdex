@@ -17,7 +17,6 @@
 
 #include "cn.h"
 #include "error.h"
-#include "genes.h"
 #include "mumdex.h"
 #include "psplot.h"
 

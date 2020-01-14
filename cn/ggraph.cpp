@@ -966,7 +966,7 @@ class AbsposColumns {
     std::random_device rd{};
     std::mt19937_64 mersenne{rd()};
     auto randGen = std::bind(
-        std::uniform_real_distribution<double>(0.0, 100.0), mersenne);
+        std::uniform_real_distribution<double>(0.0, 100.0), std::ref(mersenne));
 
     // Read in data line by line
     String line;

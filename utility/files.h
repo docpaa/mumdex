@@ -422,26 +422,17 @@ class MemoryVector : public MemoryVectorBase<Type> {
   explicit MemoryVector(const std::string & file_name,
                          const bool warn_empty = true) {
     const int input{open(file_name.c_str(), O_RDONLY)};
-    if (input == -1) {
-      if (!warn_empty) {
-        data = nullptr;
-        n_elem = 0;
-        return;
-      }
+    if (input == -1)
       throw Error("could not open input") << file_name << "for reading";
-    }
     struct stat buf;
-    if (fstat(input, &buf) == -1) {
+    if (fstat(input, &buf) == -1)
       throw Error("Could not get status for file") << file_name;
-    }
     const uint64_t file_size{static_cast<uint64_t>(buf.st_size)};
     n_elem = file_size / sizeof(Type);
     if (file_size == 0) {
-      if (warn_empty) {
+      if (warn_empty)
         std::cerr << "Empty file in MemoryVector "
                   << file_name << std::endl;
-      }
-      data = nullptr;
     } else {
       data = static_cast<Type *>(::operator new(sizeof(Type) * n_elem));
       if (data == nullptr) throw Error("Could not allocate memory for")
@@ -469,9 +460,7 @@ class MemoryVector : public MemoryVectorBase<Type> {
 
   // destruction
   ~MemoryVector() {
-    if (data != nullptr) {
-      delete data;
-    }
+    if (data != nullptr) delete data;
   }
 };
 
@@ -488,28 +477,24 @@ class TMappedVector : public MemoryVectorBase<Type> {
   // construction
   TMappedVector() : Base{} { }
   TMappedVector(TMappedVector && other) noexcept : Base{std::move(other)} { }
+  TMappedVector(const std::string & file_name, const uint64_t expected) :
+      TMappedVector{file_name, false} {
+    if (this->size() != expected)
+      throw Error("Unexpected size in MappedVector") << file_name;
+  }
   explicit TMappedVector(const std::string & file_name,
                          const bool warn_empty = true) {
     const int input{open(file_name.c_str(), O_RDONLY)};
-    if (input == -1) {
-      if (!warn_empty) {
-        data = nullptr;
-        n_elem = 0;
-        return;
-      }
+    if (input == -1)
       throw Error("could not open input") << file_name << "for reading";
-    }
     struct stat buf;
-    if (fstat(input, &buf) == -1) {
+    if (fstat(input, &buf) == -1)
       throw Error("Could not get status for file") << file_name;
-    }
     const uint64_t file_size{static_cast<uint64_t>(buf.st_size)};
     if (file_size == 0) {
-      if (warn_empty) {
+      if (warn_empty)
         std::cerr << "Empty file in TMappedVector "
                   << file_name << std::endl;
-      }
-      data = nullptr;
     } else {
       data = static_cast<Type *>(
           mmap(nullptr, file_size, PROT_READ, MAP_SHARED |
@@ -532,11 +517,8 @@ class TMappedVector : public MemoryVectorBase<Type> {
 
   // destruction
   ~TMappedVector() {
-    if (n_elem) {
-      if (munmap(data, bytes())) {
-        perror("munmap error in TMappedVector");
-      }
-    }
+    if (n_elem && munmap(data, bytes()))
+      perror("munmap error in TMappedVector");
   }
 };
 
@@ -546,6 +528,28 @@ template <class Type> using PreMappedVector = TMappedVector<Type, true>;
 template <class Type> using UnMappedVector = TMappedVector<Type, false>;
 // Use UnMapped as default
 template <class Type> using MappedVector = UnMappedVector<Type>;
+
+#if 0
+// Only works for char Type
+template <class Type>
+class ZippedVector {
+ public:
+  ZippedVector(const std::string & unzipped_name, const uint64_t expected) {
+    const std::string unzip{"zcat " + unzipped_name + ".gz"};
+    redi::ipstream input{unzip.c_str()};
+    if (!input) throw Error("Problem executing command") << unzip;
+    input >> data;
+    if (data.size() != expected)
+      throw Error("Unexpected size in ZippedVector")
+          << unzipped_name << data.size() << expected;
+  }
+  uint64_t size() const { return data.size(); }
+  const Type & operator[](const uint64_t index) const { return data[index]; }
+
+ private:
+  std::string data{};
+};
+#endif
 
 //
 // Class that loads data from text file the first time,

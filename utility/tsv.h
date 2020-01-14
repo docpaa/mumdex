@@ -179,7 +179,7 @@ class TSV {
       ps{remove_substring(file_name_, ".txt")},
     mersenne{rd()},
     unitGen{std::bind(std::uniform_real_distribution<double>(-0.5, 0.5),
-                      mersenne)} {
+                      std::ref(mersenne))} {
     // Open file
     std::ifstream file{(file_name_).c_str()};
     if (!file) throw Error("Problem opening file") << file_name_;
@@ -193,7 +193,7 @@ class TSV {
       ps{remove_substring(file_name_, ".txt")},
     mersenne{rd()},
     unitGen{std::bind(std::uniform_real_distribution<double>(-0.5, 0.5),
-                      mersenne)} {
+                      std::ref(mersenne))} {
     load(stream);
   }
 

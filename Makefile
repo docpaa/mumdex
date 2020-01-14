@@ -19,9 +19,9 @@ STD := -std=c++11
 WARN := -Wall
 LIBS := -pthread
 INCFLAGS := $(addprefix -I ,$(MODULES))
-# debug = 1
+# debug = defined
 ifdef debug
-  FAST :=  -Og -g -ggdb
+  FAST := -Og -g -ggdb
 else
   FAST := -Ofast -march=native -DNDEBUG
   # For gcc under cygwin
@@ -32,6 +32,8 @@ else
     FAST += $(LTO)
   endif
 endif
+# FAST := -O1 -pg -flto
+# LTO := -flto -pg
 LDFLAGS := $(LTO)
 
 # OS determination and special compilation stuff for each particular OS

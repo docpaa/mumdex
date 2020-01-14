@@ -276,9 +276,9 @@ class Multiplexer {
   Multiplexer(const Multiplexer &) = delete;
   Multiplexer & operator=(const Multiplexer &) = delete;
 
-  void erase_parent(void * parent) {
+  void erase_parent(void * parent_) {
     typename std::vector<Parent *>::iterator found{find(
-        parents_.begin(), parents_.end(), reinterpret_cast<Parent *>(parent))};
+        parents_.begin(), parents_.end(), reinterpret_cast<Parent *>(parent_))};
     if (found != parents_.end()) {
       parents_.erase(found);
     }
@@ -292,10 +292,10 @@ class Multiplexer {
   }
 
   // Add nodes
-  Multiplexer & add(Parent * parent) {
-    if (parent) {
-      parents_.push_back(parent);
-      parent->children().push_back(self_);
+  Multiplexer & add(Parent * parent_) {
+    if (parent_) {
+      parents_.push_back(parent_);
+      parent_->children().push_back(self_);
     }
     return *this;
   }
@@ -339,18 +339,19 @@ class Multiplexer {
   const std::vector<Child *> & children() const { return children_; }
   std::vector<Parent *> & parents() { return parents_; }
   std::vector<Child *> & children() { return children_; }
+  Parent & parent() { return *parents_.front(); }
 
   // Finalize parents
   void finalize_doc() {
-    for (Parent * parent : parents_) {
-      parent->finalize_doc();
+    for (Parent * parent_ : parents_) {
+      parent_->finalize_doc();
     }
   }
 
  protected:
   ~Multiplexer() {
-    for (Parent * parent : parents_) {
-      parent->erase_child(self_);
+    for (Parent * parent_ : parents_) {
+      parent_->erase_child(self_);
     }
     for (Child * child : children_) {
       child->erase_parent(self_);
@@ -717,14 +718,12 @@ class PSPageT :
 
   // Finalize
   virtual void finalize(PSDoc & doc, const unsigned int page, Bounds bounds) {
-    if (children().empty()) return;
-
     // Start page
     doc << "%%Page: " << page << " " << page << "\n";
     doc << "save\n";
 
     // Title
-    if (title_) {
+    if (children().size() && title_) {
       doc << bounds.xc() << " " << bounds.yh() - 0.7 * title_.size()
           << " m " << title_.ps() << "\n";
       bounds.yh(bounds.yh() - 1.2 * title_.size());
@@ -734,8 +733,12 @@ class PSPageT :
     const Layout layout{bounds, layout_};
 
     // Finalize graphs
-    for (unsigned int c{0}; c != children().size(); ++c) {
-      children()[c]->finalize(doc, layout[c].bounds());
+    if (children().empty()) {
+      doc << title_.text() << "\n";
+    } else {
+      for (unsigned int c{0}; c != children().size(); ++c) {
+        children()[c]->finalize(doc, layout[c].bounds());
+      }
     }
 
     // Finish page
@@ -920,6 +923,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
 
   virtual void finalize(PSDoc & doc, Bounds bounds) {
     if (children().empty()) {
+      return;
       std::cerr << "Empty graph" << std::endl;
       exit(1);
     }
@@ -935,13 +939,6 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
 
     // Get graph range
     do_range(hist_ ? 0.0 : 0.01);
-
-    // Check for bad range problem and abandon the graph if necessary
-    if (is_unset(range_.xl()) || is_unset(range_.xh()) ||
-        is_unset(range_.yl()) || is_unset(range_.yh()) ||
-        de(range_.xl(), range_.xh()) || de(range_.yl(), range_.yh())) {
-      return;
-    }
 
     // Axis label bounds adjustment
     const double tick_size__{tick_size() * scale};
@@ -1095,7 +1092,6 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
           << legend.str() << "\n";
     }
 
-
     // Arbitrary text
     write_text(doc, bounds, scale);
 
@@ -1198,7 +1194,16 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     for (PSSeries * series : children()) {
       series->get_range(range_, new_range, this->log_x_, this->log_y_);
     }
+
     range_ = new_range;
+
+    // Check for bad range problem and fake a good range if necessary
+    if (is_unset(range_.xl()) || is_unset(range_.xh()) ||
+        is_unset(range_.yl()) || is_unset(range_.yh()) ||
+        de(range_.xl(), range_.xh()) || de(range_.yl(), range_.yh())) {
+      range_ = Bounds{0, 1, 0, 1};
+    }
+
     if (range_.xl() > min_range.xl()) range_.xl() = min_range.xl();
     if (range_.xh() < min_range.xh()) range_.xh() = min_range.xh();
     if (range_.yl() > min_range.yl()) range_.yl() = min_range.yl();
@@ -1387,10 +1392,11 @@ class Marker {
          const std::string & color__ = default_color(),
          const double line_width__ = default_line_width(),
          const bool fill__ = true,
-         const std::string & fill_color__ = default_fill_color(),
+         const std::string & fill_color__ = "",  // default_fill_color(),
          const double rotation__ = 0.0) :
       path_{path__}, scale_{scale__}, color_{color__},
-    line_width_{line_width__}, fill_{fill__}, fill_color_{fill_color__},
+    line_width_{line_width__}, fill_{fill__},
+      fill_color_{fill_color__.size() ? fill_color__ : color__},
     rotation_{rotation__} { }
 
   // Ordering
@@ -1687,11 +1693,8 @@ class PSHSeries : public PSSeries {
 
   void get_range(const Bounds & range, Bounds & new_range,
                  const bool, const bool) {
-    if (x_.empty()) {
-      std::cerr << "Empty series in PSHSeries get_range - faking" << std::endl;
-      new_range = Bounds{0, 1, 0, 1};
-      return;
-    }
+    if (x_.empty()) return;
+
     h_.clear();
     h_.resize(n_bins_);
     // std::cerr << range.xl() << " " << range.xh() << std::endl;
@@ -1738,10 +1741,8 @@ class PSHSeries : public PSSeries {
                 const Bounds & bounds,
                 const Bounds & range,
                 const PSPart &) {
-    if (x_.empty()) {
-      std::cerr << "Empty series in PSHSeries finalize - skipping" << std::endl;
-      return;
-    }
+    if (x_.empty()) return;
+
     const double scales[2]{bounds.xw() / range.xw(),
           bounds.yw() / range.yw()};
     const double binw{bounds.xw() / n_bins_};
@@ -1883,15 +1884,17 @@ class PSXYSeries : public PSSeries {
     x.push_back(x_);
     y.push_back(y_);
   }
+  template <class Position>
+  void add_point(const Position pos) {
+    x.push_back(pos.x());
+    y.push_back(pos.y());
+  }
 
   // Set X Y limits
   virtual void get_range(const Bounds & range, Bounds & new_range,
                          const bool log_x, const bool log_y) {
-    if (x.empty()) {
-      std::cerr << "Empty series in PSXYSeries get_range - faking" << std::endl;
-      new_range = Bounds{0, 1, 0, 1};
-      return;
-    }
+    if (x.empty()) return;
+
     // Get x y ranges
     if (is_unset(range.xl()) && is_unset(range.xh())) {
       set_x_limits(new_range.xl(), new_range.xh(), log_x);
@@ -1981,11 +1984,8 @@ class PSXYSeries : public PSSeries {
   // Finalize
   virtual void finalize(PSDoc & doc, const Bounds & bounds,
                 const Bounds & range, const PSPart & part) {
-    if (x.empty()) {
-      std::cerr << "Empty series in PSXYSeries finalize - skipping"
-                << std::endl;
-      return;
-    }
+    if (x.empty()) return;
+
     const double scales[2]{bounds.xw() / range.xw(),
           bounds.yw() / range.yw()};
     const double scale{pow(bounds.xw() * bounds.yw() /
@@ -2231,6 +2231,15 @@ class PSXYDSeries : public PSSeries {
 class PSXYMSeries : public PSXYSeries {
  public:
   using PSDoc = PSDocT<PSPage>;
+
+  // factory
+  template <class ... Args>
+  static PSXYMSeries * create(Args && ... args) {
+    PSXYMSeries * xyseries__{new PSXYMSeries{std::forward<Args>(args)...}};
+    paa::ownp(xyseries__);
+    return xyseries__;
+  }
+
   // using PSXYSeries::PSXYSeries;
   explicit PSXYMSeries(PSPart & graph__) :
       PSXYSeries{graph__} { }
@@ -2263,6 +2272,12 @@ class PSXYMSeries : public PSXYSeries {
   void add_point(const double x_, const double y_, const Marker & m_) {
     x.push_back(x_);
     y.push_back(y_);
+    m.push_back(&*markers.insert(m_).first);
+  }
+  template <class Position>
+  void add_point(const Position pos, const Marker & m_) {
+    x.push_back(pos.x());
+    y.push_back(pos.y());
     m.push_back(&*markers.insert(m_).first);
   }
 
@@ -2750,6 +2765,231 @@ class LayoutTester {
 };
 
 #endif
+
+const std::string & get_color(const uint64_t index) {
+  static const std::vector<std::string> distinct_colors{
+    "0.898039 0 0", "0.145098 0 0.619608",
+        "0 0.717647 0", "0.898039 0.745098 0",
+        "0.0235294 0.337255 0.576471", "0.717647 0.866667 0",
+        "0.898039 0.513725 0", "0.584314 0 0.584314",
+        "0.972549 0.470588 0.972549", "0 0.0941176 0",
+        "0 0.941176 0.533333", "0.564706 0.627451 0.533333",
+        "0.972549 0.972549 0.627451", "0 0.658824 0.972549",
+        "0.439216 0.313725 0.972549", "0.972549 0.0313725 0.972549",
+        "0.470588 0.282353 0.188235", "0.972549 0.25098 0.470588",
+        "0.470588 0.972549 0.376471", "0 0.156863 0.972549",
+        "0.439216 0.596078 0", "0.12549 0.627451 0.376471",
+        "0.972549 0.596078 0.470588", "0.627451 0.658824 0.972549",
+        "0.282353 0.972549 0", "0.0627451 0.407843 0.0941176",
+        "0.439216 0 0", "0.0313725 0.972549 0.909804",
+        "0.376471 0 0.941176", "0.596078 0.313725 0.596078",
+        "0.972549 0.784314 0.972549", "0.282353 0.784314 0.721569",
+        "0.12549 0.156863 0.313725", "0.972549 0.972549 0.219608",
+        "0.282353 0.501961 0.752941", "0.658824 0.878431 0.690196",
+        "0.815686 0.25098 0.12549", "0.784314 0.25098 0.909804",
+        "0 0.972549 0.219608", "0.878431 0 0.376471",
+        "0.690196 0.470588 0.282353", "0.784314 0.784314 0.345098",
+        "0 0.407843 0.909804", "0.345098 0.439216 0.439216",
+        "0.282353 0.219608 0.721569", "0 0.627451 0.658824",
+        "0.407843 0 0.313725", "0.376471 0.752941 0.25098",
+        "0.784314 0.533333 0.721569", "0.784314 0.972549 0.972549",
+        "0.690196 0 0.909804", "0.658824 0.156863 0.376471",
+        "0.627451 0.407843 0", "0.313725 0.658824 0.972549",
+        "0.847059 0.0941176 0.690196", "0.25098 0.25098 0",
+        "0.878431 0.752941 0.658824", "0.376471 0.219608 0.439216",
+        "0.972549 0.407843 0.25098", "0.407843 0.972549 0.658824",
+        "0.658824 0.439216 0.941176", "0.690196 0.658824 0.12549",
+        "0.658824 0 0.156863", "0.533333 0.156863 0.815686",
+        "0.0627451 0.407843 0.345098", "0.25098 0.847059 0.470588",
+        "0.188235 0.596078 0.12549", "0.188235 0 0.156863",
+        "0.721569 0.972549 0.25098", "0 0.156863 0.721569",
+        "0.972549 0.407843 0.658824", "0.470588 0.815686 0",
+        "0 0.815686 0.752941", "0.596078 0.188235 0",
+        "0.470588 0.564706 0.25098", "0.0941176 0.784314 0.219608",
+        "0 0 0.407843", "0.313725 0.627451 0.564706",
+        "0.533333 0.533333 0.752941", "0.0941176 0 0.847059",
+        "0.25098 0.847059 0.972549", "0.0313725 0.909804 0",
+        "0.784314 0.407843 0.501961", "0.25098 0.439216 0.972549",
+        "0.909804 0.627451 0.219608", "0.470588 0.784314 0.878431",
+        "0.313725 0.439216 0.0627451", "0.564706 0.815686 0.470588",
+        "0.972549 0.12549 0.188235", "0.752941 0.972549 0.501961",
+        "0.25098 0.941176 0.25098", "0.501961 0.972549 0.12549",
+        "0.972549 0.627451 0.815686", "0.376471 0.0313725 0.690196",
+        "0.25098 0.188235 0.941176", "0 0.752941 0.501961",
+        "0.156863 0.972549 0.721569", "0.596078 0.815686 0.219608",
+        "0.972549 0.847059 0.439216", "0.12549 0.501961 0.533333",
+        "0.219608 0.313725 0.219608", "0.25098 0.752941 0.0313725",
+        "0.156863 0.188235 0.533333", "0.972549 0.25098 0.784314",
+        "0.972549 0.345098 0", "0.752941 0.784314 0.878431",
+        "0.439216 0.345098 0.752941", "0.564706 0.345098 0.376471",
+        "0.156863 0.658824 0.815686", "0.376471 0.12549 0.156863",
+        "0.470588 0.533333 0.972549", "0.972549 0.972549 0.878431",
+        "0 0.219608 0.156863", "0.752941 0.596078 0.439216",
+        "0.878431 0.972549 0", "0.501961 0.156863 0.596078",
+        "0.658824 0.690196 0.721569", "0 0.533333 0.219608",
+        "0.784314 0.219608 0.533333", "0.784314 0.345098 0.721569",
+        "0.12549 0.345098 0.752941", "0.815686 0.596078 0.972549",
+        "0.972549 0.784314 0.219608", "0.282353 0.0627451 0.470588",
+        "0.282353 0.345098 0.596078", "0.752941 0.313725 0.313725",
+        "0.815686 0.972549 0.752941", "0.501961 0.470588 0.564706",
+        "0.25098 0.470588 0.25098", "0.407843 0.658824 0.752941",
+        "0 0.470588 0.690196", "0 0.815686 0.941176",
+        "0.564706 0.690196 0.345098", "0.501961 0.784314 0.658824",
+        "0.627451 0 0.376471", "0.219608 0.0941176 0",
+        "0.972549 0 0.596078", "0.784314 0.12549 0",
+        "0.847059 0.156863 0.345098", "0.313725 0.972549 0.847059",
+        "0.627451 0.878431 0.972549", "0.815686 0.407843 0.12549",
+        "0 0.533333 0", "0.0627451 0.878431 0.376471",
+        "0.439216 0.313725 0", "0.219608 0.313725 0.407843",
+        "0.345098 0.627451 0.376471", "0.752941 0.0627451 0.501961",
+        "0 0.0627451 0.219608", "0 0.25098 0.407843",
+        "0.0313725 0.282353 0", "0.941176 0.188235 0.972549",
+        "0.627451 0.313725 0.815686", "0.721569 0.752941 0.533333",
+        "0.847059 0.878431 0.156863", "0.690196 0.188235 0.721569",
+        "0.596078 0.156863 0.188235", "0 0.0941176 0.564706",
+        "0.501961 0.439216 0.156863", "0.972549 0.188235 0",
+        "0.658824 0.156863 0.972549", "0.533333 0 0.784314",
+        "0.721569 0.533333 0", "0.815686 0.0627451 0.188235",
+        "0.501961 0.690196 0.12549", "0.0941176 0.282353 0.941176",
+        "0.0941176 0.533333 0.941176", "0.439216 0.156863 0.972549",
+        "0.564706 0.972549 0.564706", "0.564706 0.972549 0.815686",
+        "0.658824 0.439216 0.658824", "0.12549 0.847059 0.627451",
+        "0.721569 0 0.721569", "0.847059 0.376471 0.972549",
+        "0.815686 0.0941176 0.941176", "0.972549 0.847059 0.784314",
+        "0.25098 0.972549 0.564706", "0.219608 0.0941176 0.784314",
+        "0.219608 0.752941 0.345098", "0.658824 0.313725 0.156863",
+        "0.470588 0.0941176 0.439216", "0.188235 0.878431 0.0941176",
+        "0.847059 0.501961 0.345098", "0.407843 0.752941 0.439216",
+        "0.188235 0 0.345098", "0.282353 0.345098 0.847059",
+        "0.188235 0.156863 0.156863", "0.376471 0.345098 0.313725",
+        "0.878431 0.972549 0.376471", "0.596078 0.533333 0.407843",
+        "0.376471 0.878431 0.156863", "0.972549 0.439216 0.439216",
+        "0.909804 0.282353 0.282353", "0.941176 0 0.784314",
+        "0.878431 0.721569 0.470588", "0 0.658824 0.156863",
+        "0.313725 0.12549 0.313725", "0.188235 0.0627451 0.972549",
+        "0.188235 0.721569 0.501961", "0.815686 0.658824 0.784314",
+        "0.847059 0.878431 0.596078", "0.941176 0.12549 0.533333",
+        "0.627451 0.752941 0", "0.847059 0.627451 0.596078",
+        "0.407843 0.878431 0.533333", "0.188235 0.972549 0.407843",
+        "0.878431 0.439216 0.815686", "0 0.533333 0.407843",
+        "0 0.721569 0.345098", "0 0.345098 0.219608",
+        "0.407843 0.156863 0", "0.972549 0.627451 0.0313725",
+        "0 0.564706 0.815686", "0.439216 0.345098 0.533333",
+        "0.878431 0.501961 0.564706", "0.407843 0.439216 0.878431",
+        "0.156863 0.815686 0.847059", "0.501961 0.0313725 0.156863",
+        "0.721569 0 0", "0.627451 0.909804 0.376471",
+        "0.156863 0.690196 0.658824", "0.156863 0.721569 0.972549",
+        "0.533333 0.0313725 0.972549", "0.752941 0.658824 0.282353",
+        "0.407843 0.878431 0.784314", "0.690196 0.564706 0.878431",
+        "0.627451 0.972549 0", "0.909804 0.282353 0.627451",
+        "0.784314 0.533333 0.156863", "0.345098 0.501961 0.596078",
+        "0.470588 0.188235 0.313725", "0.815686 0.752941 0.156863",
+        "0.470588 0.847059 0.313725", "0.972549 0.847059 0.0627451",
+        "0.470588 0.658824 0.909804", "0.470588 0.470588 0",
+        "0.564706 0.564706 0.0941176", "0.596078 0.282353 0.972549",
+        "0.972549 0 0.156863", "0.972549 0.12549 0.815686",
+        "0 0 0.721569", "0 0 0.972549",
+        "0.345098 0.627451 0.188235", "0 0.815686 0.0941176",
+        "0.0313725 0.627451 0.501961", "0.690196 0.564706 0.596078",
+        "0.721569 0.282353 0", "0.972549 0.313725 0.941176",
+        "0.12549 0.219608 0.815686", "0.12549 0.470588 0.815686",
+        "0.0313725 0 0.0941176", "0.188235 0.972549 0.972549",
+        "0.376471 0.12549 0.815686", "0.407843 0 0.533333",
+        "0.156863 0.564706 0.658824", "0.470588 0.972549 0.972549"
+        };
+  return distinct_colors[index % distinct_colors.size()];
+}
+
+const std::string & get_hex_color(const uint64_t index) {
+  static const std::vector<std::string> distinct_colors{
+    "#e50000", "#25009e", "#00b700", "#e5be00",
+        "#065693", "#b7dd00", "#e58300", "#950095",
+        "#f878f8", "#001800", "#00f088", "#90a088",
+        "#f8f8a0", "#00a8f8", "#7050f8", "#f808f8",
+        "#784830", "#f84078", "#78f860", "#0028f8",
+        "#709800", "#20a060", "#f89878", "#a0a8f8",
+        "#48f800", "#106818", "#700000", "#08f8e8",
+        "#6000f0", "#985098", "#f8c8f8", "#48c8b8",
+        "#202850", "#f8f838", "#4880c0", "#a8e0b0",
+        "#d04020", "#c840e8", "#00f838", "#e00060",
+        "#b07848", "#c8c858", "#0068e8", "#587070",
+        "#4838b8", "#00a0a8", "#680050", "#60c040",
+        "#c888b8", "#c8f8f8", "#b000e8", "#a82860",
+        "#a06800", "#50a8f8", "#d818b0", "#404000",
+        "#e0c0a8", "#603870", "#f86840", "#68f8a8",
+        "#a870f0", "#b0a820", "#a80028", "#8828d0",
+        "#106858", "#40d878", "#309820", "#300028",
+        "#b8f840", "#0028b8", "#f868a8", "#78d000",
+        "#00d0c0", "#983000", "#789040", "#18c838",
+        "#000068", "#50a090", "#8888c0", "#1800d8",
+        "#40d8f8", "#08e800", "#c86880", "#4070f8",
+        "#e8a038", "#78c8e0", "#507010", "#90d078",
+        "#f82030", "#c0f880", "#40f040", "#80f820",
+        "#f8a0d0", "#6008b0", "#4030f0", "#00c080",
+        "#28f8b8", "#98d038", "#f8d870", "#208088",
+        "#385038", "#40c008", "#283088", "#f840c8",
+        "#f85800", "#c0c8e0", "#7058c0", "#905860",
+        "#28a8d0", "#602028", "#7888f8", "#f8f8e0",
+        "#003828", "#c09870", "#e0f800", "#802898",
+        "#a8b0b8", "#008838", "#c83888", "#c858b8",
+        "#2058c0", "#d098f8", "#f8c838", "#481078",
+        "#485898", "#c05050", "#d0f8c0", "#807890",
+        "#407840", "#68a8c0", "#0078b0", "#00d0f0",
+        "#90b058", "#80c8a8", "#a00060", "#381800",
+        "#f80098", "#c82000", "#d82858", "#50f8d8",
+        "#a0e0f8", "#d06820", "#008800", "#10e060",
+        "#705000", "#385068", "#58a060", "#c01080",
+        "#001038", "#004068", "#084800", "#f030f8",
+        "#a050d0", "#b8c088", "#d8e028", "#b030b8",
+        "#982830", "#001890", "#807028", "#f83000",
+        "#a828f8", "#8800c8", "#b88800", "#d01030",
+        "#80b020", "#1848f0", "#1888f0", "#7028f8",
+        "#90f890", "#90f8d0", "#a870a8", "#20d8a0",
+        "#b800b8", "#d860f8", "#d018f0", "#f8d8c8",
+        "#40f890", "#3818c8", "#38c058", "#a85028",
+        "#781870", "#30e018", "#d88058", "#68c070",
+        "#300058", "#4858d8", "#302828", "#605850",
+        "#e0f860", "#988868", "#60e028", "#f87070",
+        "#e84848", "#f000c8", "#e0b878", "#00a828",
+        "#502050", "#3010f8", "#30b880", "#d0a8c8",
+        "#d8e098", "#f02088", "#a0c000", "#d8a098",
+        "#68e088", "#30f868", "#e070d0", "#008868",
+        "#00b858", "#005838", "#682800", "#f8a008",
+        "#0090d0", "#705888", "#e08090", "#6870e0",
+        "#28d0d8", "#800828", "#b80000", "#a0e860",
+        "#28b0a8", "#28b8f8", "#8808f8", "#c0a848",
+        "#68e0c8", "#b090e0", "#a0f800", "#e848a0",
+        "#c88828", "#588098", "#783050", "#d0c028",
+        "#78d850", "#f8d810", "#78a8e8", "#787800",
+        "#909018", "#9848f8", "#f80028", "#f820d0",
+        "#0000b8", "#0000f8", "#58a030", "#00d018",
+        "#08a080", "#b09098", "#b84800", "#f850f0",
+        "#2038d0", "#2078d0", "#080018", "#30f8f8",
+        "#6020d0", "#680088", "#2890a8", "#78f8f8"
+        };
+  return distinct_colors[index % distinct_colors.size()];
+}
+
+std::string eps(const std::string & plot_file_name,
+                const std::string & translate,
+                const double scale) {
+  std::ifstream plot_file(plot_file_name.c_str());
+  if (!plot_file) throw Error("Could not open plot file") << plot_file_name;
+  std::string line;
+  std::ostringstream out;
+
+  out << "% eps start for " << plot_file_name << "\n";
+  out << "save" << "\n";
+  out << translate << " translate "
+      << scale << " " << scale << " scale" << "\n";
+  while (getline(plot_file, line)) {
+    if (line.size() && line[0] == '%') continue;
+    out << line << "\n";
+  }
+  out << "restore" << "\n";
+  out << "% eps stop for " << plot_file_name << "\n";
+  return out.str();
+}
 
 }  // namespace paa
 
