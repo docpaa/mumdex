@@ -708,7 +708,7 @@ class PSPageT :
     if (VERBOSE) std::cerr << "Destroy page " << title_.text() << std::endl;
     finalize_doc();
   }
-
+  PSPageT(PSPageT &&) = default;
   const Text & title() const { return title_; }
   Text & title() { return title_; }
   PSPageT & title(const Text & title__) {
@@ -886,6 +886,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     if (VERBOSE) std::cerr << "Destroy graph " << title_.text() << std::endl;
     finalize_doc();
   }
+  PSGraphT(PSGraphT &&) = default;
 
   // Graph info
   const Bounds & range() const { return range_; }
@@ -1680,7 +1681,7 @@ class PSHSeries : public PSSeries {
     if (VERBOSE) std::cerr << "Destroy PSHSeries " << std::endl;
     this->finalize_doc();
   }
-
+  PSHSeries(PSHSeries &&) = default;
   void add_point(const ValType x__) {
     x_.push_back(x__);
   }

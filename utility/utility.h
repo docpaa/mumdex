@@ -289,8 +289,8 @@ Val sqr(const Val val) {
 
 class Progress {
  public:
-  Progress(const uint64_t n_total_arg, const uint64_t interval_arg,
-           const std::string & message_arg = "") {
+  Progress(const uint64_t n_total_arg, const std::string & message_arg = "",
+           const uint64_t interval_arg = 1) {
     reset(n_total_arg, interval_arg, message_arg);
   }
   Progress(const uint64_t n_total_arg, const double percent = 1.0,
