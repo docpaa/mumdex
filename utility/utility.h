@@ -419,6 +419,18 @@ using uint16_noo_t = NoOverflowInt<uint16_t>;
 #if __cplusplus == 201103L
 namespace std {
 
+template <class C> 
+constexpr auto size(const C& c) -> decltype(c.size())
+{
+    return c.size();
+}
+
+template <class T, std::size_t N>
+constexpr std::size_t size(const T (&array)[N]) noexcept
+{
+    return N;
+}
+
 template<class T> struct _Unique_if {
   typedef unique_ptr<T> _Single_object;
 };
