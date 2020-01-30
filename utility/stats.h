@@ -12,16 +12,18 @@
 #include <algorithm>
 #include <functional>
 #include <iostream>
+#include <fstream>
 #include <ostream>
 #include <random>
+#include <string>
 #include <vector>
 #include "error.h"
+
+namespace paa {
 
 double sqr(const double & val) {
   return val * val;
 }
-
-namespace paa {
 
 class LinearRegression {
  public:
@@ -391,6 +393,39 @@ class PartitionTester {
   double true_neg_{0};
   double best_sensitivity_{0};
   double best_specificity_{0};
+};
+
+// Precomputed two-sided binomial p-values for 0.5 case
+class Binomial {
+ public:
+  explicit Binomial(const std::string & file_name,
+                    const uint64_t max_total = 5000) {
+    std::ifstream input{file_name.c_str()};
+    if (!input) throw Error("Could not read binomial input") << file_name;
+    uint64_t total;
+    uint64_t success;
+    double p_value;
+    data.reserve(index(0, max_total));
+    data.push_back(1);
+    for (uint64_t skip{0}; skip != 9; ++skip)
+      input.ignore(10000, '\n');
+    while (input >> total >> success >> p_value) {
+      if (total == max_total) break;
+      const uint64_t i{index(success, total)};
+      if (i != data.size())
+        throw Error("Bad index") << total << success << i;
+      data.push_back(p_value);
+    }
+  }
+  uint64_t index(const uint64_t success, const uint64_t total) const {
+    return total * (total + 1) / 2 + success;
+  }
+  double operator()(const uint64_t success, const uint64_t total) const {
+    return data[index(success, total)];
+  }
+
+ private:
+  std::vector<double> data{};
 };
 
 }  // namespace paa

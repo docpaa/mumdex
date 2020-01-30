@@ -1,5 +1,6 @@
 CN_PROGRAMS := \
 	bad_cn_bins \
+	combine_finebins \
 	empirical_bins \
 	extract_cn_segments \
 	find_diploid_exons \

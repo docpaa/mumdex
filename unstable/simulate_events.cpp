@@ -100,14 +100,14 @@ class EventMaker : public Event {
   EventMaker(const Reference & ref_arg, const Mappability & map_arg) :
       ref_{ref_arg}, map_{map_arg},
     posGen{bind(dist_int_32(0, static_cast<unsigned int>(ref_.size() - 1)),
-                mersenne)},
-    boolGen{bind(dist_int_32(0, 1), mersenne)},
-    lenGen{bind(dist_int_32(min_mum, max_mum), mersenne)},
-    gapGen{bind(dist_int_32(0, max_gap), mersenne)},
-    edgeGen{bind(dist_int_32(0, max_gap), mersenne)},
-    snpGen{bind(dist_int_32(1, max_snp_length), mersenne)},
-    realGen{bind(dist_real_32(0, 1), mersenne)},
-    baseGen{bind(dist_int_32(0, 3), mersenne)} { }
+                std::ref(mersenne))},
+    boolGen{bind(dist_int_32(0, 1), std::ref(mersenne))},
+    lenGen{bind(dist_int_32(min_mum, max_mum), std::ref(mersenne))},
+    gapGen{bind(dist_int_32(0, max_gap), std::ref(mersenne))},
+    edgeGen{bind(dist_int_32(0, max_gap), std::ref(mersenne))},
+    snpGen{bind(dist_int_32(1, max_snp_length), std::ref(mersenne))},
+    realGen{bind(dist_real_32(0, 1), std::ref(mersenne))},
+    baseGen{bind(dist_int_32(0, 3), std::ref(mersenne))} { }
 
   string randseq(const unsigned int length) const {
     string result;

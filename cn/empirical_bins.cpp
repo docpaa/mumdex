@@ -173,7 +173,7 @@ int main(int argc, char* argv[])  try {
       random_device rd;
       auto mersenne = mt19937_64(rd());
       uniform_real_distribution<double> dist{-0.5, 0.5};
-      function<double()> gen{bind(dist, mersenne)};
+      function<double()> gen{bind(dist, std::ref(mersenne))};
 
       const double min_total{total_cutoff};
       Progress plot_progress{n_checks * n_region, 0.1, "Plots"};

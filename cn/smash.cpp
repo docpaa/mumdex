@@ -83,7 +83,15 @@ using paa::sout;
 using paa::tout;
 using paa::unset;
 
+#define SHORT 1
+#if SHORT
+const bool use_reverse_complement{false};  // false for lower memory usage
+using SA = paa::shortSA;
+#else
+const bool use_reverse_complement{true};  // true for high memory usage
 using SA = paa::longSA;
+#endif
+
 using Mappability = paa::PreMappedMappability;
 using paa::PreMappedVector;
 
@@ -371,8 +379,7 @@ int main(int argc, char * argv[]) try {
   uint64_t n_mappings{0};
   {
     cout << "Loading suffix array structures" << endl;
-    const bool reverse_complement{false};  // false for lower memory usage
-    const SA sa{ref_name, reverse_complement, do_memory_map, true};
+    const SA sa{ref_name, use_reverse_complement, do_memory_map, true};
     cout << "Mapping reads using " << n_threads << " threads" << endl;
     vector<future<vector<MappingInfo> > > futures(n_threads);
     mutex fq_mutex;

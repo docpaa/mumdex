@@ -147,7 +147,7 @@ int main(int argc, char ** argv)  try {
   random_device rd;
   mt19937_64 mersenne{rd()};
   function<double()> unitGen{
-    bind(uniform_real_distribution<double>(-0.5, 0.5), mersenne)};
+    bind(uniform_real_distribution<double>(-0.5, 0.5), std::ref(mersenne))};
 
   // Document and defaults
   const Marker dot{paa::circle(), 0.2, "0 0 0", 1, true};

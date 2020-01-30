@@ -97,8 +97,7 @@ int main(int argc, char* argv[])  try {
 
   random_device rd;
   mt19937_64 mersenne{rd()};
-  function<double()> unitGen{
-    bind(dist_real(-0.5, 0.5), mersenne)};
+  function<double()> unitGen{bind(dist_real(-0.5, 0.5), std::ref(mersenne))};
 
   // Process command line arguments
   const Reference ref{argv[1]};

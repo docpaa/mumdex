@@ -1,5 +1,11 @@
 #! /bin/bash
 
+pdf=true
+if [ "$1" = nopdf ] ; then
+    pdf=false
+    shift 1
+fi
+
 if [ $# != 7 ] && [ $# != 8 ] ; then
     echo usage: smash.sh mumdex_dir ref_file bins_dir n_bins,... sample_name fastq1.gz fastq2.gz [n_threads] 1>&2
     exit 1
@@ -94,7 +100,7 @@ echo running smash on sample $name in fastq files $fastq1, $fastq2 using referen
 echo $mumdex_dir/smash "$ref" '<('zcat "$fastq1"')' '<('zcat "$fastq2"')' 20 4 1000 $n_threads "$name" "$bin_files" "$bad_pos" '>' "$name".out.txt '2>' "$name".err.txt
 
 if $mumdex_dir/smash "$ref" <(zcat "$fastq1") <(zcat "$fastq2") 20 4 1000 $n_threads "$name" "$bin_files" "$bad_pos" > "$name".out.txt 2> "$name".err.txt ; then
-    echo done with smash.sh for sample $name
+    echo done with smash for sample $name
 else
     echo smash failed
     exit 1
@@ -104,8 +110,10 @@ fi
 for bin in $(echo $n_bins | perl -pe 's/,/ /g') ; do for results in $(find $PWD -name '*'_${bin}_bins_results.txt) ; do segments=${results/_results./_segments.} ; if [ ! -e $segments ] ; then $mumdex_dir/extract_cn_segments $ref $bin_dir/bins.$bin.txt $results > $segments 2> ${segments%.txt}.err.txt & fi ; done ; done
 wait 
 
-# Generate pdf from postscript
-find $PWD -name '*.ps' | while read file ; do pdf=${file%.ps}.pdf ; if [ ! -e $pdf ] ; then echo generate $pdf ; $mumdex_dir/*/ps2pdf.sh $file ; fi ; done
+if [ $pdf = true ] ; then
+    # Generate pdf from postscript
+    find $PWD -name '*.ps' | while read file ; do pdf=${file%.ps}.pdf ; if [ ! -e $pdf ] ; then echo generate $pdf ; $mumdex_dir/*/ps2pdf.sh $file ; fi ; done
+fi
 
 exit 0
 

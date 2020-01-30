@@ -95,10 +95,11 @@ int main(int argc, char * argv[]) try {
   mt19937_64 mersenne{rd()};
   using dist_real = uniform_real_distribution<double>;
   using dist_int_32 = uniform_int_distribution<uint32_t>;
-  function<double()> realGen{bind(dist_real(0, 1), mersenne)};
-  function<unsigned int()> baseGen{bind(dist_int_32(0, 3), mersenne)};
+  function<double()> realGen{bind(dist_real(0, 1), std::ref(mersenne))};
+  function<unsigned int()> baseGen{bind(dist_int_32(0, 3), std::ref(mersenne))};
   function<unsigned int()> posGen{bind(dist_int_32(
-      0, static_cast<unsigned int>(ref.size() - 1 - read_length)), mersenne)};
+      0, static_cast<unsigned int>(ref.size() - 1 - read_length)),
+                                       std::ref(mersenne))};
 
   // Create modified reference sequence
   vector<string> reference_segments;

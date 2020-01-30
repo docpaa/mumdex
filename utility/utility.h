@@ -289,8 +289,8 @@ Val sqr(const Val val) {
 
 class Progress {
  public:
-  Progress(const uint64_t n_total_arg, const uint64_t interval_arg,
-           const std::string & message_arg = "") {
+  Progress(const uint64_t n_total_arg, const std::string & message_arg = "",
+           const uint64_t interval_arg = 1) {
     reset(n_total_arg, interval_arg, message_arg);
   }
   Progress(const uint64_t n_total_arg, const double percent = 1.0,
@@ -339,7 +339,7 @@ class Progress {
       if (n_ > 1 && n_ != n_total && minutes > 0) {
         fprintf(out, ", %.2f min remaining", (n_total - n_) * minutes / n_);
       }
-      if (status.size()) fprintf(out, ", %s", status.c_str());
+      if (status.size() && n_ != n_total) fprintf(out, ", %s", status.c_str());
       fprintf(out, "%sK", csi);  // clear to end of line
       fflush(out);
       if (n_ == n_total) finalize();
@@ -364,6 +364,7 @@ class Progress {
     if (n_ == n_total) finalize();
   }
   void finalize() const { fprintf(out, "\n"); }
+  double seconds() const { return timer.seconds(); }
 
  private:
   Timer timer{};
@@ -415,20 +416,17 @@ using uint16_noo_t = NoOverflowInt<uint16_t>;
 
 }  // namespace paa
 
-// Support make_unique in C++ 2011
+// Support size and make_unique in C++ 2011
 #if __cplusplus == 201103L
 namespace std {
 
-template <class C> 
-constexpr auto size(const C& c) -> decltype(c.size())
-{
-    return c.size();
+template <class C>
+constexpr auto size(const C & c) -> decltype(c.size()) {
+  return c.size();
 }
-
-template <class T, std::size_t N>
-constexpr std::size_t size(const T (&array)[N]) noexcept
-{
-    return N;
+template <class T, size_t N>
+constexpr size_t size(const T (&)[N]) noexcept {
+  return N;
 }
 
 template<class T> struct _Unique_if {

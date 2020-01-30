@@ -29,20 +29,6 @@ for compiler in 9.2.0 8.3.0 7.4.0 6.5.0 5.5.0 ; do
     fi
 done
 
-# special 4.9.2 compile test
-compiler=4.9.2
-if [ -z "$one_compiler" ] || [ $compiler = "$one_compiler" ] ; then
-    echo -n Compiler $compiler:' '
-    make clean > /dev/null
-    ssh drpa.us rm -Rf test_compilers
-    rsync -avL --progress $PWD/ drpa.us:test_compilers > /dev/null
-    start=$(date +%s)
-    ssh drpa.us "export COMPILER_DIR=/data/software/gcc/$compiler/rtf && cd test_compilers && make clean && make -j 12 && ./even /dev/null" > /dev/null 2> ~/.compile/$compiler.txt
-    sss=$?
-    stop=$(date +%s)
-    echo $((stop-start)) seconds $sss status $(cat ~/.compile/$compiler.txt | wc -l) lines in ~/.compile/$compiler.txt
-fi
-
 # special default clang compile test
 compiler=clang
 if [ -z "$one_compiler" ] || [ $compiler = "$one_compiler" ] ; then
@@ -64,6 +50,20 @@ if [ -z "$one_compiler" ] || [ $compiler = "$one_compiler" ] ; then
     rsync -avL --progress $PWD/ andmin:test_compilers > /dev/null
     start=$(date +%s)
     ssh andmin "cd test_compilers && make clean > /dev/null && make -j 12 && ./even /dev/null" > /dev/null 2> ~/.compile/$compiler.txt
+    sss=$?
+    stop=$(date +%s)
+    echo $((stop-start)) seconds $sss status $(cat ~/.compile/$compiler.txt | wc -l) lines in ~/.compile/$compiler.txt
+fi
+
+# special 4.9.2 compile test
+compiler=4.9.2
+if [ -z "$one_compiler" ] || [ $compiler = "$one_compiler" ] ; then
+    echo -n Compiler $compiler:' '
+    make clean > /dev/null
+    ssh drpa.us rm -Rf test_compilers
+    rsync -avL --progress $PWD/ drpa.us:test_compilers > /dev/null
+    start=$(date +%s)
+    ssh drpa.us "export COMPILER_DIR=/data/software/gcc/$compiler/rtf && cd test_compilers && make clean && make -j 12 && ./even /dev/null" > /dev/null 2> ~/.compile/$compiler.txt
     sss=$?
     stop=$(date +%s)
     echo $((stop-start)) seconds $sss status $(cat ~/.compile/$compiler.txt | wc -l) lines in ~/.compile/$compiler.txt

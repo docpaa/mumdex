@@ -155,7 +155,7 @@ int main(int argc, char* argv[], char * []) try {
   auto mersenne = std::mt19937_64();
   mersenne.seed(time(nullptr));
   uniform_real_distribution<double> dist{0, 1};
-  function<double()> gen{bind(dist, mersenne)};
+  function<double()> gen{bind(dist, std::ref(mersenne))};
 
   cout << "chr1\tpos1\thigh1\tchr2\tpos2\thigh2\tinvariant\toffset\t"
        << "n_in_family\tn_in_parents\tmax_in_kid\t"

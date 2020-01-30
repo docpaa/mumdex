@@ -91,7 +91,7 @@ class HMMparams_t {
     std::random_device rd{};
     std::mt19937_64 mersenne{rd()};
     std::function<double()> gen{std::bind(
-        std::uniform_real_distribution<double>(0.1, 1), mersenne)};
+        std::uniform_real_distribution<double>(0.1, 1), std::ref(mersenne))};
     FLOAT den{0};
     for (unsigned int i{0}; i != n_states(); ++i) {
       const FLOAT val{gen()};

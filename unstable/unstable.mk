@@ -25,7 +25,6 @@ DEVELOPMENT_PROGRAMS := \
 	check_mappability \
 	check_mumdex \
 	colsplit \
-	combine_finebins \
 	compare_segmentation \
 	control_mview \
 	count_anchors \
@@ -104,6 +103,7 @@ DEVELOPMENT_PROGRAMS := \
 	smash_ip_fig \
 	smooth_data \
 	snp_counts \
+	snp_hists \
 	snp_report \
 	subsample \
 	table_stats \

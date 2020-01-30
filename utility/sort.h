@@ -9,7 +9,6 @@
 #ifndef PAA_SORT_H_
 #define PAA_SORT_H_
 
-#include <string.h>
 #include <sys/mman.h>
 
 #include <algorithm>

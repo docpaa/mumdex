@@ -43,7 +43,8 @@ int main(int argc, char * argv[]) try {
   const Reference ref{argv[1]};
 
   function<uint32_t()> posGen{
-    bind(dist_int_32(0, static_cast<unsigned int>(ref.size() - 1)), mersenne)};
+    bind(dist_int_32(0, static_cast<unsigned int>(ref.size() - 1)),
+         std::ref(mersenne))};
 
   for (uint64_t n{0}; n != N; ++n) {
     const unsigned int abspos{posGen()};

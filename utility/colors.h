@@ -1,5 +1,5 @@
 //
-// colors.h.h
+// colors.h
 //
 // Define colors
 //
@@ -8,10 +8,6 @@
 
 #ifndef PAA_COLORS_H
 #define PAA_COLORS_H
-
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/keysym.h>
 
 #include <algorithm>
 #include <chrono>

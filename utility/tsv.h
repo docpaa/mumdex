@@ -179,7 +179,7 @@ class TSV {
       ps{remove_substring(file_name_, ".txt")},
     mersenne{rd()},
     unitGen{std::bind(std::uniform_real_distribution<double>(-0.5, 0.5),
-                      mersenne)} {
+                      std::ref(mersenne))} {
     // Open file
     std::ifstream file{(file_name_).c_str()};
     if (!file) throw Error("Problem opening file") << file_name_;
@@ -193,7 +193,7 @@ class TSV {
       ps{remove_substring(file_name_, ".txt")},
     mersenne{rd()},
     unitGen{std::bind(std::uniform_real_distribution<double>(-0.5, 0.5),
-                      mersenne)} {
+                      std::ref(mersenne))} {
     load(stream);
   }
 
@@ -488,6 +488,10 @@ class TSV {
   PSPage & page() { return *graph().parents().front(); }
 
   uint64_t sample{1};
+
+  const std::vector<std::string> & strings(const uint64_t col) const {
+    return data[col];
+  }
 
  private:
   // Used to add series to tsv

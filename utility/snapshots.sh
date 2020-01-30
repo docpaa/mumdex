@@ -60,6 +60,15 @@ touch $dest/running
 rsync -a $link $source $today_dest
 echo $today_dest > $dest/rolling_month/last_dir.txt
 
+# some cleanup for code directories
+(
+    cd $today_dest
+    if [ -e .gitignore ] ; then
+        (echo mooooo; eval find . $(cat .gitignore | grep -v '#' | perl -ne 's/.*\/(\w+)/$1/; s/\///;chomp; push @names, $_; END {print "-name '\''"; print join "'\'' -o -name '\''", @names; print "'\''\n"}')) | xargs rm -Rf
+    fi
+)
+
+# monthly dir
 if [ $day == 01 ] && [ $hour = 23 ] ; then
     rsync -a --link-dest=$today_dest $source $dest/monthly/$(date '+%m-%d-%Y')
 fi

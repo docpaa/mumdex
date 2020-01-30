@@ -71,8 +71,8 @@ int main(int argc, char*[]) try {
   random_device rd;
   mt19937_64 mersenne{rd()};
   using normal = normal_distribution<double>;
-  function<double()> Gen1{bind(normal(30, 10), mersenne)};
-  function<double()> Gen2{bind(normal(55, 15), mersenne)};
+  function<double()> Gen1{bind(normal(30, 10), std::ref(mersenne))};
+  function<double()> Gen2{bind(normal(55, 15), std::ref(mersenne))};
   PSPage hpage{ps};
   PSGraph hgraph{hpage, "Test Hist;X;frequency", Bounds{0, 100}};
   PSHSeries<int, uint64_t> hseries{hgraph, 100, "1 0 0", true, "Red !"};

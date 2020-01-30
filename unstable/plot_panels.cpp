@@ -110,7 +110,7 @@ int main(int argc, char ** argv) try {
   std::random_device rd{};
   std::mt19937_64 mersenne{rd()};
   std::function<double()> gen{std::bind(std::uniform_real_distribution<double>(
-      -scatter_amount, scatter_amount), mersenne)};
+      -scatter_amount, scatter_amount), std::ref(mersenne))};
 
   const double min_x{xy.front().first};
   const double max_x{xy.back().first};

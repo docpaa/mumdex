@@ -48,12 +48,18 @@ int main(int argc, char * argv[]) try {
     string value;
     unsigned int index{0};
     bool saw_chr{false};
+    bool good_chr{false};
     bool saw_pos{false};
     unsigned int chr{0};
     unsigned int pos{0};
     while (line_stream >> value) {
       if (!saw_chr && index == chr_col) {
-        chr = chr_lookup(value);
+        try {
+          chr = chr_lookup(value);
+          good_chr = true;
+        } catch (...) {
+          good_chr = false;
+        }
         saw_chr = true;
       }
       if (!saw_pos && index == pos_col) {
@@ -65,8 +71,17 @@ int main(int argc, char * argv[]) try {
     }
     if (!saw_chr) throw Error("Missing chr column") << line;
     if (!saw_pos) throw Error("Missing pos column") << line;
-    const unsigned int abspos{cn_abspos(chr, pos)};
-    cout << line << sep_char << abspos << endl;
+    if (good_chr) {
+      const unsigned int abspos{cn_abspos(chr, pos)};
+      const unsigned int abspos2{cn_abspos(chr + 1, pos)};
+      if (abspos == abspos2) {
+        cout << line << sep_char << "-" << endl;
+      } else {
+        cout << line << sep_char << abspos << endl;
+      }
+    } else {
+      cout << line << sep_char << "-" << endl;
+    }
   }
 
   return 0;

@@ -43,8 +43,10 @@ int main(int argc, char* argv[], char * []) try {
 
   std::random_device rd;
   auto mersenne = mt19937_64(rd());
-  auto realGen = bind(uniform_real_distribution<double>(0.0, 1.0), mersenne);
-  auto intGen = bind(uniform_int_distribution<uint64_t>(0, N - 1), mersenne);
+  auto realGen = bind(uniform_real_distribution<double>(0.0, 1.0),
+                      std::ref(mersenne));
+  auto intGen = bind(uniform_int_distribution<uint64_t>(0, N - 1),
+                     std::ref(mersenne));
 
   while (--argc) {
     const string input_file_name((++argv)[0]);
