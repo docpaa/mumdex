@@ -364,6 +364,7 @@ class Progress {
     if (n_ == n_total) finalize();
   }
   void finalize() const { fprintf(out, "\n"); }
+  double seconds() const { return timer.seconds(); }
 
  private:
   Timer timer{};

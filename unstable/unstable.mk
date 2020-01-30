@@ -25,7 +25,6 @@ DEVELOPMENT_PROGRAMS := \
 	check_mappability \
 	check_mumdex \
 	colsplit \
-	combine_finebins \
 	compare_segmentation \
 	control_mview \
 	count_anchors \

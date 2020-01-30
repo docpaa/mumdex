@@ -1,5 +1,11 @@
 #! /bin/bash
 
+pdf=true
+if [ "$1" = nopdf ] ; then
+    pdf=false
+    shift 1
+fi
+
 if [ $# != 7 ] && [ $# != 8 ] ; then
     echo usage: smash.sh mumdex_dir ref_file bins_dir n_bins,... sample_name fastq1.gz fastq2.gz [n_threads] 1>&2
     exit 1
@@ -104,8 +110,10 @@ fi
 for bin in $(echo $n_bins | perl -pe 's/,/ /g') ; do for results in $(find $PWD -name '*'_${bin}_bins_results.txt) ; do segments=${results/_results./_segments.} ; if [ ! -e $segments ] ; then $mumdex_dir/extract_cn_segments $ref $bin_dir/bins.$bin.txt $results > $segments 2> ${segments%.txt}.err.txt & fi ; done ; done
 wait 
 
-# Generate pdf from postscript
-find $PWD -name '*.ps' | while read file ; do pdf=${file%.ps}.pdf ; if [ ! -e $pdf ] ; then echo generate $pdf ; $mumdex_dir/*/ps2pdf.sh $file ; fi ; done
+if [ $pdf = true ] ; then
+    # Generate pdf from postscript
+    find $PWD -name '*.ps' | while read file ; do pdf=${file%.ps}.pdf ; if [ ! -e $pdf ] ; then echo generate $pdf ; $mumdex_dir/*/ps2pdf.sh $file ; fi ; done
+fi
 
 exit 0
 
