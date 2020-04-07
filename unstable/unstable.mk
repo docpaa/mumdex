@@ -50,6 +50,7 @@ DEVELOPMENT_PROGRAMS := \
 	find_indel \
 	find_microsatellite \
 	find_repeats \
+	gene_info \
 	gene_view \
 	hists \
 	hist_compare \
@@ -88,6 +89,7 @@ DEVELOPMENT_PROGRAMS := \
 	random_position \
 	random_uniform_distances \
 	rare \
+	reference_sequences \
 	repeatness \
 	repeats \
 	sam_mapper \
@@ -154,6 +156,7 @@ fastq_mapper : files.o utility.o
 fastq_vt_mapper : files.o utility.o
 find_bridge : utility.o
 find_indel : utility.o
+gene_info : genes.o
 gene_view : genes.o utility.o
 lookup_bridge : utility.o
 mapper : files.o utility.o

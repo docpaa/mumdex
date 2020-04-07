@@ -1,10 +1,13 @@
 UTILITY_PROGRAMS := column_split \
+	count_chars \
+	count_words \
 	echoe \
 	even \
 	even_columns \
 	lines_at_pos \
 	randomize_order \
 	stats \
+	table_columns \
 	table_summary
 
 PROGRAMS += $(UTILITY_PROGRAMS)

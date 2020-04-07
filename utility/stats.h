@@ -13,6 +13,7 @@
 #include <functional>
 #include <iostream>
 #include <fstream>
+#include <limits>
 #include <ostream>
 #include <random>
 #include <string>
@@ -426,6 +427,63 @@ class Binomial {
 
  private:
   std::vector<double> data{};
+};
+
+class RunningMean {
+ public:
+  RunningMean operator+=(const double & val) {
+    ++n_;
+    sum += val;
+    sumsq += val * val;
+    if (min_ > val) min_ = val;
+    if (max_ < val) max_ = val;
+    return *this;
+  }
+  uint64_t n() const { return n_; }
+  double mean() const {
+    if (n()) {
+      return sum / n();
+    } else {
+      return 0;
+    }
+  }
+  double stdev() const {
+    if (n() > 1) {
+      return sqrt((sumsq - n() * pow(mean(), 2)) / (n() - 1));
+    } else  {
+      return 0;
+    }
+  }
+  double min() const { return n() ? min_ : 0; }
+  double max() const { return n() ? max_ : 0; }
+  void input(std::istream & in) {
+    in >> n_ >> sum >> sumsq >> min_ >> max_;
+  }
+  void output(std::ostream & out, const bool pretty = false) const {
+    out << n() << " " << sum << " " << sumsq;
+    if (pretty) {
+      out << " " << min() << " " << max();
+    } else {
+      out << " " << min_ << " " << max_;
+    }
+  }
+  RunningMean & operator+=(const RunningMean & rhs) {
+    n_ += rhs.n_;
+    sum += rhs.sum;
+    sumsq += rhs.sumsq;
+    min_ = std::min(min_, rhs.min_);
+    max_ = std::max(max_, rhs.max_);
+    return *this;
+  }
+
+ private:
+  uint64_t n_{0};
+  double sum{0};
+  double sumsq{0};
+  double min_{big};
+  double max_{small};
+  static constexpr double big{std::numeric_limits<double>::max()};
+  static constexpr double small{std::numeric_limits<double>::lowest()};
 };
 
 }  // namespace paa

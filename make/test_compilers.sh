@@ -41,20 +41,6 @@ if [ -z "$one_compiler" ] || [ $compiler = "$one_compiler" ] ; then
     echo $((stop-start)) seconds $sss status $(cat ~/.compile/$compiler.txt | wc -l) lines in ~/.compile/$compiler.txt
 fi
 
-# special clang compile test
-compiler=mac_clang
-if [ -z "$one_compiler" ] || [ $compiler = "$one_compiler" ] ; then
-    echo -n Compiler $compiler:' '
-    make clean > /dev/null
-    ssh andmin rm -Rf test_compilers
-    rsync -avL --progress $PWD/ andmin:test_compilers > /dev/null
-    start=$(date +%s)
-    ssh andmin "cd test_compilers && make clean > /dev/null && make -j 12 && ./even /dev/null" > /dev/null 2> ~/.compile/$compiler.txt
-    sss=$?
-    stop=$(date +%s)
-    echo $((stop-start)) seconds $sss status $(cat ~/.compile/$compiler.txt | wc -l) lines in ~/.compile/$compiler.txt
-fi
-
 # special 4.9.2 compile test
 compiler=4.9.2
 if [ -z "$one_compiler" ] || [ $compiler = "$one_compiler" ] ; then
@@ -78,6 +64,19 @@ if [ -z "$one_compiler" ] || [ $compiler = "$one_compiler" ] ; then
     rsync -avL --progress $PWD/ andrewsp@hannah5:test_compilers > /dev/null
     start=$(date +%s)
     ssh andrewsp@hannah5 "cd test_compilers && make clean && make -j 12 && ./even /dev/null" > /dev/null 2> ~/.compile/$compiler.txt
+    sss=$?
+    stop=$(date +%s)
+    echo $((stop-start)) seconds $sss status $(cat ~/.compile/$compiler.txt | wc -l) lines in ~/.compile/$compiler.txt
+fi
+# special mac clang compile test
+compiler=mac_clang
+if [ -z "$one_compiler" ] || [ $compiler = "$one_compiler" ] ; then
+    echo -n Compiler $compiler:' '
+    make clean > /dev/null
+    ssh andmin rm -Rf test_compilers
+    rsync -avL --progress $PWD/ andmin:test_compilers > /dev/null
+    start=$(date +%s)
+    ssh andmin "cd test_compilers && make clean > /dev/null && make -j 12 && ./even /dev/null" > /dev/null 2> ~/.compile/$compiler.txt
     sss=$?
     stop=$(date +%s)
     echo $((stop-start)) seconds $sss status $(cat ~/.compile/$compiler.txt | wc -l) lines in ~/.compile/$compiler.txt

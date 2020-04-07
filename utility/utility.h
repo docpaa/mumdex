@@ -414,6 +414,23 @@ class NoOverflowInt {
 };
 using uint16_noo_t = NoOverflowInt<uint16_t>;
 
+// Bytes formatting
+inline std::string bytes2human(double bytes) {
+  static const char * suffix[]{"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB"};
+  uint64_t order{0};
+  while (bytes >= 1024) {
+    bytes /= 1024;
+    ++order;
+  }
+  std::ostringstream out;
+  if (order) {
+    out << std::setprecision(1);
+    out << std::fixed;
+  }
+  out << bytes << " " << suffix[order];
+  return out.str();
+}
+
 }  // namespace paa
 
 // Support size and make_unique in C++ 2011

@@ -29,6 +29,7 @@ struct Gap {
       const unsigned int stop_, const std::string type_) :
       chr{chr_}, start{start_}, stop{stop_}, type{type_} {}
 
+  unsigned int length() const { return stop - start; }
   unsigned int chr;
   unsigned int start;
   unsigned int stop;
@@ -39,7 +40,8 @@ class Gaps {
  public:
   Gaps(const std::string & file_name,
        const ChromosomeIndexLookup & lookup,
-       const std::string & types) {
+       const std::string & types,
+       const std::string & just_chr = "") {
     std::ifstream input{file_name.c_str()};
     if (!input) throw Error("Cound not open gap input file") << file_name;
     input.ignore(10000, '\n');
@@ -57,7 +59,8 @@ class Gaps {
       std::istringstream line_str{line.c_str()};
       line_str >> bin >> chr_name >> start >> stop
                >> ix >> n >> size >> type >> bridge;
-      if (size && types.find(type) != std::string::npos)
+      if (size && types.find(type) != std::string::npos &&
+          (just_chr.empty() || chr_name == just_chr))
         data.emplace_back(lookup[chr_name], start, stop, type);
     }
     std::cerr << "Loaded " << data.size() << " gaps" << std::endl;

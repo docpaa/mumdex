@@ -1823,6 +1823,16 @@ class PSXYSeries : public PSSeries {
       std::unique_ptr<PSGraph> graph_{std::make_unique<PSGraph>(doc)};
       manage(std::move(graph_));
     }
+  template <class Hist>
+  explicit PSXYSeries(const Hist & hist, PSDoc & doc,
+                      const std::string & title__ = "") :
+    draw_commands_{Marker().draw_commands()},
+    setup_commands_{Marker().setup_commands()} {
+      std::unique_ptr<PSGraph> graph_{std::make_unique<PSGraph>(doc, title__)};
+      manage(std::move(graph_));
+      for (uint64_t bin{0}; bin != hist.n_bins(); ++bin)
+        add_point(hist.mid(bin), hist[bin]);
+    }
   PSXYSeries(PSDoc & doc,
              const std::string & title__) :
       PSXYSeries(doc, title__, Bounds{0.0}, Marker{}) {}

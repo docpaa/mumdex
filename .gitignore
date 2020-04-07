@@ -43,8 +43,10 @@ combine_finebins
 compare_segmentation
 control_mview
 count_anchors
+count_chars
 count_genes
 count_pseudogenes
+count_words
 debruijn
 denovo_cn
 denovo_pseudogenes
@@ -73,6 +75,7 @@ find_indel
 find_microsatellite
 find_repeats
 finebin_cn
+gene_info
 gene_view
 ggraph
 hist_compare
@@ -130,6 +133,7 @@ random_uniform_distances
 randomize_order
 rare
 recurrent_cn
+reference_sequences
 repeatness
 repeats
 sam2fastq
@@ -153,6 +157,7 @@ snp_hists
 snp_report
 stats
 subsample
+table_columns
 table_stats
 table_summary
 test_hmm

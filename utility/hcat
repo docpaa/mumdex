@@ -1,0 +1,5 @@
+#! /bin/bash
+
+read line
+echo "$line"
+eval "$@"

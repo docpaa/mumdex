@@ -48,7 +48,14 @@ inline uint64_t file_size(const std::string & file_name) {
     return static_cast<uint64_t>(st.st_size);
 }
 inline void mkdir(const std::string & dir_name) {
-  ::mkdir(dir_name.c_str(), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+  if (::mkdir(dir_name.c_str(),
+              S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) &&
+      errno != EEXIST)
+    throw Error("Problem creating directory") << dir_name;
+}
+inline void symlink(const std::string & target, const std::string & linkpath) {
+  if (::symlink(target.c_str(), linkpath.c_str()) && errno != EEXIST)
+    throw Error("Problem creating symbilic link") << linkpath << "to" << target;
 }
 inline bool readable(const std::string & file) {
   return !access(file.c_str(), R_OK);
@@ -1318,6 +1325,23 @@ class CompressedInts {
 };
 
 typedef CompressedInts<uint16_t, uint8_t> Compressed;
+
+template <class STREAM>
+struct Fstream : public STREAM {
+  explicit Fstream(const std::string & file_name,
+                   const std::string & description = "") :
+      STREAM{file_name} {
+    if (!*this) {
+      std::ostringstream message;
+      message << "Problem opening";
+      if (description.size()) message << ' ' << description;
+      message << " file " << file_name;
+      throw Error(message.str());
+    }
+  }
+};
+using iFstream = Fstream<std::ifstream>;
+using oFstream = Fstream<std::ofstream>;
 
 }  // namespace paa
 

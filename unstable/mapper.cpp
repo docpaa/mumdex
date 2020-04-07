@@ -34,7 +34,7 @@ using paa::Reference;
 using paa::SimpleHit;
 
 int main(int argc, char* argv[])  try {
-  read_ahead = true;
+  read_ahead = false;
   std::ios_base::sync_with_stdio(false);
   cin.tie(nullptr);
 
