@@ -9,6 +9,7 @@
 // example command line:
 // ggraph cn hg19.fa chr,pos,ratio,seg {m,f,d,s}.txt
 //
+// 45678911234567892123456789312345678941234567895123456789612345678971234567898
 
 #include <algorithm>
 #include <exception>
@@ -20,6 +21,7 @@
 #include <memory>
 #include <mutex>
 #include <random>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -51,6 +53,7 @@ using std::ostringstream;
 using std::pair;
 using std::placeholders::_1;
 using std::placeholders::_2;
+using std::set;
 using std::string;
 using std::unique_lock;
 using std::unique_ptr;
@@ -138,6 +141,7 @@ struct BestVariant {
   double width() const { return high - low; }
 };
 
+set<std::string> gene_highlights;
 bool add_genes(const RefCN & ref,
                X11Graph & graph, const Event & event = Event()) {
   static bool first_call{true};
@@ -192,7 +196,6 @@ bool add_genes(const RefCN & ref,
     static map<X11Graph *, bool> all_inside_coord;
     bool & inside_coord{all_inside_coord[&graph]};
     switch (event.x->type) {
-#if 1
       case KeyPress:
         if (inside_coord) {
           const std::pair<char, KeySym> char_key{graph.get_char_and_keysym(
@@ -274,6 +277,7 @@ bool add_genes(const RefCN & ref,
                   abspos_stop = abspos + winsize / 2;
                   abspos -= winsize / 2;
                   gene_found = gene_name;
+                  gene_highlights.insert(gene_name);
                   break;
                 }
               }
@@ -317,9 +321,51 @@ bool add_genes(const RefCN & ref,
           if (0) std::cerr << graph.status << std::endl;
           graph.draw_status(true);
           return true;
+        } else {
+          const std::pair<char, KeySym> char_key{graph.get_char_and_keysym(
+              event.x->xkey)};
+          const char c{char_key.first};
+          if (c == 'G') {
+            // Get gene limits from graph range
+            using ChromPos = pair<unsigned int, unsigned int>;
+            std::vector<KnownGene>::const_iterator gene_limits[2];
+            for (const bool high : {false, true}) {
+              const unsigned int abspos{
+                min(ref.cn_abspos.n_positions() - 1,
+                    static_cast<unsigned int>(max(1.0, graph.range[0][high])))};
+              const ChromPos chrpos_bound{ref.cn_abspos.chrpos(abspos)};
+              gene_limits[high] = upper_bound(
+                  genes.begin(), genes.end(), chrpos_bound,
+                  [high](const ChromPos cp, const KnownGene & gene) {
+                    if (gene.chr == cp.first) {
+                      const double e{1000000};
+                      if (high) {
+                        return gene.t_stop >= cp.second + e;
+                      } else {
+                        return gene.t_start + e >= cp.second;
+                      }
+                    }
+                    return gene.chr >= cp.first;
+                  });
+            }
+
+            if (gene_limits[0] > gene_limits[1])
+              gene_limits[0] = gene_limits[1];
+            set<string> gene_symbols;
+            for (std::vector<KnownGene>::const_iterator g{gene_limits[0]};
+                 g != gene_limits[1]; ++g) {
+              const KnownGene & gene{*g};
+              gene_symbols.insert(xref[gene.name].geneSymbol);
+            }
+            if (gene_symbols.size()) {
+              cout << "Genes displayed:" << endl;
+              for (const string & name : gene_symbols) cout << name << endl;
+            } else {
+              cerr << "No gene names to output in view" << endl;
+            }
+          }
         }
         return false;
-#endif
       case MotionNotify:
         {
           const XMotionEvent & xmotion{event.x->xmotion};
@@ -458,12 +504,15 @@ bool add_genes(const RefCN & ref,
   if (gene_limits[0] > gene_limits[1]) gene_limits[0] = gene_limits[1];
 
   static GC gc{graph.create_gc(graph.app.black, graph.app.white, 2)};
+  static GC highlight_gc{graph.create_gc(graph.app.red, graph.app.white, 2)};
 
   // Set clip rectangle
   static iBounds last_bounds;
   if (graph.bounds != last_bounds) {
     XRectangle clip_rectangle(rect(graph.bounds));
     XSetClipRectangles(graph.display(), gc, 0, 0, &clip_rectangle, 1, YXBanded);
+    XSetClipRectangles(graph.display(), highlight_gc, 0, 0, &clip_rectangle,
+                       1, YXBanded);
   }
 
   // Draw all exons and genes in range
@@ -532,6 +581,7 @@ bool add_genes(const RefCN & ref,
   // Get good font for gene names
   const double avail_height{(graph.bounds[1][0] - graph.border_width) * 0.6};
   const X11Font * fits{graph.app.good_font("A", 1000, avail_height, gc)};
+  graph.app.good_font("A", 1000, avail_height, highlight_gc);
 
   // Draw gene names nicely
   std::vector<Item> snames(names.begin(), names.end());
@@ -555,7 +605,9 @@ bool add_genes(const RefCN & ref,
       if (left > last_right[i]) {
         const int ypos(exon_y + 2 * graph.border_width +
                        exon_height + i * fits->height());
-        XDrawString(graph.display(), graph.pixmap, gc, xpos,
+        const bool highlight{gene_highlights.count(name) == 1};
+        GC & draw_gc{highlight ? highlight_gc : gc};
+        XDrawString(graph.display(), graph.pixmap, draw_gc, xpos,
                     fits->below_y(ypos), const_cast<char *>(name.c_str()),
                     static_cast<unsigned int>(name.size()));
         const double right{tpos + width / 2};
@@ -1174,6 +1226,62 @@ int main(int argc, char * argv[]) try {
         }
         argc -= 2;
         argv += 2;
+      } else if (matches("--genes")) {
+        ifstream genes_file{argv[2]};
+        if (!genes_file) throw Error("Problem opening genes file") << argv[2];
+        string name;
+        while (genes_file >> name) gene_highlights.insert(name);
+        argc -= 2;
+        argv += 2;
+      } else if (matches("--drivers")) {
+        // https://www.ncbi.nlm.nih.gov/entrez/eutils/
+        // elink.fcgi?dbfrom=pubmed&retmode=ref&cmd=prlinks&id=29625053
+        const set<string> drivers{"ABL1", "ACVR1", "ACVR1B", "ACVR2A", "AJUBA",
+              "AKT1", "ALB", "ALK", "AMER1", "APC", "APOB", "AR", "ARAF",
+              "ARHGAP35", "ARID1A", "ARID2", "ARID5B", "ASXL1", "ASXL2",
+              "ATF7IP", "ATM", "ATR", "ATRX", "ATXN3", "AXIN1", "AXIN2", "B2M",
+              "BAP1", "BCL2", "BCL2L11", "BCOR", "BRAF", "BRCA1", "BRCA2",
+              "BRD7", "BTG2", "CACNA1A", "CARD11", "CASP8", "CBFB", "CBWD3",
+              "CCND1", "CD70", "CD79B", "CDH1", "CDK12", "CDK4", "CDKN1A",
+              "CDKN1B", "CDKN2A", "CDKN2C", "CEBPA", "CHD3", "CHD4", "CHD8",
+              "CHEK2", "CIC", "CNBD1", "COL5A1", "CREB3L3", "CREBBP", "CSDE1",
+              "CTCF", "CTNNB1", "CTNND1", "CUL1", "CUL3", "CYLD", "CYSLTR2",
+              "DACH1", "DAZAP1", "DDX3X", "DHX9", "DIAPH2", "DICER1", "DMD",
+              "DNMT3A", "EEF1A1", "EEF2", "EGFR", "EGR3", "EIF1AX", "ELF3",
+              "EP300", "EPAS1", "EPHA2", "EPHA3", "ERBB2", "ERBB3", "ERBB4",
+              "ERCC2", "ESR1", "EZH2", "FAM46D", "FAT1", "FBXW7", "FGFR1",
+              "FGFR2", "FGFR3", "FLNA", "FLT3", "FOXA1", "FOXA2", "FOXQ1",
+              "FUBP1", "GABRA6", "GATA3", "GNA11", "GNA13", "GNAQ", "GNAS",
+              "GPS2", "GRIN2D", "GTF2I", "H3F3A", "H3F3C", "HGF", "HIST1H1C",
+              "HIST1H1E", "HLA-A", "HLA-B", "HRAS", "HUWE1", "IDH1", "IDH2",
+              "IL6ST", "IL7R", "INPPL1", "IRF2", "IRF6", "JAK1", "JAK2",
+              "JAK3", "KANSL1", "KDM5C", "KDM6A", "KEAP1", "KEL", "KIF1A",
+              "KIT", "KLF5", "KMT2A", "KMT2B", "KMT2C", "KMT2D", "KRAS",
+              "KRT222", "LATS1", "LATS2", "LEMD2", "LZTR1", "MACF1", "MAP2K1",
+              "MAP2K4", "MAP3K1", "MAP3K4", "MAPK1", "MAX", "MECOM", "MED12",
+              "MEN1", "MET", "MGA", "MGMT", "MLH1", "MSH2", "MSH3", "MSH6",
+              "MTOR", "MUC6", "MYC", "MYCN", "MYD88", "MYH9", "NCOR1", "NF1",
+              "NF2", "NFE2L2", "NIPBL", "NOTCH1", "NOTCH2", "NPM1", "NRAS",
+              "NSD1", "NUP133", "NUP93", "PAX5", "PBRM1", "PCBP1", "PDGFRA",
+              "PDS5B", "PGR", "PHF6", "PIK3CA", "PIK3CB", "PIK3CG", "PIK3R1",
+              "PIK3R2", "PIM1", "PLCB4", "PLCG1", "PLXNB2", "PMS1", "PMS2",
+              "POLE", "POLQ", "POLRMT", "PPM1D", "PPP2R1A", "PPP6C", "PRKAR1A",
+              "PSIP1", "PTCH1", "PTEN", "PTMA", "PTPDC1", "PTPN11", "PTPRC",
+              "PTPRD", "RAC1", "RAD21", "RAF1", "RARA", "RASA1", "RB1",
+              "RBM10", "RET", "RFC1", "RHEB", "RHOA", "RHOB", "RIT1", "RNF111",
+              "RNF43", "RPL22", "RPL5", "RPS6KA3", "RQCD1", "RRAS2", "RUNX1",
+              "RXRA", "SCAF4", "SETBP1", "SETD2", "SF1", "SF3B1", "SIN3A",
+              "SMAD2", "SMAD4", "SMARCA1", "SMARCA4", "SMARCB1", "SMC1A",
+              "SMC3", "SOS1", "SOX17", "SOX9", "SPOP", "SPTA1", "SPTAN1",
+              "SRSF2", "STAG2", "STK11", "TAF1", "TBL1XR1", "TBX3", "TCEB1",
+              "TCF12", "TCF7L2", "TET2", "TGFBR2", "TGIF1", "THRAP3", "TLR4",
+              "TMSB4X", "TNFAIP3", "TP53", "TRAF3", "TSC1", "TSC2", "TXNIP",
+              "U2AF1", "UNCX", "USP9X", "VHL", "WHSC1", "WT1", "XPO1",
+              "ZBTB20", "ZBTB7B", "ZC3H12A", "ZCCHC12", "ZFHX3", "ZFP36L1",
+              "ZFP36L2", "ZMYM2", "ZMYM3", "ZNF133", "ZNF750"};
+        for (const string & name : drivers) gene_highlights.insert(name);
+        --argc;
+        ++argv;
       } else {
         throw UsageError("Unrecognized command line option") << option;
       }
@@ -1371,6 +1479,8 @@ Optional leading arguments (CAPS for numeric):
        --linear
        --lines Y1,Y2,Y3...
   -o | --output
+     | --genes FILE
+  -d | --drivers
   -h | --help
 
 Use optional leading argument --help to display additional usage information
@@ -1422,7 +1532,9 @@ or visit http://mumdex.com/ggraph/ to view the G-Graph tutorial)xxx"};
   17. The --linear option sets log mode initially, overriding any config file
   18. The --lines option specifies alternative ratio lines for cn mode only
   19. The --output option saves the initial view and then exits
-  20. The --help option displays this text and then exits
+  20. The --genes option loads a space separated list of gene names to highlight
+  21. The --drivers option highlights common cancer driver genes
+  22. The --help option displays this text and then exits
 )xxx"
             << std::endl;
 
