@@ -6,6 +6,7 @@ CN_PROGRAMS := \
 	find_diploid_exons \
 	finebin_cn \
 	ggraph \
+	heatmap \
 	mumdex_cn \
 	mumdex_finebin \
 	pop_cn \

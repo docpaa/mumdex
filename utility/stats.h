@@ -429,6 +429,7 @@ class Binomial {
   std::vector<double> data{};
 };
 
+// Change to Welford's algorithm! This is numerically unstable...
 class RunningMean {
  public:
   RunningMean operator+=(const double & val) {
@@ -449,11 +450,14 @@ class RunningMean {
   }
   double stdev() const {
     if (n() > 1) {
-      return sqrt((sumsq - n() * pow(mean(), 2)) / (n() - 1));
+      const double diff{sumsq - n() * sqr(mean())};
+      if (diff < 0) return 0;
+      return sqrt(diff / (n() - 1));
     } else  {
       return 0;
     }
   }
+  double seom() const { return stdev() / sqrt(n()); }
   double min() const { return n() ? min_ : 0; }
   double max() const { return n() ? max_ : 0; }
   void input(std::istream & in) {
@@ -474,6 +478,17 @@ class RunningMean {
     min_ = std::min(min_, rhs.min_);
     max_ = std::max(max_, rhs.max_);
     return *this;
+  }
+  void set_mean(const double val) {
+    reset();
+    *this += val;
+  }
+  void reset() {
+    n_ = 0;
+    sum = 0;
+    sumsq = 0;
+    min_ = big;
+    max_ = small;
   }
 
  private:

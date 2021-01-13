@@ -57,8 +57,8 @@ int main(int argc, char ** argv)  try {
   PSDoc ps{input_name, input_name};
   ps.pdf(false);
   PSGraph graph{ps, title, Bounds{x_low, x_high, y_low, y_high}};
-  graph.ps(  // "np 0 0 gfc m 1 0 gfc l 1 1 gfc l 1 0 gfc l cp clip "
-           "0 0 0 c 0.5 lw np 0 0 gc m 4 4 gc l sp");
+  //  graph.ps(  // "np 0 0 gfc m 1 0 gfc l 1 1 gfc l 1 0 gfc l cp clip "
+  // "0 0 0 c 0.5 lw np 0 0 gc m 4 4 gc l sp");
   // graph.log_x(true).log_y(true);
   // graph.log_x(true);
   vector<PSXYSeries> series;

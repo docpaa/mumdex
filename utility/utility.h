@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -27,6 +28,36 @@
 #include <vector>
 
 namespace paa {
+
+constexpr double PI{3.141592653589793238};
+
+template <class C>
+void clear(C & container) {
+  C temp;
+  container.swap(temp);
+}
+
+template <typename V>
+std::string dash(const V & val) {
+  std::ostringstream out;
+  out << val;
+  return out.str();
+}
+
+template <typename V, typename... Vals>
+std::string dash(const V & val, Vals... vals) {
+  return dash(val) + "-" + dash(vals...);
+}
+
+template <class Type>
+std::string nice_string(const Type & type) {
+  std::ostringstream out;
+  out << type;
+  return out.str();
+}
+
+template <class Type>
+constexpr Type sqr(const Type val) { return val * val; }
 
 template <class Value>
 inline std::string sround(const Value & value, const uint64_t n) {
@@ -45,8 +76,8 @@ inline std::string commas(uint64_t number) {
   if (!number) return "0";
   std::deque<uint64_t> parts;
   while (number) {
-    parts.push_front(number % 1000);
-    number /= 1000;
+    parts.push_front(number % 1000ul);
+    number /= 1000ul;
   }
   std::ostringstream result;
   for (uint64_t p{0}; p != parts.size(); ++p) {
@@ -279,14 +310,6 @@ template <class T> class ClassInfo {
   }
 };
 
-
-#if 0
-template <class Val>
-Val sqr(const Val val) {
-  return val * val;
-}
-#endif
-
 class Progress {
  public:
   Progress(const uint64_t n_total_arg, const std::string & message_arg = "",
@@ -336,9 +359,8 @@ class Progress {
       const auto minutes = timer.minutes();
       fprintf(out, "\r%s: %.3f%% complete, %.2f min elapsed",
               message.c_str(), 100.0 * n_ / n_total, minutes);
-      if (n_ > 1 && n_ != n_total && minutes > 0) {
+      if (n_ > 1 && n_ != n_total && minutes > 0)
         fprintf(out, ", %.2f min remaining", (n_total - n_) * minutes / n_);
-      }
       if (status.size() && n_ != n_total) fprintf(out, ", %s", status.c_str());
       fprintf(out, "%sK", csi);  // clear to end of line
       fflush(out);
@@ -353,12 +375,25 @@ class Progress {
     const auto minutes = timer.minutes();
     fprintf(out, "\r%s: %.3f%% complete, %.2f min elapsed",
             message.c_str(), 100.0 * n_ / n_total, minutes);
-    if (n_ > 1 && n_ != n_total && minutes > 0) {
+    if (n_ > 1 && n_ != n_total && minutes > 0)
       fprintf(out, ", %.2f min remaining", (n_total - n_) * minutes / n_);
-    }
-    if (status.size()) {
-      fprintf(out, ", %s", status.c_str());
-    }
+    if (status.size()) fprintf(out, ", %s", status.c_str());
+    fprintf(out, "%sK", csi);  // clear to end of line
+    fflush(out);
+    if (n_ == n_total) finalize();
+  }
+  void operator()(const uint64_t n__,
+                  const bool,
+                  const std::string & status = std::string()) {
+    static const char esc = static_cast<char>(27);
+    static const char csi[] = { esc, '[', 0 };  // character escape sequence
+    n_ = n__;
+    const auto minutes = timer.minutes();
+    fprintf(out, "\r%s: %.3f%% complete, %.2f min elapsed",
+            message.c_str(), 100.0 * n_ / n_total, minutes);
+    if (n_ > 1 && n_ != n_total && minutes > 0)
+      fprintf(out, ", %.2f min remaining", (n_total - n_) * minutes / n_);
+    if (status.size()) fprintf(out, ", %s", status.c_str());
     fprintf(out, "%sK", csi);  // clear to end of line
     fflush(out);
     if (n_ == n_total) finalize();
@@ -429,6 +464,59 @@ inline std::string bytes2human(double bytes) {
   }
   out << bytes << " " << suffix[order];
   return out.str();
+}
+
+// Constant expression integer sqrt, I modified a version from:
+// @author  Kim Walisch, <kim.walisch@gmail.com>
+// @license Public Domain
+#define MID ((lo + hi + 1) / 2)
+constexpr uint64_t sqrt_helper(uint64_t x, uint64_t lo, uint64_t hi) {
+  return lo == hi ? lo : ((x / MID < MID)
+      ? sqrt_helper(x, lo, MID - 1) : sqrt_helper(x, MID, hi));
+}
+template <class Type> constexpr Type ce_i_sqrt(Type x) {
+  return Type(sqrt_helper(x, 0, x / 2 + 1));
+}
+
+// Parameters that are easy to list and still allow complex updates
+template <class Type>
+class ParameterT {
+ public:
+  using Func = std::function<void ()>;
+  explicit ParameterT(const Type value_, Func update_ = []() {}) :
+      value{value_}, update{update_} {}
+  ParameterT(const ParameterT &) = default;
+  ParameterT & operator=(const ParameterT &) = default;
+  Type operator()() const { return value; }
+  void operator()(const Type value_) {
+    value = value_;
+    update();
+  }
+  void operator()(const Type value_, bool) { value = value_; }
+  ParameterT & operator++() {
+    ++value;
+    return *this;
+  }
+  ParameterT & operator+=(const Type to_add) {
+    value += to_add;
+    return *this;
+  }
+
+ private:
+  Type value;
+  Func update;
+};
+template <class Type>
+std::ostream & operator<<(std::ostream & out, const ParameterT<Type> & param) {
+  out << param();
+  return out;
+}
+template <class Type>
+std::istream & operator>>(std::istream & in, ParameterT<Type> & param) {
+  Type value;
+  in >> value;
+  param(value, false);
+  return in;
 }
 
 }  // namespace paa

@@ -24,7 +24,7 @@ ifeq ($(USER), paa)
   all : lint
 
   # Excessive compiler warnings are a good thing...
-  WARN += -Wpedantic -Wextra -Weffc++ -Wc++11-compat \
+  WARN += -Wpedantic -Wall -Wextra -Weffc++ -Wc++11-compat \
           -Wctor-dtor-privacy -Wnarrowing -Wold-style-cast \
           -Woverloaded-virtual -Wsign-promo -Wformat=2 -Wmissing-include-dirs \
           -Wswitch-default -Wswitch-enum -Wunused-parameter \

@@ -178,7 +178,7 @@ int main(int argc, char* argv[]) try {
 
           const CN_Bins profile{results_name.str()};
           if (profile.size() != bins.size())
-            throw Error("Profile bins size mismatch") << sample;
+            throw Error("Profile bins size mismatch") << pop.sample(sample);
 
           if (graph == nullptr) {
             graph = make_unique<PSGraph>(profiles_ps, family + " " + member +

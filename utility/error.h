@@ -12,8 +12,20 @@
 #include <exception>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace paa {
+
+// Output a vector
+template <class Element>
+std::ostream & operator<<(std::ostream & out,
+                          const std::vector<Element> & elements) {
+  for (uint64_t e{0}; e != elements.size(); ++e) {
+    if (e) out << " ";
+    out << elements[e];
+  }
+  return out;
+}
 
 // Class to handle error reporting
 class Error: public std::exception {

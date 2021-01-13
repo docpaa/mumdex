@@ -144,6 +144,8 @@ struct BestVariant {
 set<std::string> gene_highlights;
 bool add_genes(const RefCN & ref,
                X11Graph & graph, const Event & event = Event()) {
+  static bool is_mouse{ref.fasta_file().find("m38") != string::npos};
+  if (is_mouse) return false;
   static bool first_call{true};
   if (first_call && graph.range[0][2] > max_gene_mb * 1000000.0) return false;
   static mutex genes_mutex;
@@ -1130,6 +1132,7 @@ int main(int argc, char * argv[]) try {
   unsigned char log_y{2};
   vector<double> ratio_lines{};
   std::string display_name{X11Graph::default_title};
+  vector<unsigned int> colors;
   --argc;
   while (argc) {
     if (argv[1][0] == '-') {
@@ -1282,6 +1285,15 @@ int main(int argc, char * argv[]) try {
         for (const string & name : drivers) gene_highlights.insert(name);
         --argc;
         ++argv;
+      } else if (matches("--colors")) {
+        istringstream colors_stream{argv[2]};
+        unsigned int color;
+        while (colors_stream >> color) {
+          colors.push_back(color);
+          colors_stream.get();
+        }
+        argc -= 2;
+        argv += 2;
       } else {
         throw UsageError("Unrecognized command line option") << option;
       }
@@ -1443,6 +1455,10 @@ int main(int argc, char * argv[]) try {
       graph.set_range(1, atof(initial[2]), atof(initial[3]));
   }
   if (initial || log_y) graph.prepare();
+  if (colors.size()) {
+    for (unsigned int c{0}; c != colors.size(); ++c)
+      graph.set_color(c, colors[c], true);
+  }
 
   // Just print the initial view and quit
   graph.output(output);
@@ -1481,6 +1497,7 @@ Optional leading arguments (CAPS for numeric):
   -o | --output
      | --genes FILE
   -d | --drivers
+  -c | --colors c1,c2,c3,...
   -h | --help
 
 Use optional leading argument --help to display additional usage information

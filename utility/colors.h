@@ -22,13 +22,13 @@
 #include <memory>
 #include <numeric>
 #include <set>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
 #include "error.h"
-#include "layout.h"
 #include "files.h"
 #include "plot.h"
 #include "strings.h"
@@ -36,6 +36,25 @@
 #include "utility.h"
 
 namespace paa {
+
+std::string ps2hex(const std::string & ps) {
+  std::istringstream ps_stream{ps.c_str()};
+  std::ostringstream result{};
+  result << "#";
+  double value;
+  while (ps_stream >> value) {
+    result.width(2);
+    result.fill('0');
+    result << std::hex << std::internal;
+    result << static_cast<int>(255 * value);
+  }
+  return result.str();
+}
+std::vector<std::string> ps2hex(const std::vector<std::string> & ps) {
+  std::vector<std::string> result;
+  for (const std::string & ps_color : ps) result.push_back(ps2hex(ps_color));
+  return result;
+}
 
 class Color {
  public:

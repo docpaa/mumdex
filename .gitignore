@@ -78,6 +78,7 @@ finebin_cn
 gene_info
 gene_view
 ggraph
+heatmap
 hist_compare
 hists
 ihists
@@ -160,7 +161,10 @@ subsample
 table_columns
 table_stats
 table_summary
+test_beta
 test_hmm
+test_kd
+test_lpe
 test_mumdex
 test_numerical
 test_psplot

@@ -169,12 +169,14 @@ class MultiDimMinimizer {
       basis.erase(basis.begin() + best_dim);
       basis.push_back(vec_diff(point, start_point));
       copy(point.begin(), point.end(), start_point.begin());
-      std::cerr << "Value is " << val << " " << fabs(start_val - val)
-                << " " << iter;
-      for (unsigned int d2{0}; d2 != dimensions; ++d2) {
-        std::cerr << " " << point[d2];
+      if (0) {
+        std::cerr << "Value is " << val << " " << fabs(start_val - val)
+                  << " " << iter;
+        for (unsigned int d2{0}; d2 != dimensions; ++d2) {
+          std::cerr << " " << point[d2];
+        }
+        std::cerr << std::endl;
       }
-      std::cerr << std::endl;
     } while (++iter < max_iter && fabs(start_val - val) > tol);
     return point;
   }

@@ -27,7 +27,8 @@ using paa::X11Colors;
 using paa::X11Win;
 
 int main(int argc, char * argv[]) try {
-  if (--argc != 1) throw Error("usage: distinct_colors n_colors");
+  if (--argc < 1)
+    throw Error("usage: distinct_colors n_colors [starting colors ...]");
 
   // Target colors
   const unsigned int n_colors{static_cast<unsigned int>(atoi(argv[1]))};
@@ -35,9 +36,15 @@ int main(int argc, char * argv[]) try {
   // Starting colors
   vector<string> starting_colors{
     "rgb:e5/00/00", "rgb:25/00/9e", "rgb:00/b7/00", "rgb:e5/be/00"};
+  if (argc > 1) {
+    starting_colors.clear();
+    --argc;
+    ++argv;
+    while (argc--) starting_colors.push_back(*++argv);
+  }
   vector<string> extra_colors{
     "rgb:06/56/93", "rgb:b7/dd/00", "rgb:e5/83/00", "rgb:95/00/95"};
-  if (true) starting_colors.insert(starting_colors.end(),
+  if (false) starting_colors.insert(starting_colors.end(),
                                    extra_colors.begin(), extra_colors.end());
 
   // The App

@@ -18,12 +18,13 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
-
 #include "error.h"
 #include "files.h"
 #include "plot.h"
+#include "stats.h"
 #include "utility.h"
 
 #define VERBOSE 0
@@ -406,6 +407,7 @@ class PSDocT : public DocSettings,
   std::string ext() const { return eps() ? ".eps" : ".ps"; }
 
   // Finalize
+  void output() { finalize_doc(); }
   void finalize_doc() try {
     if (finalized) return;
     finalized = true;
@@ -470,16 +472,17 @@ class PSDocT : public DocSettings,
 /s {show} bind def
 /sf {/Helvetica findfont e scalefont setfont} bind def 
 % justification
-/jcx {dup stringwidth pop 2 div neg} bind def
-/jc {jcx 0 rmoveto} bind def
-/jrx {dup stringwidth pop neg} bind def
-/jr {jrx 0 rmoveto} bind def
+/sw {stringwidth} def
+/jcx {dup sw pop 2 div neg} bind def
+/jc {jcx 0 rm} bind def
+/jrx {dup sw pop neg} bind def
+/jr {jrx 0 rm} bind def
 % shortening
-/nrs {neg rmoveto show} bind def
-/cbb {moveto lineto lineto lineto closepath clip} bind def
-/bb {setlinewidth bk setrgbcolor nd newpath moveto lineto lineto lineto
+/nrs {neg rm show} bind def
+/cbb {m lineto lineto lineto closepath clip} bind def
+/bb {setlinewidth bk setrgbcolor nd newpath m lineto lineto lineto
      closepath stroke} bind def
-/bbf {setlinewidth bk setrgbcolor nd newpath moveto lineto lineto lineto
+/bbf {setlinewidth bk setrgbcolor nd newpath m lineto lineto lineto
       closepath gssave setrgbcolor fill grestore stroke} bind def
 %%EndProlog
 )foo";
@@ -500,7 +503,7 @@ class PSDocT : public DocSettings,
     }
     if (pdf() || png()) {
       std::ostringstream ps2pdf;
-      ps2pdf << "ps2pdf -dDEVICEWIDTHPOINTS=" << width()
+      ps2pdf << "ps2pdf -dAutoRotatePages=/None -dDEVICEWIDTHPOINTS=" << width()
              << " -dDEVICEHEIGHTPOINTS=" << height()
              << " " << file_name << ext() << " " << file_name << ".pdf";
       if (system(ps2pdf.str().c_str()) == -1) {
@@ -800,6 +803,11 @@ class PSPartT : public Multiplexer<PSPageT<PSPartT<PSSeries> >,
     log_y_ = log_y__;
     return *this;
   }
+  PSPartT & log_log(const bool log__) {
+    log_x_ = log__;
+    log_y_ = log__;
+    return *this;
+  }
 
  protected:
   bool log_x_{false};
@@ -954,7 +962,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     const Ticks x_ticks{do_x_ticks_ ? x_axis.ticks() : Ticks()};
     const Ticks y_ticks{do_x_ticks_ ? y_axis.ticks() : Ticks()};
     if (y_ticks.size()) {
-      unsigned int max_size{0};
+      unsigned int max_size{min_tick_size};
       for (const std::pair<double, bool> tick : y_ticks) {
         if (!tick.second) continue;
         std::ostringstream sample;
@@ -1078,8 +1086,8 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
         legend << "gs " << lx << " " << ly - 1.5 * c * legend_size__
                << " tr gs " << series->marker(scale).commands() << " sp gr "
                << 0.8 * legend_size__ << " " << -0.3 * legend_size__ << " m "
-               << "(" << text << ") dup stringwidth pop "
-               << "/cx exch def cx mx gt {/mx cx def} if "
+               << "(" << text << ") dup sw pop "
+               << "/cx e def cx mx gt {/mx cx def} if "
                << "show gr\n";
         ++c;
       }
@@ -1153,6 +1161,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     do_border_ = do_border__;
     return *this;
   }
+  unsigned int min_tick_size{0};
 
  protected:
   void do_labels(PSDoc & doc, Bounds & bounds, const double scale,
@@ -1192,17 +1201,28 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
                 const Bounds min_range =
                 {unset(), nunset(), unset(), nunset()}) {
     Bounds new_range{range_};
+    Bounds max_range{range_};
     for (PSSeries * series : children()) {
       series->get_range(range_, new_range, this->log_x_, this->log_y_);
+      max_range.xl(min(max_range.xl(), new_range.xl()));
+      max_range.xh(max(max_range.xh(), new_range.xh()));
+      max_range.yl(min(max_range.yl(), new_range.yl()));
+      max_range.yh(max(max_range.yh(), new_range.yh()));
     }
-
-    range_ = new_range;
+    range_ = max_range;
 
     // Check for bad range problem and fake a good range if necessary
     if (is_unset(range_.xl()) || is_unset(range_.xh()) ||
-        is_unset(range_.yl()) || is_unset(range_.yh()) ||
-        de(range_.xl(), range_.xh()) || de(range_.yl(), range_.yh())) {
-      range_ = Bounds{0, 1, 0, 1};
+        is_unset(range_.yl()) || is_unset(range_.yh())) {
+      range_ = Bounds{0.001, 1, 0.001, 1};
+    }
+    if (de(range_.xl(), range_.xh())) {
+      range_.xl() *= 0.9;
+      range_.xh() *= 1.1;
+    }
+    if (de(range_.yl(), range_.yh())) {
+      range_.yl() *= 0.9;
+      range_.yh() *= 1.1;
     }
 
     if (range_.xl() > min_range.xl()) range_.xl() = min_range.xl();
@@ -1536,7 +1556,7 @@ class PSSeries : public Multiplexer<PSPartT<PSSeries>, PSSeries, PSSeries> {
   explicit PSSeries(PSPart & graph__) : Multi{this, &graph__} { }
   PSSeries(PSSeries &&) = default;
   virtual ~PSSeries() { }
-  virtual void get_range(const Bounds & range, Bounds & new_range,
+  virtual void get_range(const Bounds & range, Bounds & newrange,
                          const bool log_x, const bool log_y) = 0;
   virtual void finalize(PSDoc & doc,
                         const Bounds & bounds,
@@ -1708,13 +1728,17 @@ class PSHSeries : public PSSeries {
       // std::cerr << range.xl() << " " << range.xh() << std::endl;
       const auto minmax = std::minmax_element(x_.begin(), x_.end());
       if (get_range_low) new_range.xl(*minmax.first);
-      if (get_range_high) new_range.xh(*minmax.second);
+      if (get_range_high) {
+        new_range.xh(*minmax.second);
+        new_range.xh(*minmax.second + new_range.xw() / (100 * n_bins_));
+      }
       // std::cerr << new_range.xl() << " " << new_range.xh() << std::endl;
     }
 
     for (const ValType val : x_) {
       const uint64_t bin{
-        static_cast<uint64_t>((val - range.xl()) * n_bins_ / range.xw())};
+        static_cast<uint64_t>((
+            val - new_range.xl()) * n_bins_ / new_range.xw())};
       if (bin >= 0 && bin < n_bins_) {
         ++h_[bin];
       }
@@ -1726,12 +1750,13 @@ class PSHSeries : public PSSeries {
         new_range.yh() = nval;
       }
       if (new_range.yl() > nval) {
-        new_range.yl() = nval;
+        new_range.yl() = nval;  // useless see last line
       }
     }
     if (normalize_ && new_range.yh() > 1) {
       new_range.yh(1);
     }
+    new_range.yl(0);
   }
 
   double y_val(const uint64_t i) const {
@@ -2009,18 +2034,28 @@ class PSXYSeries : public PSSeries {
     double x_start{0.0};
     double last_x{0.0};
     double last_y{0.0};
-    if (do_lines()) {
-      lines_out << "0.5 lw np\n";
+    if (do_lines()) lines_out << "0.5 lw np\n";
+    if (e.size() && error_bars) {
+      if (part.log_y()) throw Error("No error bars allowed on log graphs");
+      const double bar{16 * scale};
+      doc << "/ebar {/EE e def /EY e def /EX e def gs 2 " << scale
+          << " mul lw "
+          << "gs np EX " << bar / 2 << " sub EY EE sub m " << bar
+          << " 0 rl EX " << bar / 2 << " sub EY EE add m " << bar
+          << " 0 rl EX EY EE sub m 0 EE 2 mul rl sp gr} def\n";
     }
     for (unsigned int i{0}; i != x.size(); ++i) {
       if (part.log_x() && x[i] <= 0) continue;
       if (part.log_y() && y[i] <= 0) continue;
       const double xv{part.log_x() ? log10(x[i]) : x[i]};
       const double yv{part.log_y() ? log10(y[i]) : y[i]};
-      if (range.includes(xv, yv)) {
+      if (range.includes(xv, yv) || e.size()) {
+        if (e.size() && e[i] > 0 && error_bars)
+          doc << bounds.xl() + (xv - range.xl()) * scales[0] << " "
+              << bounds.yl() + (yv - range.yl()) * scales[1] << " "
+              << e[i] * scales[1] << " ebar\n";
         doc << bounds.xl() + (xv - range.xl()) * scales[0] << " "
-            << bounds.yl() + (yv - range.yl()) * scales[1] << " "
-            << "p\n";
+            << bounds.yl() + (yv - range.yl()) * scales[1] << " " << "p\n";
         if (do_lines()) {
           if (i) {
             if (yv < last_y || yv > last_y || i + 1 == x.size()) {
@@ -2069,14 +2104,76 @@ class PSXYSeries : public PSSeries {
     return *this;
   }
 
+  bool error_bars{true};
+
  protected:
   std::vector<double> x{};
   std::vector<double> y{};
+  std::vector<double> e{};  // only used by XYESeries class below
   std::string draw_commands_{};
   std::string setup_commands_{};
   Marker marker_{};
   std::string title_{};
   bool do_lines_{false};
+};
+
+class PSXYESeries : public PSXYSeries {
+ public:
+  using PSSeries = PSXYSeries::PSSeries;
+  using PSGraph = PSGraphT<PSSeries>;
+  using PSPage = PSPageT<PSPart>;
+  using PSDoc = PSDocT<PSPage>;
+  using PSSeries::add;
+  using PSSeries::manage;
+
+  // factory
+  template <class ... Args>
+  static PSXYESeries * create(Args && ... args) {
+    PSXYESeries * xyseries__{new PSXYESeries{std::forward<Args>(args)...}};
+    paa::ownp(xyseries__);
+    return xyseries__;
+  }
+  using PSXYSeries::PSXYSeries;
+
+  void add_point_error(const double x_, const double y_, const double e_) {
+    x.push_back(x_);
+    y.push_back(y_);
+    e.push_back(e_);
+  }
+
+  // Set X Y limits
+  virtual void get_range(const Bounds & range, Bounds & new_range,
+                         const bool log_x, const bool log_y) {
+    // Calculate averages, errors
+    if (e.empty()) {
+      std::unordered_map<double, RunningMean> means;
+      for (uint64_t i{0}; i != size(); ++i) means[x[i]] += y[i];
+      x.clear();
+      y.clear();
+      std::set<double> values;
+      for (const auto & vals : means) values.insert(vals.first);
+      for (const double value : values) {
+        const RunningMean & mean{means.at(value)};
+        x.push_back(value);
+        y.push_back(mean.mean());
+        e.push_back(seom ? mean.seom() : mean.stdev());
+      }
+    } else {
+      errors_range = true;
+    }
+    PSXYSeries::get_range(range, new_range, log_x, log_y);
+    if (errors_range) {
+      std::pair<double, double> erange{unset(), nunset()};
+      for (uint64_t i{0}; i != y.size(); ++i) {
+        erange.first = min(erange.first, y[i] - e[i]);
+        erange.second = max(erange.second, y[i] + e[i]);
+      }
+      new_range.yl(erange.first);
+      new_range.yh(erange.second);
+    }
+  }
+  bool seom{false};
+  bool errors_range{false};
 };
 
 
@@ -2655,9 +2752,9 @@ class PSShade : public PSXYSeries {
       if (max_index == 0) {
         doc << "0 0";
       } else if (max_index == 1) {
-        doc << "0 exch 0";
+        doc << "0 e 0";
       } else {
-        doc << "0 exch 0 exch";
+        doc << "0 e 0 e";
       }
     }
     doc << " c m "
@@ -2776,6 +2873,8 @@ class LayoutTester {
 };
 
 #endif
+
+
 
 const std::string & get_color(const uint64_t index) {
   static const std::vector<std::string> distinct_colors{

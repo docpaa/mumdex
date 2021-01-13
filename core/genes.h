@@ -91,7 +91,11 @@ class GeneXrefs {
  public:
   explicit GeneXrefs(const std::string & file_name);
   const GeneXref & operator[](const std::string & name) const {
-    return data.at(name);
+    try {
+      return data.at(name);
+    } catch (...) {
+      throw Error("Problem looking up gene Xref") << name;
+    }
   }
 
  private:

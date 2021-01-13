@@ -13,6 +13,12 @@
 
 namespace paa {
 
+inline std::string trim(std::string input) {
+  while (isspace(input.front())) input = input.substr(1);
+  while (isspace(input.back())) input.pop_back();
+  return input;
+}
+
 std::string to_lower(const std::string & in);
 std::string to_upper(const std::string & in);
 // void remove(std::string & input, const std::string & search);

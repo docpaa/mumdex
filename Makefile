@@ -14,30 +14,33 @@ include project.mk
 VPATH := $(MODULES)
 include $(wildcard $(addsuffix /*.mk,$(MODULES)))
 
+# OS determination and special compilation stuff for each particular OS
+UNAME := $(shell sh -c 'uname -s 2> /dev/null || echo NO_UNAME_FOUND')
+
 # Compilation flags
 STD := -std=c++11
 WARN := -Wall
 LIBS := -pthread
 INCFLAGS := $(addprefix -I ,$(MODULES))
-# debug = defined
+#debug = defined
 ifdef debug
-  FAST := -Og -g -ggdb
+  FAST := -O0 -g -ggdb
 else
   FAST := -Ofast -march=native -DNDEBUG
   # For gcc under cygwin
   ifneq (,$(findstring /cygdrive/,$(PATH)))
     FAST += -Wa,-mbig-obj
   else
-    LTO := -flto
-    FAST += $(LTO)
+    ifneq ($(UNAME),Darwin)
+      LTO := -flto
+      FAST += $(LTO)
+    endif
   endif
 endif
-# FAST := -O1 -pg -flto
-# LTO := -flto -pg
+#FAST := -Ofast -pg -flto
+#LTO := -flto -pg
 LDFLAGS := $(LTO)
 
-# OS determination and special compilation stuff for each particular OS
-UNAME := $(shell sh -c 'uname -s 2> /dev/null || echo NO_UNAME_FOUND')
 ifeq ($(UNAME),Darwin)
   CXX := clang++
   INCFLAGS += -I /opt/X11/include

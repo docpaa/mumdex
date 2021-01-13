@@ -53,15 +53,26 @@ inline void mkdir(const std::string & dir_name) {
       errno != EEXIST)
     throw Error("Problem creating directory") << dir_name;
 }
+inline std::string get_cwd() {
+  constexpr uint64_t Ksize{1024};
+  char buffer[Ksize];
+  if (getcwd(buffer, Ksize) == nullptr)
+    throw Error("Problem getting current working directory");
+  return std::string(buffer);
+}
 inline void symlink(const std::string & target, const std::string & linkpath) {
+#ifdef __CYGWIN__
+  throw Error("Cannot do symlink under cygwin");
+#else
   if (::symlink(target.c_str(), linkpath.c_str()) && errno != EEXIST)
     throw Error("Problem creating symbilic link") << linkpath << "to" << target;
+#endif
 }
 inline bool readable(const std::string & file) {
   return !access(file.c_str(), R_OK);
 }
-inline void unlink(const std::string & file) {
-  if (::unlink(file.c_str())) {
+inline void unlink(const std::string & file, const bool complain = false) {
+  if (::unlink(file.c_str()) && complain) {
     throw Error("Could not unlink file") << file;
   }
 }
@@ -604,6 +615,23 @@ class BinaryCache {
  private:
   const PreMappedVector<Data> data{"/dev/null", false};
 };
+
+template <class Type>
+void write_one(FILE * out, const Type & value, const char * name) {
+  const uint64_t written = fwrite(&value, sizeof(Type), 1, out);
+  if (written != 1) {
+    perror(nullptr);
+    throw Error("problem writing") << name;
+  }
+}
+template <class Type>
+void read_one(FILE * in, Type & value, const char * name) {
+  const uint64_t read_in = fread(&value, sizeof(Type), 1, in);
+  if (read_in != 1) {
+    perror(nullptr);
+    throw Error("problem reading") << name;
+  }
+}
 
 inline void bwritec(FILE * output, const void * data, const std::string & name,
                     const uint64_t count) {
