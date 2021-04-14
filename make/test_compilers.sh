@@ -16,10 +16,10 @@ program=
 unset COMPILER_DIR
 n_threads=$(nproc)
 out_dir=~/.compile-$(basename $PWD)
+mkdir -p $out_dir
 code_dir=$out_dir/code
 rsync -aL --delete $PWD/ $code_dir
 (cd $code_dir ; make clean > /dev/null)
-mkdir -p $out_dir
 
 function compile() {
     (
