@@ -29,7 +29,7 @@
 #include "lowess.h"
 #include "mumdex.h"
 #include "psplot.h"
-#include "strings.h"
+#include "paastrings.h"
 #include "threads.h"
 
 namespace paa {

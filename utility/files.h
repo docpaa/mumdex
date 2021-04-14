@@ -39,6 +39,32 @@ namespace paa {
 extern bool read_ahead;
 extern bool memory_mapped;
 
+// A safe file name
+inline std::string safe_file_name(const std::string & name) {
+  if (name.empty()) return "";
+  std::istringstream stream{name.c_str()};
+  char c;
+  std::string result{""};
+  while (stream.get(c)) if (isalnum(c) || c == '.') result += c;
+  return result;
+}
+
+// Get file extension, if exists
+inline std::string extension(const std::string & file_name) {
+  const size_t pos{file_name.find_last_of('.')};
+  if (pos == std::string::npos) return "";
+  return file_name.substr(pos);
+}
+
+// Grab file contents as a string
+inline std::string file_string(const std::string & name) {
+  std::ifstream css{name.c_str()};
+  std::string result;
+  char c;
+  while (css.get(c)) result += c;
+  return result;
+}
+
 // Files and directories
 inline uint64_t file_size(const std::string & file_name) {
     struct stat st;
@@ -164,7 +190,7 @@ class Columns {
 
     if (0) {
       std::cerr << "Parse:" << std::endl;
-      for (const std::pair<unsigned int, unsigned int> lu : column_numbers) {
+      for (const std::pair<unsigned int, unsigned int> & lu : column_numbers) {
         std::cerr << column_names[lu.second]
                   << " " << lu.first << " " << lu.second << std::endl;
       }
@@ -1370,6 +1396,13 @@ struct Fstream : public STREAM {
 };
 using iFstream = Fstream<std::ifstream>;
 using oFstream = Fstream<std::ofstream>;
+
+// Open a file
+inline std::ifstream open_file(const std::string & file_name) {
+  std::ifstream file{file_name.c_str()};
+  if (!file) throw Error("Could not open file") << file_name;
+  return file;
+}
 
 }  // namespace paa
 

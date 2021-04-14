@@ -27,7 +27,7 @@
 #include "bridges.h"
 #include "error.h"
 #include "mumdex.h"
-#include "strings.h"
+#include "paastrings.h"
 #include "threads.h"
 #include "x11plot.h"
 

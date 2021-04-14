@@ -29,7 +29,7 @@ ifeq ($(USER), paa)
           -Woverloaded-virtual -Wsign-promo -Wformat=2 -Wmissing-include-dirs \
           -Wswitch-default -Wswitch-enum -Wunused-parameter \
           -Wuninitialized -Wunknown-pragmas -Wfloat-equal -Wundef -Wshadow \
-          -Wlarger-than=10000 -Wdate-time -Wframe-larger-than=50000 \
+          -Wlarger-than=10000 -Wframe-larger-than=50000 \
           -Wcast-qual -Wcast-align -Wenum-compare -Wpacked -Wredundant-decls \
           -Winvalid-pch -Wlong-long -Wvla -Wdisabled-optimization \
           -Wmissing-braces

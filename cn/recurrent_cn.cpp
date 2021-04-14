@@ -22,7 +22,7 @@
 #include "mumdex.h"
 #include "psplot.h"
 #include "stats.h"
-#include "strings.h"
+#include "paastrings.h"
 #include "threads.h"
 #include "utility.h"
 

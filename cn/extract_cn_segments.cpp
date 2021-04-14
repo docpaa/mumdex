@@ -17,7 +17,7 @@
 #include "error.h"
 #include "genes.h"
 #include "mumdex.h"
-#include "strings.h"
+#include "paastrings.h"
 
 using std::cerr;
 using std::cout;

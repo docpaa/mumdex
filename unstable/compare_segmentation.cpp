@@ -24,7 +24,7 @@
 #include "error.h"
 #include "mumdex.h"
 #include "psplot.h"
-#include "strings.h"
+#include "paastrings.h"
 
 using std::cout;
 using std::cerr;

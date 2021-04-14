@@ -37,7 +37,7 @@
 #include "layout.h"
 #include "files.h"
 #include "plot.h"
-#include "strings.h"
+#include "paastrings.h"
 #include "threads.h"
 #include "utility.h"
 
@@ -1811,7 +1811,7 @@ class X11Graph : public X11Win, public SavedConfig {
 
   // Graph data typedefs
   using String = std::string;
-  using Strings = std::vector<String>;
+  // using Strings = std::vector<String>;
   using Values = std::vector<double>;
   using XYSeries = std::vector<ArrayHandle<double>>;
   using Data = std::vector<XYSeries>;
@@ -4325,7 +4325,7 @@ class X11TextGrid : public X11Win {
 class X11DataTable;
 class TabularData {
  public:
-  using Strings = std::vector<std::string>;
+  // using Strings = std::vector<std::string>;
   using Reals = std::vector<double>;
   using StringTableMaybe = std::vector<std::shared_ptr<Strings>>;
   using RealTableMaybe = std::vector<std::shared_ptr<Reals>>;
@@ -5065,7 +5065,7 @@ class X11Plotter {
   template <class TSV>
   explicit X11Plotter(const TSV & tsv, ThreadPool * pool_) :
       data{tsv}, app{pool_} {
-    using Strings = std::vector<std::string>;
+        // using Strings = std::vector<std::string>;
     using ColStrings = std::vector<Strings>;
     using Vec = std::vector<unsigned int>;
     using Cells = std::vector<std::pair<unsigned int, unsigned int>>;

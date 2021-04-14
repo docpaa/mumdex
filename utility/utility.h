@@ -29,31 +29,20 @@
 
 namespace paa {
 
+// Get environment variables
+inline std::string get_environment(const std::string & name,
+                            const std::string & default_value = "") {
+  const char * const ptr{getenv(name.c_str())};
+  const std::string value{ptr ? ptr : default_value};
+  return value.size() ? value : default_value;
+}
+
 constexpr double PI{3.141592653589793238};
 
 template <class C>
 void clear(C & container) {
   C temp;
   container.swap(temp);
-}
-
-template <typename V>
-std::string dash(const V & val) {
-  std::ostringstream out;
-  out << val;
-  return out.str();
-}
-
-template <typename V, typename... Vals>
-std::string dash(const V & val, Vals... vals) {
-  return dash(val) + "-" + dash(vals...);
-}
-
-template <class Type>
-std::string nice_string(const Type & type) {
-  std::ostringstream out;
-  out << type;
-  return out.str();
 }
 
 template <class Type>
@@ -274,6 +263,10 @@ class Timer {
  public:
   Timer() : start{std::chrono::system_clock::now()} {}
   void reset() { start = std::chrono::system_clock::now(); }
+  double milliseconds() const {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::system_clock::now() - start).count() / 1000000.0;
+  }
   double seconds() const {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::system_clock::now() - start).count() / 1000000000.0;

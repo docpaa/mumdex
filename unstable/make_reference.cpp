@@ -14,7 +14,7 @@
 
 #include "error.h"
 #include "mumdex.h"
-#include "strings.h"
+#include "paastrings.h"
 
 using std::cerr;
 using std::cin;

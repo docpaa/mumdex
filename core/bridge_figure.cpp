@@ -21,7 +21,7 @@
 #include "mumdex.h"
 #include "population.h"
 #include "sequence.h"
-#include "strings.h"
+#include "paastrings.h"
 #include "utility.h"
 
 using std::cerr;

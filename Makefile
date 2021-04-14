@@ -90,6 +90,14 @@ COMPILE.cpp = $(CXX) $(STD) $(FAST) $(WARN) $(INCFLAGS) $(DEPFLAGS) -c
 	$(POSTCOMPILE)
 % : %.gslo ; $(CXX) $(LDFLAGS) $^ -o $@ -lgsl -lgslcblas $(LIBS)
 
+# Special rules for gsl compilation and linking
+# give .gslo prerequisite if gsl library needed
+%.sqlo : %.cpp .dep/%.dep
+	$(COMPILE.cpp) -isystem /usr/local/mysql/connector-c++-/include/ $< -o $@
+	$(POSTCOMPILE)
+% : %.sqlo
+	$(CXX) -L$(LD_LIBRARY_PATH) $(LDFLAGS) $^ -o $@ $(LIBS) -lmysqlcppconn8 -lcrypto
+
 # Special rules for eigen compilation and linking
 # give .eo prerequisite if eigen headers are needed
 %.eo : %.cpp .dep/%.dep
@@ -102,7 +110,7 @@ COMPILE.cpp = $(CXX) $(STD) $(FAST) $(WARN) $(INCFLAGS) $(DEPFLAGS) -c
 
 # Clean all compiled files
 clean :
-	rm -f *.x11o *.gslo *.eo *.ro *.o $(PROGRAMS)
+	rm -f *.x11o *.gslo *.sqlo *.eo *.ro *.o $(PROGRAMS)
 	rm -Rf .dep/ .lint/ python/build python/dist
 spotless : clean
 	rm -f *~ */*~
@@ -135,7 +143,7 @@ include $(wildcard .dep/*.dep)
 
 # Optional linting of all source code in all subdirectories
 LINTCODE := $(wildcard $(addsuffix /*.h,$(MODULES))) $(wildcard $(addsuffix /*.cpp,$(MODULES)))
-LINT := ./make/cpplint.py --filter=-readability/streams,-runtime/printf,-build/header_guard,-build/c++11,-runtime/references
+LINT := ./make/cpplint.py --filter=-readability/streams,-runtime/printf,-build/header_guard,-build/c++11,-runtime/references,-runtime/string
 LINTGREP := grep -v -e 'Done process' -e 'Total err'
 $(shell mkdir -p .lint > /dev/null)
 lint : $(addprefix .lint/,$(notdir $(LINTCODE:=.lint)))

@@ -21,7 +21,7 @@
 
 #include "error.h"
 #include "files.h"
-#include "strings.h"
+#include "paastrings.h"
 
 /*
 

@@ -2,6 +2,7 @@ UTILITY_PROGRAMS := column_split \
 	count_chars \
 	count_words \
 	echoe \
+	dupes \
 	even \
 	even_columns \
 	lines_at_pos \

@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "error.h"
-#include "strings.h"
+#include "paastrings.h"
 
 using std::cout;
 using std::cerr;

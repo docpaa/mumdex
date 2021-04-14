@@ -17,7 +17,7 @@
 #include "error.h"
 #include "longSA.h"
 #include "query.h"
-#include "strings.h"
+#include "paastrings.h"
 
 using std::cerr;
 using std::endl;

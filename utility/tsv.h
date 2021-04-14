@@ -20,7 +20,7 @@
 #include <vector>
 #include "error.h"
 #include "psplot.h"
-#include "strings.h"
+#include "paastrings.h"
 
 namespace paa {
 

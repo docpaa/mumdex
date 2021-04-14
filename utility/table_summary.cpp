@@ -21,7 +21,7 @@
 #include "error.h"
 #include "pstream.h"
 #include "stats.h"
-#include "strings.h"
+#include "paastrings.h"
 #include "utility.h"
 
 using std::cerr;

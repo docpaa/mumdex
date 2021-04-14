@@ -6,10 +6,10 @@
 // Copyright 2015 Peter Andrews @ CSHL
 //
 
-#include "strings.h"
-
 #include <algorithm>
 #include <string>
+
+#include "paastrings.h"
 
 namespace paa {
 

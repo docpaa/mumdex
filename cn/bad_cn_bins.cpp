@@ -21,7 +21,7 @@
 #include "mumdex.h"
 #include "psplot.h"
 #include "stats.h"
-#include "strings.h"
+#include "paastrings.h"
 
 using std::cin;
 using std::cout;

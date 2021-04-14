@@ -21,7 +21,7 @@
 #include "error.h"
 #include "mumdex.h"
 #include "psplot.h"
-#include "strings.h"
+#include "paastrings.h"
 #include "utility.h"
 
 using std::cerr;
