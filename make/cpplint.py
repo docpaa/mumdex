@@ -6055,6 +6055,7 @@ def ProcessConfigOverrides(filename):
     False if the current |filename| should not be processed further.
   """
 
+  """
   abs_filename = os.path.abspath(filename)
   cfg_filters = []
   keep_looking = True
@@ -6117,7 +6118,7 @@ def ProcessConfigOverrides(filename):
   # config options having the least priority).
   for filter in reversed(cfg_filters):
      _AddFilters(filter)
-
+  """
   return True
 
 

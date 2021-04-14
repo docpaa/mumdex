@@ -1397,13 +1397,6 @@ struct Fstream : public STREAM {
 using iFstream = Fstream<std::ifstream>;
 using oFstream = Fstream<std::ofstream>;
 
-// Open a file
-inline std::ifstream open_file(const std::string & file_name) {
-  std::ifstream file{file_name.c_str()};
-  if (!file) throw Error("Could not open file") << file_name;
-  return file;
-}
-
 }  // namespace paa
 
 #endif  // LONGMEM_FILES_H_
