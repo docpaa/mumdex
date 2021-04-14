@@ -55,7 +55,7 @@ int main(int argc, char ** argv)  try {
 
   // Graph
   PSDoc ps{input_name, input_name};
-  ps.pdf(false);
+  ps.pdf(true);
   PSGraph graph{ps, title, Bounds{x_low, x_high, y_low, y_high}};
   //  graph.ps(  // "np 0 0 gfc m 1 0 gfc l 1 1 gfc l 1 0 gfc l cp clip "
   // "0 0 0 c 0.5 lw np 0 0 gc m 4 4 gc l sp");
@@ -65,7 +65,16 @@ int main(int argc, char ** argv)  try {
   series.reserve(100);
 
   // Default markers
-  const vector<string> colors{"1 0 0", "0 0 1", "0 1 0"};
+  const vector<string> colors{
+    "0 0 0",  // black
+        "0 0.717647 0",  // green
+        "0.898039 0 0",  // red
+        "0.145098 0.145098 1",  // blue
+        "0.909804 0.690196 0",  // orange
+        "0.439216 0.564706 0.564706",  // grey
+        "0.972549 0.282353 0.878431",  // pink
+        "0 0.909804 0.972549",  // light blue
+        };
   const vector<string (*)()> shapes{paa::circle, paa::square, paa::triangle,
         paa::diamond, paa::plus, paa::xshape, paa::star};
   vector<Marker> markers;
@@ -81,8 +90,8 @@ int main(int argc, char ** argv)  try {
   while (header_stream >> header) {
     series_names.push_back(header);
     series.emplace_back(graph, Marker{shapes[(shape++) % shapes.size()](),
-            0.6, colors[(color++) % colors.size()], 1.0,
-            false, "1 1 1"});  // , header);
+            0.6, colors[color % colors.size()]});  // , header);
+    ++color;
   }
 
   // Read data

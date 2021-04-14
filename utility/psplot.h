@@ -149,11 +149,15 @@ class Layout {
             total += fraction;
             fractions[y].push_back(fraction);
           }
-          if (total >= 1) throw Error("Total layout fractions too big");
+          if (total >= 1)
+            throw Error("Total layout fractions too big") << format;
           fractions[y].push_back(1 - total);
           format_stream >> c;
           if (c != ')') {
-            throw Error("Layout expected close parentheses");
+            std::string rest;
+            getline(format_stream, rest);
+            throw Error("Layout expected close parentheses")
+                << "in" << format << " at " << rest;
           }
         } else {
           for (unsigned int x{0}; x != nxy[y]; ++x) {
@@ -231,7 +235,8 @@ class Layout {
   const Layout & operator[](const unsigned int i) const {
     unsigned int total{0};
     if (components.empty()) {
-      if (i) throw Error("Unexpected i in Layout::operator[]") << i;
+      if (i) throw Error("Unexpected i in Layout::operator[]")
+                 << i << "in";
       return *this;
     }
     for (unsigned int x{0}; x != nx(); ++x) {
@@ -960,8 +965,8 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
           (this->log_y_ ? 3 : 7) * y_page_scale, this->log_y_};
     // using Ticks = std::vector<std::pair<double, bool>>;
     const Ticks x_ticks{do_x_ticks_ ? x_axis.ticks() : Ticks()};
-    const Ticks y_ticks{do_x_ticks_ ? y_axis.ticks() : Ticks()};
-    if (y_ticks.size()) {
+    const Ticks y_ticks{do_y_ticks_ ? y_axis.ticks() : Ticks()};
+    if (y_ticks.size() && do_y_tick_labels_) {
       unsigned int max_size{min_tick_size};
       for (const std::pair<double, bool> tick : y_ticks) {
         if (!tick.second) continue;
@@ -974,9 +979,9 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
       }
       bounds.xl() += 0.65 * max_size * tick_size__;
     } else {
-      if (do_x_ticks_) bounds.xl() += 0.7 * tick_size__;
+      if (do_y_tick_labels_) bounds.xl() += 0.7 * tick_size__;
     }
-    if (do_y_ticks_) bounds.yl() += 1.3 * tick_size__;
+    if (do_x_tick_labels_) bounds.yl() += 1.3 * tick_size__;
 
     // Set x y scales
     double scales[2]{bounds.xw() / range().xw(), bounds.yw() / range().yw()};
@@ -1027,19 +1032,14 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
 
         // Ticks and labels
         if (tick.second) {
-#if 1
-          ticks_out << pname << " tm" << (y ? "y" : "x") << " "
-                    << pname << " (" << std::setprecision(10)
+          ticks_out << pname << " tm" << (y ? "y" : "x") << " ";
+          if ((!y && !do_x_tick_labels_) || (y && !do_y_tick_labels_)) {
+            continue;
+          }
+          ticks_out << pname << " (" << std::setprecision(10)
                     << ((y && this->log_y_) || (!y && this->log_x_) ?
                         pow(10, tick.first) : tick.first)
                     << ") " << std::setprecision(default_precision);
-#else
-          ticks_out << pname << " tm" << (y ? "y" : "x") << " "
-                    << pname << " (" << std::setprecision(10)
-                    << ((y && this->log_y_) || (!y && this->log_x_) ?
-                        pow(10, tick.first) : tick.first)
-                    << ") " << std::setprecision(default_precision);
-#endif
           if (y) {
             ticks_out << "jrx " << 0.4 * tick_size__
                       << " sub " << 0.35 * tick_size__;
@@ -1156,6 +1156,14 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     do_y_ticks_ = do_ticks__;
     return *this;
   }
+  PSGraphT & do_x_tick_labels(const bool do_tick_labels__) {
+    do_x_tick_labels_ = do_tick_labels__;
+    return *this;
+  }
+  PSGraphT & do_y_tick_labels(const bool do_tick_labels__) {
+    do_y_tick_labels_ = do_tick_labels__;
+    return *this;
+  }
 
   PSGraphT & do_border(const bool do_border__) {
     do_border_ = do_border__;
@@ -1209,6 +1217,12 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
       max_range.yl(min(max_range.yl(), new_range.yl()));
       max_range.yh(max(max_range.yh(), new_range.yh()));
     }
+#if 0
+    if (is_unset(range_.xl())) range_.xl(max_range.xl());
+    if (is_unset(range_.xh())) range_.xh(max_range.xh());
+    if (is_unset(range_.yl())) range_.yl(max_range.yl());
+    if (is_unset(range_.yh())) range_.yh(max_range.yh());
+#endif
     range_ = max_range;
 
     // Check for bad range problem and fake a good range if necessary
@@ -1320,6 +1334,8 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
   bool hist_{false};
   bool do_x_ticks_{doc_defaults.ticks()};
   bool do_y_ticks_{doc_defaults.ticks()};
+  bool do_x_tick_labels_{true};
+  bool do_y_tick_labels_{true};
   bool do_border_{true};
   std::string ps_{};
   std::string pre_ps_{};
