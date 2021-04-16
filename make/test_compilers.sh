@@ -15,56 +15,63 @@ one_compiler=$1
 program=
 unset COMPILER_DIR
 n_threads=$(nproc)
-out_dir=~/.compile-$(basename $PWD)
+code_name=$(basename $PWD)
+out_dir=~/.compile-test
 mkdir -p $out_dir
-code_dir=$out_dir/code
+code_dir=$out_dir/$code_name
 rsync -aL --delete $PWD/ $code_dir
 (cd $code_dir ; make clean > /dev/null)
 
 function compile() {
     (
         compiler=$1
-        nproc=$2
-        export CXX=g++
-        if [ $compiler = clang ] ; then
+        nproc=$n_threads
+        if [[ "$compiler" == *clang* ]] ; then
             export CXX=clang++
+            export CXXFLAGS=-fuse-ld=gold 
+        else
+            export CXX=g++
+        fi
+        if [ $compiler = clang ] ; then
+            a=b
         elif [ $compiler = mac_clang ] ; then
             remote=andmin
-            export CXX=clang++
-        elif [ $compiler = 4.9.2 ] ; then
+            nproc=12
+        elif [ $compiler = gcc_4.9.2 ] ; then
             remote=drpa.us
+            nproc=12
         elif [ $compiler = cygwin ] ; then
             remote=andrewsp@hannah5
         elif [ $compiler = default ] ; then
             a=b
         else
-            export COMPILER_DIR=/data/software/gcc/$compiler
+            export COMPILER_DIR=/data/software/${compiler/_/\/}
             export PATH=$COMPILER_DIR/bin:$PATH
         fi
         cd $code_dir
         if [ -z "$one_compiler" ] || [ $compiler = "$one_compiler" ] ; then
             start=$(date +%s)
-            out="$(printf "Compiler %-9s" $compiler)"
+            out="$(printf "Compiler %-12s" $compiler)"
             if [ ! -z $remote ] ; then
-                rsync -aL --delete $PWD/ $remote:test_compilers
-                ssh $remote "(hostname -s ; $CXX --version | head -n 1) 1>&2 && cd test_compilers && make clean > /dev/null && make -j 12 $program && ./even /dev/null" > /dev/null 2> $out_dir/$compiler.txt
+                rdir=.test_compiler_$code_name
+                rsync -aL --delete $PWD/ $remote:$rdir
+                ssh $remote "(hostname -s ; $CXX --version | head -n 1) 1>&2 && cd $rdir && make clean > /dev/null && make -j 12 $program && ./even /dev/null" > /dev/null 2> $out_dir/$compiler.txt
             else
                 echo -n "$out"
                 ((hostname -s ; $CXX --version | head -n 1) 1>&2 && make -j $nproc $program && ./even /dev/null && make clean) > /dev/null 2> $out_dir/$compiler.txt
             fi
             sss=$?
             stop=$(date +%s)
-            echo "$([ ! -z $remote ] && echo -n "$out")" $((stop-start)) s $sss e $(tail -n +3 $out_dir/$compiler.txt | wc -l) l $(head -n 2 $out_dir/$compiler.txt) $out_dir/$compiler.txt
+            echo -n "$([ ! -z $remote ] && echo -n "$out") "
+            printf "%3s s %1s e %3s l %-40s %-8s %s\n" $((stop-start)) $sss "$(tail -n +3 $out_dir/$compiler.txt | wc -l)" "$out_dir/$compiler.txt" "$(echo $(head -n 1 $out_dir/$compiler.txt))" "$(echo $(head -n 2 $out_dir/$compiler.txt | tail -n 1))"
         fi
     )
 }
 
-compile default $n_threads
-for compiler in 10.3.0 9.3.0 8.4.0 7.4.0 6.5.0 5.5.0 ; do
-    compile $compiler $n_threads
+for compiler in \
+    clang_{4..12}.x clang_13.0.0 \
+          gcc_4.9.2 gcc_{5.5.0,6.5.0,7.4.0,8.4.0,9.3.0,10.3.0} \
+          default clang mac_clang ; do
+    compile $compiler
 done
-compile clang $n_threads
-compile 4.9.2 12 &
-compile mac_clang $n_threads &
-wait
 # compile cygwin 12

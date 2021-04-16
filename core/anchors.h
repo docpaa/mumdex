@@ -348,7 +348,7 @@ class AnchorCountsCreator {
   };
 };
 
-typedef struct {
+struct Pos_counts{
   uint16_t reference[2]{static_cast<uint16_t>(0), static_cast<uint16_t>(0)};
   uint16_t anchor[2]{static_cast<uint16_t>(0), static_cast<uint16_t>(0)};
 #if USE_ZERO
@@ -358,7 +358,7 @@ typedef struct {
 #if USE_SUPPORT
   uint8_t max_support[2]{static_cast<uint16_t>(0), static_cast<uint16_t>(0)};
 #endif
-} Pos_counts;
+};
 
 #if USE_ZERO
 #define N_CT 5U

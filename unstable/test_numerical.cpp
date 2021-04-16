@@ -132,7 +132,8 @@ int main(int argc, char * argv[]) try {
     const double x{x_min + xi * step};
     const double y{adapted_fun(x, test_params)};
     x_vals[xi] = x;
-    y_vals[xi] = y + 10.0 * udist(mersenne) / numeric_limits<uint64_t>::max();
+    y_vals[xi] = y + 10.0 * udist(mersenne) /
+        static_cast<double>(numeric_limits<uint64_t>::max());
   }
 
   // Fit model to data
