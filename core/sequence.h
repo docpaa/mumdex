@@ -195,10 +195,10 @@ class Repeatness {
       sequence_{sequence_arg}, mismatches_(4) {
     const auto mams = sa.find_mams(sequence_);
     n_mams_ = static_cast<unsigned int>(mams.size());
-    for (const auto mam : mams) {
+    for (const auto & mam : mams) {
       if (mam.len > max_length_) max_length_ = mam.len;
     }
-    for (const auto mam : mams) {
+    for (const auto & mam : mams) {
       const unsigned int chr{mam.chr};
       const unsigned int pos{mam.pos};
       const unsigned int abspos_start{ref.offset(chr) + pos};

@@ -177,7 +177,7 @@ int main(int argc, char ** argv) try {
     vector<double> values;
     vector<pair<size_t, string>> & col_ordered{ordered[column]};
     double total{0};
-    for (const pair<string, size_t> & val_count : col_data) {
+    for (const auto & val_count : col_data) {
       const string & word{val_count.first};
       column_widths[column] = std::max(column_widths[column], word.size());
       const size_t count{val_count.second};

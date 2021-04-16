@@ -321,7 +321,7 @@ int main(int argc, char* argv[])  try {
       const unsigned int n_families{[&all_samples, &pop] {
           unsigned int n{0};
           Family last_family{100000};
-          for (const Sample sample : all_samples) {
+          for (const Sample & sample : all_samples) {
             const Family family{pop.family(sample)};
             if (family != last_family) {
               ++n;

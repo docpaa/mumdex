@@ -103,7 +103,7 @@ int main(int argc, char ** argv) {
         sout << bin.positions().size() << endl;
         set<string> tags;
         const vector<PosTagInfo> anchors{bin.positions()};
-        for (const PosTagInfo anchor : anchors) {
+        for (const PosTagInfo & anchor : anchors) {
           tags.emplace(anchor.tag);
         }
         for (const string & tag : tags) {

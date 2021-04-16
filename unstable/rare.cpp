@@ -256,7 +256,7 @@ int main(int argc, char* argv[])  try {
       const unsigned int n_families{[&all_samples, &pop] {
           unsigned int n{0};
           Family last_family{100000};
-          for (const Sample sample : all_samples) {
+          for (const Sample & sample : all_samples) {
             const Family family{pop.family(sample)};
             if (family != last_family) {
               ++n;
@@ -390,7 +390,7 @@ int main(int argc, char* argv[])  try {
         unsigned int n_parents{0};
         unsigned int n_proband{0};
         unsigned int n_sibling{0};
-        for (const Sample sample : samples) {
+        for (const Sample & sample : samples) {
           if (pop.is_parent(sample)) {
             if (pop.is_mother(sample)) {
               mstr << 'm';

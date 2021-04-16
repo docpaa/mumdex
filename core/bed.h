@@ -101,7 +101,7 @@ class BedFile {
     const bool show_bed = false;
     if (show_bed) {
       int n = 0;
-      for (const GenomicInterval interval2 : intervals) {
+      for (const GenomicInterval & interval2 : intervals) {
         interval2.out(std::cerr);
         std::cerr << std::endl;
         ++n;

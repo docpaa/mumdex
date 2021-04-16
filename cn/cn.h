@@ -522,7 +522,7 @@ std::vector<Bin> load_bins(const std::string & bins_name,
         if (bad_zones.count(name_no_chr)) {
           const std::vector<std::pair<unsigned int, unsigned int>> &
               zones{bad_zones[name_no_chr]};
-          for (const std::pair<unsigned int, unsigned int> zone : zones) {
+          for (const std::pair<unsigned int, unsigned int> & zone : zones) {
             while (b + 1 != bins_.size() && bins_[b].chromosome() < c) ++b;
             if (bins_[b].chromosome() > c)
               throw Error("Unexpected chromosome ordering");

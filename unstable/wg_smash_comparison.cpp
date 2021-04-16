@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) try {
            << " " << destination
            << " " << members.size() << endl;
 
-    for (const string member : members) {
+    for (const string & member : members) {
       // Load segment data if necessary
       if (!all_segments.count(member)) {
         ostringstream segments_name;

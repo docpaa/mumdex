@@ -197,7 +197,7 @@ uint64_t rotr(const uint64_t value, unsigned int count) {
 class PairHash {
  public:
   explicit PairHash(const vector<MappingInfo> & maps) {
-    for (const MappingInfo map : maps) {
+    for (const MappingInfo & map : maps) {
       const uint64_t value{map.position() - map.offset() +
             (static_cast<uint64_t>(map.chromosome()) << 32)};
       hash_ = hash_ ^ rotr(value, static_cast<unsigned int>(value));
@@ -272,7 +272,7 @@ vector<MappingInfo> smash_map(
       }
 
       // Return mappings, after making some cuts
-      for (const match_t mum : MUMs) {
+      for (const match_t & mum : MUMs) {
         // if (mum.len < min_length) continue;
         const uint64_t read_length{sequences[read_2].size()};
         mappings.emplace_back(sa.ref, mum, read_2, read_length);

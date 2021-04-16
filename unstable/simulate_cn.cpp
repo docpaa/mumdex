@@ -438,7 +438,7 @@ int main(int argc, char* argv[])  try {
     << out_title << ".txt";
     ofstream data_file{data_name.str().c_str()};
     data_file << setprecision(8);
-    for (const pair<double, bool> val : min_max_ratios) {
+    for (const pair<double, bool> & val : min_max_ratios) {
       data_file << val.second << " " << val.first << "\n";
     }
   };

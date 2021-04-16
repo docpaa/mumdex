@@ -128,7 +128,7 @@ class Node {
     unsigned int bases_seen{static_cast<unsigned int>(sequence.size())};
     const vector<sset *> all_links{&in_nodes, &out_nodes};
     for (const auto links : all_links) {
-      for (const auto link : *links) {
+      for (const auto & link : *links) {
         bases_seen += link->mark_nodes(value);
       }
     }
@@ -136,7 +136,7 @@ class Node {
   }
   unsigned int count_right(sset & seen) const {
     unsigned int bases_seen{static_cast<unsigned int>(sequence.size())};
-    for (const auto link : out_nodes) {
+    for (const auto & link : out_nodes) {
       if (seen.count(link)) continue;
       seen.insert(link);
       bases_seen += link->count_right(seen);
@@ -350,7 +350,7 @@ Node::iter create_main_path(list<Node> & nodes, Node::smap & seen_nodes,
   }
 
   // Continue choosing process recursively
-  for (const auto choice : choices) {
+  for (const auto & choice : choices) {
     create_main_path(nodes, seen_nodes, new_iter, choice);
   }
   return new_iter;
@@ -435,7 +435,7 @@ int main(int argc, char* argv[]) try {
 
     // Transfer simple nodes to linked node structure
     list<Node> nodes;
-    for (const auto node : simple_nodes) {
+    for (const auto & node : simple_nodes) {
       const auto seq = node.first;
       const auto count = node.second;
       if (count > clip) nodes.emplace_back(seq, count);
@@ -472,7 +472,7 @@ int main(int argc, char* argv[]) try {
 
     // Show collapsed results
     if (show_collapsed_kmers) {
-      for (const auto node : nodes) {
+      for (const auto & node : nodes) {
         const auto seq = node.sequence;
         const auto count = node.count;
         serr << seq << count << endl;
@@ -503,7 +503,7 @@ int main(int argc, char* argv[]) try {
       }
     }
     multimap<unsigned int, Node::iter, more<unsigned int>> ordered_left;
-    for (const auto elem : leftmost_nodes) {
+    for (const auto & elem : leftmost_nodes) {
       const auto node = elem.second;
       ordered_left.emplace(contig_sizes[node->contig], node);
     }
@@ -511,7 +511,7 @@ int main(int argc, char* argv[]) try {
     // Extract main L->R path for each multi-node contig as special contigs
     list<Node> main_path;
     if (0) {
-      for (const auto elem : leftmost_nodes) {
+      for (const auto & elem : leftmost_nodes) {
         const auto node = elem.second;
         Node::smap seen;
         const auto new_node =
@@ -550,7 +550,7 @@ int main(int argc, char* argv[]) try {
       if (argc != 7) {
         dot << "name [color=blue, label=\"" << graph_types[g] << "\"];" << endl;
       }
-      for (const auto elem : ordered_left) {
+      for (const auto & elem : ordered_left) {
         const auto & node = *elem.second;
         if (node.main_path == main_path_type[g]) {
           dot << "\"name\" -> \"" << &node
@@ -838,7 +838,7 @@ int main(int argc, char* argv[]) try {
         const auto id = &node;
         const auto max_length = [&lines]() {
           unsigned int max = 0;
-          for (const auto line : lines) {
+          for (const auto & line : lines) {
             if (line.size() > max) max = static_cast<unsigned int>(line.size());
           }
           return max;

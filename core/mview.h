@@ -470,7 +470,7 @@ class X11MUMdexViewer : public X11Win {
       const std::vector<MUM> other_mums{read_mums(mindex)};
       std::vector<unsigned int> base_seen(read_length);
       unsigned int total_n_bases{0};
-      for (const MUM omum : other_mums) {
+      for (const MUM & omum : other_mums) {
         unsigned int first_hit{0};
         unsigned int last_hit{0};
         unsigned int n_bases{0};

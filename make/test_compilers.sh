@@ -60,7 +60,7 @@ function compile() {
 }
 
 compile default $n_threads
-for compiler in 9.3.0 8.4.0 7.4.0 6.5.0 5.5.0 ; do
+for compiler in 10.3.0 9.3.0 8.4.0 7.4.0 6.5.0 5.5.0 ; do
     compile $compiler $n_threads
 done
 compile clang $n_threads

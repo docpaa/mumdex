@@ -100,7 +100,7 @@ int main(int argc, char* argv[])  try {
     }
     for (const bool read2 : {false, true}) {
       const vector<SimpleHit> mums{sa.find_mams(sequence[read2])};
-      for (const auto mum : mums) {
+      for (const auto & mum : mums) {
         sout << names[read2]
              << read2
              << vt_mismatches[read2] << vt_mismatches[1 - read2]

@@ -64,7 +64,7 @@ int main(int argc, char* argv[])  try {
     }
   }
 
-  for (const auto elem : counts) {
+  for (const auto & elem : counts) {
     cout << elem.first << " " << elem.second << endl;
   }
 

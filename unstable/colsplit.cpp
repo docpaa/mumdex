@@ -51,7 +51,7 @@ int main(int argc, char **) try {
 
   // output files
   vector<unique_ptr<ofstream>> outputs;
-  for (const string name : column_names)
+  for (const string & name : column_names)
     outputs.push_back(std::make_unique<ofstream>(name.c_str()));
 
   // process data

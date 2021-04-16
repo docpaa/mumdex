@@ -3378,7 +3378,7 @@ inline void X11Graph::draw_grid() const {
     if (y && tiled_radio) break;
     const Axis axis{range[y][0], range[y][1], 3, log_radios[y],
           (y ? y_cn_scale : 1.0)};
-    for (const Tick tick : axis.ticks()) {
+    for (const Tick & tick : axis.ticks()) {
       if (!grid_radios[!tick.second][y]) continue;
       const int loc{coord(y, tick.first)};
       XDrawLine(display(), pixmap, tick.second >= 2 ? gc :
@@ -3402,7 +3402,7 @@ void X11Graph::draw_ticks(Drawable drawable) {
     if (y && tiled_radio) break;
     const double xyscale{y ? y_cn_scale : 1.0};
     const Axis axis{range[y][0], range[y][1], 3, log_radios[y], xyscale};
-    for (const std::pair<double, unsigned char> tick : axis.ticks()) {
+    for (const std::pair<double, unsigned char> & tick : axis.ticks()) {
       if (!tick.second) continue;
       const int loc{coord(y, tick.first)};
       const double val{tick.first};
@@ -4150,7 +4150,7 @@ class X11TextGrid : public X11Win {
   }
   void clear_status() {
     for (unsigned int c{0}; c != data.size(); ++c) set_column_status(c, false);
-    for (const auto cell : selected_cells)
+    for (const auto & cell : selected_cells)
       toggle_cell_status(cell.first, cell.second);
   }
   bool cells_selected() const {

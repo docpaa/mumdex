@@ -787,7 +787,7 @@ class PSPartT : public Multiplexer<PSPageT<PSPartT<PSSeries> >,
     return *this;
   }
   void write_text(PSDoc & doc, const Bounds & bounds, const double scale) {
-    for (const std::pair<std::pair<double, double>, Text> text_pos : text_) {
+    for (const std::pair<std::pair<double, double>, Text> & text_pos : text_) {
       const double x{text_pos.first.first};
       const double y{text_pos.first.second};
       Text text{text_pos.second};

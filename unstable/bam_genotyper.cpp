@@ -276,7 +276,8 @@ int main(int argc, char ** argv) try {
 
     // Process count of all pairs
     while (bam >> consensus) {
-      for (const pair<unsigned int, BaseQual> & pos_base_qual : consensus) {
+      for (const pair<const unsigned int, BaseQual> & pos_base_qual :
+               consensus) {
         ++counts[base_to_int(pos_base_qual.second.base)][pos_base_qual.first];
       }
     }

@@ -79,7 +79,7 @@ int main(int argc, char ** argv) try {
       return result;
     }()};
 
-  for (const pair<char, uint64_t> & char_count : char_counts)
+  for (const auto & char_count : char_counts)
     cout << char_count.first << '\t' << char_count.second << '\n';
 
   return 0;

@@ -347,7 +347,7 @@ class SlowChecks {
     // Bridge in parent cut, any mum length
     static thread_local vector<Sample> parents;
     parents.clear();
-    for (const Sample parent : pop.parent(family)) {
+    for (const Sample & parent : pop.parent(family)) {
       // ignore check if we already know it is in the parent
       if (find(samples.begin(), samples.end(), parent) != samples.end()) {
         parents.push_back(parent);
@@ -370,11 +370,11 @@ class SlowChecks {
     static thread_local vector<Sample> children;
     children.clear();
     ConsensusSequence consensus[2]{adjacent_length, adjacent_length};
-    for (const Sample child : pop.child(family)) {
+    for (const Sample & child : pop.child(family)) {
       bool in_child = false;
       const MUMdex & mumdex{mumdex_names[child], ref};
 
-      for (const Bridge sbridge : Bridges{bridge, mumdex}) {
+      for (const Bridge & sbridge : Bridges{bridge, mumdex}) {
         in_child = true;
         unsigned int i{0};
         for (const string & seq : sbridge.adjacent_sequences(adjacent_length)) {
@@ -544,7 +544,7 @@ class SlowChecks {
     if (parents.size() == 0) {
       ++n_denovo;
       ++seen_denovo_families[family];
-      for (const Sample sample : children) ++seen_denovo_samples[sample];
+      for (const Sample & sample : children) ++seen_denovo_samples[sample];
       if (children.size() == 1) {
         if (pop.is_proband(children.front())) {
           ++n_denovo_proband;
@@ -919,7 +919,7 @@ int main(int argc, char* argv[])  try {
       const unsigned int n_families{[&all_samples, &pop] {
           unsigned int n{0};
           Family last_family{100000};
-          for (const Sample sample : all_samples) {
+          for (const Sample & sample : all_samples) {
             const Family family{pop.family(sample)};
             if (family != last_family) {
               ++n;
@@ -990,7 +990,7 @@ int main(int argc, char* argv[])  try {
         // Parent sample cuts
         bool just_kids{true};
         unsigned int n_parents{0};
-        for (const Sample sample : samples) {
+        for (const Sample & sample : samples) {
           if (pop.is_parent(sample)) {
             just_kids = false;
             ++n_parents;

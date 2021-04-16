@@ -77,7 +77,7 @@ int main(int argc, char* argv[])  try {
   while (argc--) {
     // Get samples for sample or family name
     const string sample_or_family{argv++[1]};
-    for (const Sample s : pop.samples(sample_or_family)) {
+    for (const Sample & s : pop.samples(sample_or_family)) {
       pool.run(unordered_results,
                [&pop, &samples_dir, &ref, &mappability, expected, x, y]
                (const Sample & sample) {

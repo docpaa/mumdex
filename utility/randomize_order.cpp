@@ -48,7 +48,7 @@ int main(int argc, char* argv[], char * []) try {
   auto mersenne = mt19937_64(rd());
   shuffle(data.begin(), data.end(), mersenne);
 
-  for (const auto val : data) {
+  for (const auto & val : data) {
     if (!cout) {
       cerr << "cout closed" << endl;
       break;

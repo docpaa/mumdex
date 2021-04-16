@@ -67,7 +67,7 @@ int main(int argc, char* argv[])  try {
   const vector<string> sample_names{[&samples, &pop]() {
     vector<string> names;
     names.reserve(samples.size());
-    for (const Sample sample : samples) {
+    for (const Sample & sample : samples) {
       names.push_back(pop.sample(sample));
     }
     return names;

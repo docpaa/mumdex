@@ -77,7 +77,7 @@ int main(int argc, char* argv[])  try {
       line_str >> name;
       fastq >> read >> c >> line;
       const vector<SimpleHit> mums{sa.find_mams(read, min_len)};
-      for (const auto mum : mums) {
+      for (const auto & mum : mums) {
         sout << name << read2 << ref.name(mum.chr) << mum.pos
              << mum.off << mum.len << mum.dir << endl;
       }

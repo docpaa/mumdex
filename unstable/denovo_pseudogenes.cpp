@@ -254,7 +254,7 @@ int main(int argc, char* argv[]) try {
        << counts.size() * sizeof(JunctionInfo) << "bytes" << endl;
   sort(counts.begin(), counts.end(), FamilyJunctionSorter(family_ids));
   if (0) {
-    for (const auto count : counts) {
+    for (const auto & count : counts) {
       sout << count.junction_index << count.invariant_index
            << count.invariant << count.count
            << families[family_ids[count.sample]]
@@ -404,16 +404,16 @@ int main(int argc, char* argv[]) try {
     const auto & gene_cand = gene_cand_info.second;
     if (gene_cand.candidates.empty()) continue;
     vector<pair<pair<unsigned int, SavedCandidate>, bool>> sample_details;
-    for (const auto info : gene_cand.candidates) {
+    for (const auto & info : gene_cand.candidates) {
       sample_details.emplace_back(info, true);
     }
-    for (const auto info : gene_cand.also_seen) {
+    for (const auto & info : gene_cand.also_seen) {
       sample_details.emplace_back(info, false);
     }
     ostringstream out;
     out << "----------------------------------------------" << endl;
     ostringstream search_out_gene;
-    for (const auto info : sample_details) {
+    for (const auto & info : sample_details) {
       const auto sample_info = info.first;
       const auto s = sample_info.first;
       const auto f = family_ids[s];
@@ -698,7 +698,7 @@ int main(int argc, char* argv[]) try {
             continue;
           if ([other_mum, &seen_mums]() {
               const unsigned int seen_threshold = 5000;
-              for (const auto other : seen_mums) {
+              for (const auto & other : seen_mums) {
                 if (other_mum.close_by(other, seen_threshold)) return true;
               }
               return false;

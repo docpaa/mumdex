@@ -357,7 +357,7 @@ class Population {
     std::ofstream sample_meta("samples.txt");
     if (!sample_meta) throw Error("Problem opening samples.txt");
     for (const Family f : families()) {
-      for (const Sample s : samples(f)) {
+      for (const Sample & s : samples(f)) {
         sample_meta << family(f) << '\t' << n_members(f) << '\t'
                     << sample(s) << '\t' << member(s) << '\t'
                     << sex(s) << std::endl;

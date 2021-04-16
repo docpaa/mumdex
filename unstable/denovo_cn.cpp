@@ -103,7 +103,7 @@ int main(int argc, char* argv[]) try {
     [&pop, &results_dir, &ref, &lookup, n_bins]() {
       ThreadPool pool{20};
       vector<future<vector<Segments>>> futures;
-      for (const Family & family : pop.families()) {
+      for (const Family family : pop.families()) {
         futures.push_back(pool.run(
             [&pop, &results_dir, n_bins, &ref, &lookup](const Family & f) {
               vector<Segments> result;
@@ -142,7 +142,7 @@ int main(int argc, char* argv[]) try {
 
   unsigned int n_call{0};
   unsigned int n_denovo{0};
-  for (const Family & family : pop.families()) {
+  for (const Family family : pop.families()) {
     const vector<Sample> & samples{pop.samples(family)};
     for (unsigned int s{0}; s != samples.size(); ++s) {
       const Sample sample{samples[s]};
@@ -177,7 +177,7 @@ int main(int argc, char* argv[]) try {
               // Get population results
               vector<double> vals;
               vector<double> parent_vals;
-              for (const Family & f : pop.families()) {
+              for (const Family f : pop.families()) {
                 const vector<Sample> & ss{pop.samples(f)};
                 for (unsigned int s2{0}; s2 != ss.size(); ++s2) {
                   if (pop.is_parent(ss[s2])) {

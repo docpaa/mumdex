@@ -169,7 +169,7 @@ int main(int argc, char* argv[], char * []) try {
       MergeHelperCompare>;
   PQueue queue{MergeHelperCompare()};
   unsigned int n_samples_skipped{0};
-  for (const auto s : pop.samples(pop.family(family_name))) {
+  for (const auto & s : pop.samples(pop.family(family_name))) {
     ostringstream bridges_name;
     bridges_name << bridges_dir << "/" << pop.sample(s) << "/"
                  << get_bridge_file_name(ref, chromosome);

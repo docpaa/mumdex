@@ -155,7 +155,7 @@ class Image {
     data[pos.x() * n_y() + pos.y()] = value;
   }
   void clear(const ImgPixels & pixels) {
-    for (const ImgPixel pixel : pixels) set(pixel.first, pixel.second, 0);
+    for (const ImgPixel & pixel : pixels) set(pixel.first, pixel.second, 0);
   }
   void clear() { data.assign(data.size(), 0); }
 

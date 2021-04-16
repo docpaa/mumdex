@@ -79,7 +79,7 @@ int main(int argc, char* argv[])  try {
 
     cout << name << " " << bases << '\n';
     const vector<SimpleHit> mums{sa.find_mams(bases, min_map_len)};
-    for (const auto mum : mums) {
+    for (const auto & mum : mums) {
       sout << ref.name(mum.chr) << mum.pos
            << mum.off << mum.len << mum.dir << '\n';
     }

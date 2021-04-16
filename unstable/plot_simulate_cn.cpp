@@ -126,7 +126,7 @@ int main(int argc, char* argv[])  try {
   // Read data files, calculate performance measures
   // should synchronize small, graph access
   cerr << "Read data" << endl;
-  for (const auto file_info_ : data_files) {
+  for (const auto & file_info_ : data_files) {
     auto data_fun = [&lengths, &cpbs, &small, n_bins, level,
                      &performance, &total_n_trials,
                      &ps, &pages, &graphs, &series, &dark_circle_marker]

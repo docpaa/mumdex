@@ -784,7 +784,7 @@ int main(int argc, char* argv[])  try {
         static_cast<unsigned int>(-1)};
   unsigned int main_high_ref[2]{0, 0};
   // Loop over samples
-  for (const Sample sample : event_samples) {
+  for (const Sample & sample : event_samples) {
     // Load the mumdex for the sample
     const string sample_name{pop.sample(sample)};
     const MUMdex mumdex{samples_dir + "/" + sample_name + "/mumdex"};
@@ -822,7 +822,7 @@ int main(int argc, char* argv[])  try {
   const unsigned int ref_half_size{max(max_dist[0], max_dist[1]) + 10};
 
   // Loop over samples
-  for (const Sample sample : event_samples) {
+  for (const Sample & sample : event_samples) {
     // Load the mumdex for the sample
     const string sample_name{pop.sample(sample)};
     const MUMdex mumdex{samples_dir + "/" + sample_name + "/mumdex"};
@@ -1011,7 +1011,7 @@ int main(int argc, char* argv[])  try {
       if (pair_number == 1) {
         if (event_samples.size() > 1) {
           sample_names = "";
-          for (const Sample esample : event_samples) {
+          for (const Sample & esample : event_samples) {
             if (sample_names.size()) sample_names += " ";
             sample_names += pop.sample(esample);
           }
@@ -1149,7 +1149,7 @@ int main(int argc, char* argv[])  try {
       //
 
       // Loop over parents (actually all family members) for counts
-      for (const Sample parent : pop.samples(family)) {
+      for (const Sample & parent : pop.samples(family)) {
         const string parent_name{pop.sample(parent)};
 
         // Load the mumdex for the sample
@@ -1299,7 +1299,7 @@ int main(int argc, char* argv[])  try {
 
   unsigned int n_pages_pre{0};
   unsigned int n_pages{0};
-  for (const pair<double, vector<string> > & sample : sample_pages) {
+  for (const pair<float, vector<string> > & sample : sample_pages) {
     for (const string & spage : sample.second) {
       ++n_pages_pre;
       if (((n_pages_pre % 3) != 1) && main_pages_only) continue;

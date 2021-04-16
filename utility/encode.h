@@ -538,7 +538,7 @@ class OptionalSavers {
     load(mumdex_name, mumdex_size * 2);
   }
   explicit OptionalSavers(std::vector<std::string> optional_formats) {
-    for (const auto format_string : optional_formats) {
+    for (const auto & format_string : optional_formats) {
       std::istringstream format{format_string};
       std::string type;
       std::getline(format, type, '|');

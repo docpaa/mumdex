@@ -68,7 +68,7 @@ int main(int argc, char* argv[])  try {
   while (argc--) {
     // Get samples for sample or family name
     const string sample_or_family{argv++[1]};
-    for (const Sample sample : pop.samples(sample_or_family)) {
+    for (const Sample & sample : pop.samples(sample_or_family)) {
       // Get sample info
       const Family family{pop.family(sample)};
       const string sample_name{pop.sample(sample)};

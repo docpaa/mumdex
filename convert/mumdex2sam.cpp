@@ -61,7 +61,7 @@ int main(int argc, char * argv[]) try {
   }
   cout << "@FI\tNP:" << mumdex.n_pairs() << "\tNM:" << mumdex.mums().size()
        << endl;
-  for (const auto format : optional_formats) {
+  for (const auto & format : optional_formats) {
     cout << "@OF\tOF:" << format << endl;
   }
   cout << "@PG\tID:mumdex2sam\tCL:mumdex2sam " << mumdex_name << endl;

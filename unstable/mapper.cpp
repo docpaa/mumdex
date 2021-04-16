@@ -48,7 +48,7 @@ int main(int argc, char* argv[])  try {
   while (cin >> read) {
     cout << read << '\n';
     const vector<SimpleHit> mums{sa.find_mams(read)};
-    for (const auto mum : mums) {
+    for (const auto & mum : mums) {
       sout << ref.name(mum.chr) << mum.pos
            << mum.off << mum.len << mum.dir << '\n';
     }

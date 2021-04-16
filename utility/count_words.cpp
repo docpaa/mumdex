@@ -79,7 +79,7 @@ int main(int argc, char ** argv) try {
       return result;
     }()};
 
-  for (const pair<string, uint64_t> & word_count : word_counts)
+  for (const auto & word_count : word_counts)
     cout << word_count.first << '\t' << word_count.second << '\n';
 
   return 0;
