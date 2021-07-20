@@ -25,6 +25,8 @@ namespace paa {
 const unsigned int junction_window = 5;
 
 struct Gap {
+  explicit Gap(const unsigned int chr_) :
+      chr{chr_}, start{0}, stop{0}, type{""} {}
   Gap(const unsigned int chr_, const unsigned int start_,
       const unsigned int stop_, const std::string type_) :
       chr{chr_}, start{start_}, stop{stop_}, type{type_} {}
@@ -41,7 +43,8 @@ class Gaps {
   Gaps(const std::string & file_name,
        const ChromosomeIndexLookup & lookup,
        const std::string & types,
-       const std::string & just_chr = "") {
+       const std::string & just_chr = "",
+       const bool do_sort = false) {
     std::ifstream input{file_name.c_str()};
     if (!input) throw Error("Cound not open gap input file") << file_name;
     input.ignore(10000, '\n');
@@ -63,9 +66,49 @@ class Gaps {
           (just_chr.empty() || chr_name == just_chr))
         data.emplace_back(lookup[chr_name], start, stop, type);
     }
+    if (do_sort) {
+      sort(data.begin(), data.end(), [](const Gap & lhs, const Gap & rhs) {
+          if (lhs.chr == rhs.chr) {
+            return lhs.start < rhs.start;
+          } else {
+            return lhs.chr < rhs.chr;
+          }
+        });
+    }
     std::cerr << "Loaded " << data.size() << " gaps" << std::endl;
   }
 
+  using Closest = std::pair<unsigned int, std::string>;
+  Closest find_closest(const unsigned int chr, const unsigned int pos) const {
+    const auto chr_bounds = equal_range(
+        data.begin(), data.end(), Gap{chr},
+        [](const Gap & lhs, const Gap & rhs) {
+          return lhs.chr < rhs.chr;
+        });
+    using Iter = std::vector<Gap>::const_iterator;
+    Iter closest_g{data.end()};
+    unsigned int closest_distance{1000000000};
+    for (Iter g{chr_bounds.first}; g != chr_bounds.second; ++g) {
+      unsigned int distance{0};
+      if (g->chr != chr) throw Error("Bad gap chr in find_closest");
+      if (pos < g->start) {
+        distance = g->start - pos;
+      } else if (pos > g->stop) {
+        distance = pos - g->stop;
+      } else {
+        distance = 0;
+      }
+      if (distance < closest_distance) {
+        closest_distance = distance;
+        closest_g = g;
+      }
+    }
+    if (closest_g == data.end()) {
+      return Closest{1000000000, "none"};
+    } else {
+      return Closest{closest_distance, closest_g->type};
+    }
+  }
   std::vector<Gap>::const_iterator begin() const { return data.begin(); }
   std::vector<Gap>::const_iterator end() const { return data.end(); }
 

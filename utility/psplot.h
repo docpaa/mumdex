@@ -1072,8 +1072,8 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     // Auto Legend
     // const double lx{bounds.xl() + 7 * bounds.xw() / 10};
     // const double ly{bounds.yh() - bounds.yw() / 16};
-    const double lx{bounds.xl() + 1 * bounds.xw() / 10};
-    const double ly{bounds.yh() - bounds.yw() / 8};
+    const double lx{bounds.xl() + 7 * bounds.xw() / 10};
+    const double ly{bounds.yl() + bounds.yw() / 2};
 
     unsigned int c{0};
     std::ostringstream legend;

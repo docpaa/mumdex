@@ -176,7 +176,8 @@ int main(int argc, char ** argv)  try {
                                    pair_base_counts.end());
       auto max_index = max_iter - pair_base_counts.begin();
       bool good{true};
-      for (int64_t i{0}; i != pair_base_counts.size(); ++i) {
+      for (int64_t i{0}; i != static_cast<int64_t>(pair_base_counts.size());
+           ++i) {
         if (i == max_index) continue;
         if (pair_base_counts[i] == pair_base_counts[max_index]) {
           good = false;

@@ -49,11 +49,31 @@ inline std::string safe_file_name(const std::string & name) {
   return result;
 }
 
+// Remove specific file extension, if exists
+inline std::string remove_extension(const std::string & file_name,
+                                    const std::string & extension) {
+  const size_t pos{file_name.find_last_of('.')};
+  if (pos == std::string::npos) return file_name;
+  if (pos != std::string::npos && file_name.substr(pos + 1) == extension)
+    return file_name.substr(0, pos);
+  return file_name;
+}
+
 // Get file extension, if exists
 inline std::string extension(const std::string & file_name) {
   const size_t pos{file_name.find_last_of('.')};
   if (pos == std::string::npos) return "";
   return file_name.substr(pos);
+}
+
+// Remove path component of file name
+inline std::string remove_path(const std::string & file_name) {
+  const size_t pos{file_name.find_last_of('/')};
+  if (pos != std::string::npos) {
+    return file_name.substr(pos + 1);
+  } else {
+    return file_name;
+  }
 }
 
 // Grab file contents as a string

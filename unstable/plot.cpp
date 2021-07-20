@@ -25,6 +25,7 @@ using std::cerr;
 using std::endl;
 using std::ifstream;
 using std::istringstream;
+using std::ostringstream;
 using std::string;
 using std::vector;
 
@@ -40,8 +41,25 @@ using paa::PSXYSeries;
 int main(int argc, char ** argv)  try {
   // Check arguments
   --argc;
-  if (argc != 2 && argc != 6)
-    throw Error("usage: plot data_file title;x;y [xlow xhigh ylow yhigh]");
+  const string usage{
+    "usage: plot -[log_y|legend|lines]... data_file title;x;y"
+        " [xlow xhigh ylow yhigh]"};
+  if (argc < 2) throw Error(usage);
+  bool log_y{false};
+  bool legend{false};
+  bool acted {true};
+  bool lines{false};
+  while (acted) {
+    acted = false;
+    if (string(argv[1]) == "-log_y") log_y = acted = true;
+    if (string(argv[1]) == "-legend") legend = acted = true;
+    if (string(argv[1]) == "-lines") lines = acted = true;
+    if (acted) {
+      --argc;
+      ++argv;
+    }
+  }
+  if (argc != 2 && argc != 6) throw Error(usage);
 
   // Interpret arguments
   const string input_name{argv[1]};
@@ -57,6 +75,7 @@ int main(int argc, char ** argv)  try {
   PSDoc ps{input_name, input_name};
   ps.pdf(true);
   PSGraph graph{ps, title, Bounds{x_low, x_high, y_low, y_high}};
+  if (log_y) graph.log_y(true);
   //  graph.ps(  // "np 0 0 gfc m 1 0 gfc l 1 1 gfc l 1 0 gfc l cp clip "
   // "0 0 0 c 0.5 lw np 0 0 gc m 4 4 gc l sp");
   // graph.log_x(true).log_y(true);
@@ -74,9 +93,13 @@ int main(int argc, char ** argv)  try {
         "0.439216 0.564706 0.564706",  // grey
         "0.972549 0.282353 0.878431",  // pink
         "0 0.909804 0.972549",  // light blue
+        "0.38 0.2 0.07",  // brown
+        "0.5 0.5 1",  //
         };
-  const vector<string (*)()> shapes{paa::circle, paa::square, paa::triangle,
-        paa::diamond, paa::plus, paa::xshape, paa::star};
+  const vector<string (*)()> shapes{
+    paa::circle, paa::square, paa::triangle,
+        paa::diamond, paa::circle, paa::plus,
+        paa::xshape, paa::circle, paa::star};
   vector<Marker> markers;
 
   // Series names
@@ -89,9 +112,9 @@ int main(int argc, char ** argv)  try {
   unsigned int shape{0};
   while (header_stream >> header) {
     series_names.push_back(header);
-    series.emplace_back(graph, Marker{shapes[(shape++) % shapes.size()](),
-            0.6, colors[color % colors.size()]});  // , header);
-    ++color;
+    series.emplace_back(graph, Marker{shapes[shape++ % shapes.size()](),
+            1.0, colors[color++ % colors.size()]});  // , header);
+    if (lines) series.back().do_lines(true);
   }
 
   // Read data
@@ -107,6 +130,19 @@ int main(int argc, char ** argv)  try {
     }
 
     if (!input) throw Error("Problem parsing input");
+  }
+
+  if (legend) {
+    ostringstream legend_stream;
+    legend_stream << "70 15 m 15 sf (Legend:) s";
+    for (uint64_t c{0}; c != series_names.size(); ++c) {
+      if (c) legend_stream << " 0 0 0 c (,) s";
+      legend_stream << " " << colors[c % colors.size()] << " c ( "
+                    << series_names[c] << ") s gs 10 5 rm cxy tr "
+                    << series[c].marker(1.0).commands() << " sp gr"
+                    << " 17 0 rm ";
+    }
+    graph.ps(legend_stream.str());
   }
 
   return 0;

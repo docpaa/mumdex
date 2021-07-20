@@ -105,6 +105,7 @@ mumdex_sequences
 mummer
 mview
 namepair
+namepair_full
 offset_beds
 optional_test
 pair_view
@@ -161,6 +162,7 @@ stats
 subsample
 table_columns
 table_stats
+table_sum
 table_summary
 test_beta
 test_hmm

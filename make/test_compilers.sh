@@ -28,11 +28,10 @@ function compile() {
         nproc=$n_threads
         if [[ "$compiler" == *clang* ]] ; then
             export CXX=clang++
-            export CXXFLAGS=-fuse-ld=gold 
         else
             export CXX=g++
         fi
-        if [ $compiler = clang ] ; then
+        if [ $compiler = clang ] || [ $compiler = default ] ; then
             a=b
         elif [ $compiler = mac_clang ] ; then
             remote=andmin
@@ -42,8 +41,7 @@ function compile() {
             nproc=12
         elif [ $compiler = cygwin ] ; then
             remote=andrewsp@hannah5
-        elif [ $compiler = default ] ; then
-            a=b
+            nproc=6
         else
             export COMPILER_DIR=/data/software/${compiler/_/\/}
             export PATH=$COMPILER_DIR/bin:$PATH
@@ -69,9 +67,9 @@ function compile() {
 }
 
 for compiler in \
-    clang_{4..12}.x clang_13.0.0 \
-          gcc_4.9.2 gcc_{5.5.0,6.5.0,7.4.0,8.4.0,9.3.0,10.3.0} \
+    clang_{4..13}.x \
+          gcc_{4.9.2,5.5.0,6.5.0,7.5.0,8.4.0,9.3.0,10.3.0,11.1.0} \
           default clang mac_clang ; do
     compile $compiler
 done
-# compile cygwin 12
+# compile cygwin

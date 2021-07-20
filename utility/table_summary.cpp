@@ -211,7 +211,9 @@ int main(int argc, char ** argv) try {
       col_header.emplace_back("max", as_string(values.back()));
       col_header.emplace_back("mad", as_string(mad.mad()));
       col_header.emplace_back("avg", as_string(total / n_rows));
+      col_header.emplace_back("tot", as_string(total));
     } else {
+      col_header.emplace_back("", "");
       col_header.emplace_back("", "");
       col_header.emplace_back("", "");
       col_header.emplace_back("", "");

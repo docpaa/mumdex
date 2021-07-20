@@ -199,10 +199,10 @@ class TReference {
 
   // read from fasta file or binary - and do not use too much physical memory
   explicit TReference(const std::string & fasta,
-                      const size_t max_bytes = 4906) :
+                      const size_t max_bytes = 4096) :
       seq{"/dev/null", false},
-    chr_len{"/dev/null", false},
-    fasta_file_{fasta} {
+      chr_len{"/dev/null", false},
+      fasta_file_{fasta} {
       const std::string ref_bin_name{fasta + ".bin/ref.seq.bin"};
       if (readable(ref_bin_name)) {
         new (this) TReference{fasta, ReadFromBinary()};  // placement new
@@ -504,6 +504,15 @@ class TMappability {
     const unsigned int stop{pos + length};
     for (unsigned int p{pos}; p != stop; ++p) {
       result = std::min(result, low(p));
+      if (p + result > stop) break;
+    }
+    return result;
+  }
+  unsigned int max(const unsigned int pos, const unsigned int length) const {
+    unsigned int result{0};
+    const unsigned int stop{pos + length};
+    for (unsigned int p{pos}; p != stop; ++p) {
+      result = std::max(result, low(p));
       if (p + result > stop) break;
     }
     return result;

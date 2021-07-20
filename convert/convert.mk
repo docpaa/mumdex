@@ -7,6 +7,7 @@ CONVERT_PROGRAMS := \
 	mumdex2txt \
 	mumdex2txt_fast \
 	namepair \
+	namepair_full \
 	pop2txt \
 	sam2fastq \
 	sam2fastqs \
@@ -20,5 +21,6 @@ mumdex2txt : files.o utility.o
 mumdex2txt_fast : files.o utility.o
 mumdex2sam : files.o utility.o
 namepair : utility.o
+namepair_full : utility.o
 
 

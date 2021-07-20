@@ -21,6 +21,7 @@ using std::exception;
 using std::istringstream;
 using std::string;
 
+using paa::reverse_complement;
 using paa::ChromosomeIndexLookup;
 using paa::Error;
 using paa::Mappability;
@@ -28,9 +29,15 @@ using paa::Reference;
 
 int main(int argc, char * argv[]) try {
   // Check initial command line arguments
-  const string usage{
-    "usage: reference_sequences reference chr:start-stop|chr:start:n ..."};
+  const string usage{"usage: reference_sequences [-rc] reference "
+        "chr:start-stop|chr:start:n ..."};
   if (--argc < 2) throw Error(usage);
+  bool rc{false};
+  if (string(argv[1]) == "-rc") {
+    rc = true;
+    --argc;
+    ++argv;
+  }
   const Reference reference{argv[1]};
   const ChromosomeIndexLookup chr_lookup{reference};
   const Mappability mappability{reference};
@@ -65,7 +72,8 @@ int main(int argc, char * argv[]) try {
     if (stop > reference.size(chr) || start >= reference.size(chr))
       throw Error("Region goes off end of chromosome") << argv[a];
     const unsigned int abspos{reference.abspos(chr, start)};
-    cout << argv[a] << '\t' << reference.subseq(chr, start, stop)
+    const string seq{reference.subseq(chr, start, stop)};
+    cout << argv[a] << '\t' << (rc ? reverse_complement(seq) : seq)
          << '\t' << n << '\t' << mappability.min(abspos, n) << '\n';
   }
 

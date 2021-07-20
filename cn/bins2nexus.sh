@@ -5,8 +5,8 @@ base=$(basename $bins_file)
 base=${base%_bins_results.txt}
 # echo base $base
 
-ratios=$base.ratios.txt
-segs=$base.segs.txt
+ratios=$base.nexus.ratios.txt
+segs=$base.nexus.segs.txt
 
 (
     cat $bins_file |

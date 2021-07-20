@@ -4396,8 +4396,13 @@ class TabularData {
           if (col.is_real()) {
             col_type = "real";
             reals_maybe[c] = std::make_shared<Reals>(n_rows());
-            for (unsigned int r{0}; r != n_rows(); ++r)
-              (*reals_maybe[c])[r] = tsv.as_real(c, r);
+            for (unsigned int r{0}; r != n_rows(); ++r) {
+              if (col.is_integral()) {
+                (*reals_maybe[c])[r] = tsv.as_jitter(c, r);
+              } else {
+                (*reals_maybe[c])[r] = tsv.as_real(c, r);
+              }
+            }
             reals_[c] = *reals_maybe[c];
           }
           if (col.is_integral()) col_type = "int";

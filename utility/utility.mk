@@ -9,6 +9,7 @@ UTILITY_PROGRAMS := column_split \
 	randomize_order \
 	stats \
 	table_columns \
+	table_sum \
 	table_summary \
 	test_beta \
 	test_kd \
