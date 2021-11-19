@@ -619,11 +619,8 @@ int main(int argc, char* argv[]) try {
 
   // Gene info
   const string reference_file{ref.fasta_file()};
-  const string genes_name{reference_file + ".bin/knownGene.txt"};
-  const string isoforms_name{reference_file + ".bin/knownIsoforms.txt"};
-  const string kgXrefs_name{reference_file + ".bin/kgXref.txt"};
-  const KnownGenes genes{genes_name, isoforms_name, lookup, ref};
-  const GeneXrefs xref{kgXrefs_name};
+  const KnownGenes genes{lookup, ref};
+  const GeneXrefs xref{ref};
 
   // load sample information in parallel
   const AllSampleInfo all_sample_info{

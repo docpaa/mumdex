@@ -36,12 +36,8 @@ int main(int argc, char* argv[]) try {
   const string ref_name{argv[1]};
   const Reference ref{ref_name};
   const ChromosomeIndexLookup chr_lookup{ref};
-  const string genes_name{ref_name + ".bin/knownGene.txt"};
-  const string isoforms_name{ref_name + ".bin/knownIsoforms.txt"};
-  const string kgXrefs_name{ref_name + ".bin/kgXref.txt"};
-
-  const KnownGenes genes{genes_name, isoforms_name, chr_lookup, ref};
-  const GeneXrefs xref{kgXrefs_name};
+  const KnownGenes genes{chr_lookup, ref};
+  const GeneXrefs xref{ref};
 
   ifstream candidates{argv[2]};
   if (!candidates) throw Error("Could not open candidates file") << argv[2];

@@ -11,8 +11,8 @@
 #include <string>
 #include <utility>
 
-#include "./error.h"
-#include "./files.h"
+#include "error.h"
+#include "files.h"
 
 using std::cout;
 using std::cerr;

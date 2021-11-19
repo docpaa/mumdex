@@ -66,6 +66,12 @@ class DocSettings {
     png_ = png__;
     return *this;
   }
+  void pdf_only() {
+    pdf_ = true;
+    ps_ = false;
+    eps_ = false;
+    png_ = false;
+  }
   bool ticks() const { return ticks_; }
   bool & ticks() { return ticks_; }
   DocSettings & ticks(const bool ticks__) {
@@ -235,8 +241,7 @@ class Layout {
   const Layout & operator[](const unsigned int i) const {
     unsigned int total{0};
     if (components.empty()) {
-      if (i) throw Error("Unexpected i in Layout::operator[]")
-                 << i << "in";
+      if (i) throw Error("Unexpected i in Layout::operator[]") << i;
       return *this;
     }
     for (unsigned int x{0}; x != nx(); ++x) {
@@ -546,6 +551,10 @@ class PSDocT : public DocSettings,
     psout << std::endl;
     return *this;
   }
+  void annotate(const std::string & text) {
+    for (unsigned int p{0}; p != children().size(); ++p)
+      children()[p]->annotate(text, width() - 12, height() - 18.5);
+  }
 
  private:
   std::string file_name{};
@@ -749,14 +758,24 @@ class PSPageT :
       }
     }
 
+    // Add ps annotation
+    if (ps_.size()) doc << ps_ << '\n';
+
     // Finish page
     doc << "restore\n";
     doc << "ps\n" << "%%EndPage: " << page << std::endl;
+  }
+  void annotate(const std::string & text, const double x, const double y) {
+    std::ostringstream ps;
+    ps << "10 sf 0 0 0 c " << x << " " << y << " m "
+       << "(" << text << ") jr s";
+    ps_ = ps.str();
   }
 
  private:
   Text title_;
   std::string layout_;
+  std::string ps_{};
 };
 
 // Get components of labels from string like "Title;X Label;Y Label"
@@ -936,7 +955,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
   }
 
   virtual void finalize(PSDoc & doc, Bounds bounds) {
-    if (children().empty()) {
+    if (false && children().empty()) {
       return;
       std::cerr << "Empty graph" << std::endl;
       exit(1);
@@ -990,6 +1009,9 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     const double eb{border_width() * scale / 2};
     if (do_border_) do_bbox(doc, scale, bounds, eb);
 
+    // Arbitrary ps
+    do_ps(doc, scales, bounds, pre_ps_);
+
     // Axes and ticks and labels
     const double width1{0.5 * grid_width() * scale};
     const double width2{grid_width() * scale};
@@ -1008,7 +1030,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
         << "/gly {" << bounds.xw() + 2 * eb << " 0" << " rl} def "
         << "/tmx {" << "0 " << tick_length() * scale << " rl} def "
         << "/tmy {" << tick_length() * scale << " 0" << " rl} def\n"
-        << "np 0.6 0.6 0.6 c " << width1 << " lw " << dash1 << " sd\n";
+        << "np " << grid_color << " c " << width1 << " lw " << dash1 << " sd\n";
 
     unsigned int n_pname{0};
     for (const bool y : {false, true}) {
@@ -1060,7 +1082,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     }
 
     // Arbitrary ps
-    do_ps(doc, scales, bounds, pre_ps_);
+    do_ps(doc, scales, bounds, mid_ps_);
 
     // Finalize series
     for (PSSeries * series : children()) {
@@ -1122,6 +1144,10 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     ps_ += ps__ + "\n";
     return *this;
   }
+  PSGraphT & mid_ps(const std::string & ps__) {
+    mid_ps_ += ps__ + "\n";
+    return *this;
+  }
   PSGraphT & pre_ps(const std::string & ps__) {
     pre_ps_ += ps__ + "\n";
     return *this;
@@ -1170,6 +1196,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     return *this;
   }
   unsigned int min_tick_size{0};
+  std::string grid_color{"0.6 0.6 0.6"};
 
  protected:
   void do_labels(PSDoc & doc, Bounds & bounds, const double scale,
@@ -1224,19 +1251,38 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
     if (is_unset(range_.yh())) range_.yh(max_range.yh());
 #endif
     range_ = max_range;
-
     // Check for bad range problem and fake a good range if necessary
     if (is_unset(range_.xl()) || is_unset(range_.xh()) ||
         is_unset(range_.yl()) || is_unset(range_.yh())) {
       range_ = Bounds{0.001, 1, 0.001, 1};
     }
     if (de(range_.xl(), range_.xh())) {
-      range_.xl() *= 0.9;
-      range_.xh() *= 1.1;
+      if (de(range_.xl(), 0)) {
+        if (this->log_x_) {
+          range_.xl() = 0.05;
+          range_.xh() = 2;
+        } else {
+          range_.xl() -= 1;
+          range_.xh() += 1;
+        }
+      } else {
+        range_.xl() *= 0.9;
+        range_.xh() *= 1.1;
+      }
     }
     if (de(range_.yl(), range_.yh())) {
-      range_.yl() *= 0.9;
-      range_.yh() *= 1.1;
+      if (de(range_.yl(), 0)) {
+        if (this->log_y_) {
+          range_.yl() = 0.05;
+          range_.yh() = 2;
+        } else {
+          range_.yl() -= 1;
+          range_.yh() += 1;
+        }
+      } else {
+        range_.yl() *= 0.9;
+        range_.yh() *= 1.1;
+      }
     }
 
     if (range_.xl() > min_range.xl()) range_.xl() = min_range.xl();
@@ -1248,6 +1294,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
       range_.xh(log10(range_.xh()));
     }
     if (this->log_y_) {
+      if (hist_) range_.yh() *= 1.5;
       range_.yl(log10(range_.yl()));
       range_.yh(log10(range_.yh()));
     }
@@ -1281,51 +1328,37 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
 
   void do_ps(PSDoc & doc, double * scales, const Bounds & bounds,
              const std::string & ps__) {
-    if (ps__.size()) {
-      if (ps__.find(" pfc ") != std::string::npos) {
-        doc << "/pfc { /y e def "
-            << doc.width() << " mul " << " y " << doc.height() << " mul "
-            << "} def\n";
-      }
-      if (ps__.find(" xc ") != std::string::npos) {
-        doc << "/xc { " << (this->log_x() ? "log " : "")
-            << range().xl() << " sub "
-            << scales[0] << " mul " << bounds.xl() << " add "
-            << "} def\n";
-      }
-      if (ps__.find(" yc ") != std::string::npos) {
-        doc << "/yc { " << (this->log_y() ? "log " : "")
-            << range().yl() << " sub "
-            << scales[1] << " mul " << bounds.yl() << " add "
-            << "} def\n";
-      }
-      if (ps__.find(" gc ") != std::string::npos) {
-        doc << "/gc { /y e " << (this->log_y() ? "log " : "")
-            << "def " << (this->log_x() ? "log " : "")
-            << range().xl() << " sub "
-            << scales[0] << " mul " << bounds.xl() << " add "
-            << " y " << range().yl() << " sub "
-            << scales[1] << " mul " << bounds.yl() << " add "
-            << "} def\n";
-      }
-      if (ps__.find(" gfc ") != std::string::npos) {
-        doc << "/gfc { /y e def "
-            << bounds.xw() << " mul " << bounds.xl() << " add "
-            << " y " << bounds.yw() << " mul " << bounds.yl() << " add "
-            << "} def\n";
-      }
-      if (ps__.find(" xfc ") != std::string::npos) {
-        doc << "/xfc { "
-            << bounds.xw() << " mul " << bounds.xl() << " add "
-            << "} def\n";
-      }
-      if (ps__.find(" yfc ") != std::string::npos) {
-        doc << "/yfc { "
-            << bounds.yw() << " mul " << bounds.yl() << " add "
-            << "} def\n";
-      }
-      doc << ps__ << "\n";
+    if (&ps__ == &pre_ps_ && (pre_ps_.size() || mid_ps_.size() || ps_.size())) {
+      doc << "/pfc { /y e def "
+          << doc.width() << " mul " << " y " << doc.height() << " mul "
+          << "} def\n";
+      doc << "/xc { " << (this->log_x() ? "log " : "")
+          << range().xl() << " sub "
+          << scales[0] << " mul " << bounds.xl() << " add "
+          << "} def\n";
+      doc << "/yc { " << (this->log_y() ? "log " : "")
+          << range().yl() << " sub "
+          << scales[1] << " mul " << bounds.yl() << " add "
+          << "} def\n";
+      doc << "/gc { /y e " << (this->log_y() ? "log " : "")
+          << "def " << (this->log_x() ? "log " : "")
+          << range().xl() << " sub "
+          << scales[0] << " mul " << bounds.xl() << " add "
+          << " y " << range().yl() << " sub "
+          << scales[1] << " mul " << bounds.yl() << " add "
+          << "} def\n";
+      doc << "/gfc { /y e def "
+          << bounds.xw() << " mul " << bounds.xl() << " add "
+          << " y " << bounds.yw() << " mul " << bounds.yl() << " add "
+          << "} def\n";
+      doc << "/xfc { "
+          << bounds.xw() << " mul " << bounds.xl() << " add "
+          << "} def\n";
+      doc << "/yfc { "
+          << bounds.yw() << " mul " << bounds.yl() << " add "
+          << "} def\n";
     }
+    if (ps__.size()) doc << ps__ << "\n";
   }
 
   Bounds range_;
@@ -1338,6 +1371,7 @@ class PSGraphT : public GraphSettings, public PSPartT<PSSeries> {
   bool do_y_tick_labels_{true};
   bool do_border_{true};
   std::string ps_{};
+  std::string mid_ps_{};
   std::string pre_ps_{};
 };
 
@@ -1693,6 +1727,21 @@ class PSHSeries : public PSSeries {
       graph_->hist(true);
       manage(std::move(graph_));
     }
+  template<class Hist>
+  PSHSeries(PSPage & page__,
+            const Hist & histogram,
+            const std::string & title__,
+            const std::string & color__ = "1 0 0",
+            const bool normalize__ = false) :
+      h_(histogram.n_bins()), n_bins_{histogram.n_bins()},
+      color_{color__}, normalize_{normalize__}, title_{""}, filled{true} {
+      std::unique_ptr<PSGraph> graph_{std::make_unique<PSGraph>(
+          page__, title__,
+          Bounds{1.0 * histogram.min(), 1.0 * histogram.max()})};
+      graph_->hist(true);
+      manage(std::move(graph_));
+      for (uint64_t b{0}; b != n_bins_; ++b) h_[b] = histogram[b];
+    }
 
   explicit PSHSeries(std::vector<PSSeries *> others) {
     const PSSeries * first{others.front()};
@@ -1729,34 +1778,39 @@ class PSHSeries : public PSSeries {
   }
 
   void get_range(const Bounds & range, Bounds & new_range,
-                 const bool, const bool) {
-    if (x_.empty()) return;
-
-    h_.clear();
-    h_.resize(n_bins_);
-    // std::cerr << range.xl() << " " << range.xh() << std::endl;
+                 const bool, const bool log_y) {
+    if (x_.empty() && !filled) return;
 
     const bool get_range_low{is_unset(range.xl())};
     const bool get_range_high{is_unset(range.xh())};
     const bool do_get_range{get_range_low || get_range_high};
 
     if (do_get_range) {
-      // std::cerr << range.xl() << " " << range.xh() << std::endl;
       const auto minmax = std::minmax_element(x_.begin(), x_.end());
       if (get_range_low) new_range.xl(*minmax.first);
       if (get_range_high) {
         new_range.xh(*minmax.second);
-        new_range.xh(*minmax.second + new_range.xw() / (100 * n_bins_));
+        if (n_bins_)
+          new_range.xh(*minmax.second + new_range.xw() / (100 * n_bins_));
       }
-      // std::cerr << new_range.xl() << " " << new_range.xh() << std::endl;
     }
 
-    for (const ValType val : x_) {
-      const uint64_t bin{
-        static_cast<uint64_t>((
-            val - new_range.xl()) * n_bins_ / new_range.xw())};
-      if (bin >= 0 && bin < n_bins_) {
-        ++h_[bin];
+    if (!filled) {
+      h_.clear();
+      if (n_bins_ == 0) {
+        new_range.xl() -= 1;
+        new_range.xh() += 2;
+        n_bins_ = new_range.xh() - new_range.xl();
+      }
+      h_.resize(n_bins_);
+
+      for (const ValType val : x_) {
+        const uint64_t bin{
+          static_cast<uint64_t>((
+              val - new_range.xl()) * n_bins_ / new_range.xw())};
+        if (bin >= 0 && bin < n_bins_) {
+          ++h_[bin];
+        }
       }
     }
     for (const CountType val : h_) {
@@ -1772,7 +1826,8 @@ class PSHSeries : public PSSeries {
     if (normalize_ && new_range.yh() > 1) {
       new_range.yh(1);
     }
-    new_range.yl(0);
+    new_range.yl(log_y ? 0.5 : 0);
+    if (log_y && new_range.yh() <= 1) new_range.yh(10);
   }
 
   double y_val(const uint64_t i) const {
@@ -1782,27 +1837,23 @@ class PSHSeries : public PSSeries {
   virtual void finalize(PSDoc & doc,
                 const Bounds & bounds,
                 const Bounds & range,
-                const PSPart &) {
-    if (x_.empty()) return;
+                const PSPart & part) {
+    if (x_.empty() && !filled) return;
 
-    const double scales[2]{bounds.xw() / range.xw(),
-          bounds.yw() / range.yw()};
+    const double scales[2]{bounds.xw() / range.xw(), bounds.yw() / range.yw()};
     const double binw{bounds.xw() / n_bins_};
     if (h_.size()) {
       doc << "bk c np /h {" << bounds.yl() << " m "
           << binw << " 0 rl 0 e rl "
           << -binw << " 0 rl cp ";
-      if (color_.size()) {
-        doc << "gs " << color_ << " c fp gr ";
-      }
+      if (color_.size()) doc << "gs " << color_ << " c fp gr ";
       doc << "sp} def\n";
-      for (uint64_t i{0}; i != h_.size(); ++i) {
-        if (h_[i] > 0) {
-          doc << (y_val(i) - range.yl()) * scales[1]
+      for (uint64_t i{0}; i != h_.size(); ++i)
+        if (h_[i] > 0)
+          doc << ((part.log_y() ? log10(y_val(i)) : y_val(i)) -
+                  range.yl()) * scales[1]
               << " " << bounds.xl() + i * binw << " h"
               << "\n";
-        }
-      }
       doc << "sp\n";
     }
   }
@@ -1813,6 +1864,10 @@ class PSHSeries : public PSSeries {
     return Marker{square(), 1.5 * scale__, "bk", 1.0, true, color_};
   }
 
+  PSGraph & graph() {
+    return dynamic_cast<PSGraph&>(*parents().front());
+  }
+
  private:
   std::vector<ValType> x_{};
   std::vector<CountType> h_{};
@@ -1820,6 +1875,7 @@ class PSHSeries : public PSSeries {
   std::string color_{};
   bool normalize_{};
   std::string title_{};
+  bool filled{false};
 };
 
 class PSXYSeries : public PSSeries {
@@ -1841,9 +1897,9 @@ class PSXYSeries : public PSSeries {
 
   // Construct
   explicit PSXYSeries(const Marker & marker__ = Marker()) :
-      draw_commands_{marker__.draw_commands()},
-      setup_commands_{marker__.setup_commands()},
-      marker_{marker__} { }
+      marker_{marker__},
+      draw_commands_{marker_.draw_commands()},
+      setup_commands_{marker_.setup_commands()} { }
   PSXYSeries(PSPart & graph__,
              const std::string & draw_commands__,
              const std::string & setup_commands__ = "") :
@@ -1855,20 +1911,23 @@ class PSXYSeries : public PSSeries {
         Marker().setup_commands()} { }
   PSXYSeries(PSPart & graph__, const Marker & marker__,
              const std::string & title__ = "") :
-      PSSeries{graph__}, draw_commands_{marker__.draw_commands()},
+      PSSeries{graph__}, marker_{marker__},
+      draw_commands_{marker__.draw_commands()},
     setup_commands_{marker__.setup_commands()},
-    marker_{marker__}, title_{title__} { }
+    title_{title__} { }
   explicit PSXYSeries(PSDoc & doc) :
-    draw_commands_{Marker().draw_commands()},
-    setup_commands_{Marker().setup_commands()} {
+      marker_{Marker()},
+      draw_commands_{marker_.draw_commands()},
+      setup_commands_{marker_.setup_commands()} {
       std::unique_ptr<PSGraph> graph_{std::make_unique<PSGraph>(doc)};
       manage(std::move(graph_));
     }
   template <class Hist>
   explicit PSXYSeries(const Hist & hist, PSDoc & doc,
                       const std::string & title__ = "") :
-    draw_commands_{Marker().draw_commands()},
-    setup_commands_{Marker().setup_commands()} {
+      marker_{Marker()},
+      draw_commands_{marker_.draw_commands()},
+      setup_commands_{marker_.setup_commands()} {
       std::unique_ptr<PSGraph> graph_{std::make_unique<PSGraph>(doc, title__)};
       manage(std::move(graph_));
       for (uint64_t bin{0}; bin != hist.n_bins(); ++bin)
@@ -1881,9 +1940,9 @@ class PSXYSeries : public PSSeries {
              const std::string & title__,
              const Bounds & range__,
              const Marker & marker__ = Marker()) :
-    draw_commands_{marker__.draw_commands()},
-    setup_commands_{marker__.setup_commands()},
-    marker_{marker__} {
+      marker_{marker__},
+      draw_commands_{marker__.draw_commands()},
+      setup_commands_{marker__.setup_commands()} {
       std::unique_ptr<PSGraph> graph_{
         std::make_unique<PSGraph>(doc, title__, range__)};
       manage(std::move(graph_));
@@ -1900,12 +1959,32 @@ class PSXYSeries : public PSSeries {
       manage(std::move(graph_));
     }
   PSXYSeries(PSPage & page,
+             const std::string & title__) :
+      marker_{Marker()},
+      draw_commands_{Marker().draw_commands()},
+      setup_commands_{Marker().setup_commands()} {
+      std::unique_ptr<PSGraph> graph_{
+        std::make_unique<PSGraph>(page, title__, Bounds{0.0})};
+      manage(std::move(graph_));
+    }
+  PSXYSeries(PSPage & page,
              const std::string & title__,
-             const Marker & marker__ = Marker(),
+             const Bounds & range__,
+             const Marker & marker__ = Marker()) :
+      marker_{marker__},
+      draw_commands_{marker__.draw_commands()},
+      setup_commands_{marker__.setup_commands()} {
+      std::unique_ptr<PSGraph> graph_{
+        std::make_unique<PSGraph>(page, title__, range__)};
+      manage(std::move(graph_));
+    }
+  PSXYSeries(PSPage & page,
+             const std::string & title__,
+             const Marker & marker__,
              const Bounds & range__ = Bounds{0.0}) :
-    draw_commands_{marker__.draw_commands()},
-    setup_commands_{marker__.setup_commands()},
-    marker_{marker__} {
+      marker_{marker__},
+      draw_commands_{marker__.draw_commands()},
+      setup_commands_{marker__.setup_commands()} {
       std::unique_ptr<PSGraph> graph_{
         std::make_unique<PSGraph>(page, title__, range__)};
       manage(std::move(graph_));
@@ -1914,8 +1993,9 @@ class PSXYSeries : public PSSeries {
              const std::string & title__,
              const Bounds & range__ = Bounds{0.0},
              const Marker & marker__ = Marker()) :
-      draw_commands_{marker__.draw_commands()},
-      setup_commands_{marker__.setup_commands()} {
+      marker_{marker__},
+      draw_commands_{marker_.draw_commands()},
+      setup_commands_{marker_.setup_commands()} {
         std::unique_ptr<PSGraph> graph_{
           std::make_unique<PSGraph>(file_name, title__, range__)};
       manage(std::move(graph_));
@@ -1929,6 +2009,10 @@ class PSXYSeries : public PSSeries {
   virtual ~PSXYSeries() {
     if (VERBOSE) std::cerr << "Destroy PSXYSeries " << std::endl;
     this->finalize_doc();
+  }
+
+  PSGraph & graph() {
+    return dynamic_cast<PSGraph&>(*parents().front());
   }
 
   // Add data point
@@ -2126,9 +2210,9 @@ class PSXYSeries : public PSSeries {
   std::vector<double> x{};
   std::vector<double> y{};
   std::vector<double> e{};  // only used by XYESeries class below
+  Marker marker_{};
   std::string draw_commands_{};
   std::string setup_commands_{};
-  Marker marker_{};
   std::string title_{};
   bool do_lines_{false};
 };
@@ -2673,6 +2757,10 @@ class PSShade : public PSXYSeries {
           const std::string & target_color__ = "1 0 0") :
       PSXYSeries{doc, title__, Bounds{0.0}, Marker{}},
       target_color{target_color__} {}
+  PSShade(PSPage & page, const std::string & title__,
+          const std::string & target_color__ = "1 0 0") :
+      PSXYSeries{page, title__, Bounds{0.0}, Marker{}},
+      target_color{target_color__} {}
   PSShade(PSShade && other) = default;
 
   virtual ~PSShade() {
@@ -2723,6 +2811,7 @@ class PSShade : public PSXYSeries {
         }
       }
     }
+    if (values.empty()) return;
     if (histeq_) hist_eq = std::make_unique<HistEq>(values, n_colors);
 
     std::function<double(double)> identity_color{
@@ -3116,6 +3205,116 @@ std::string eps(const std::string & plot_file_name,
   out << "% eps stop for " << plot_file_name << "\n";
   return out.str();
 }
+
+template <class Value>
+void plot_continuous(const std::vector<Value> & values,
+                     PSGraph & graph, const std::string & color,
+                     const double x_thresh = 0.0001,
+                     const double y_thresh = 0.0001,
+                     const double factor = 1.0) {
+  PSXYSeries & series{*PSXYSeries::create(
+      graph, Marker{paa::circle(), 0.3, color, 0.2, true})};
+  double last_x{-100};
+  Value last_y{10 * values.back()};
+  for (uint64_t v{0}; v != values.size(); ++v) {
+    const double x{1.0 * v / values.size()};
+    const Value y{values[v]};
+    if (fabs(x - last_x) > x_thresh || fabs(y - last_y) > y_thresh) {
+      series.add_point(x, factor * y);
+      last_x = x;
+      last_y = y;
+    }
+  }
+}
+
+void draw_vertical_line(PSGraph & graph, const double x,
+                        const std::string & color,
+                        const std::string & dash = "") {
+  std::ostringstream ps;
+  if (dash.size()) ps << dash << " sd ";
+  ps << "1 lw " << color << " c np " << x << " xc 0 yfc m "
+     << x << " xc 1 yfc l sp";
+  if (dash.size()) ps << " nd ";
+  ps << "\n";
+  graph.ps(ps.str());
+}
+void draw_horizontal_line(PSGraph & graph, const double y,
+                          const std::string & color) {
+  std::ostringstream ps;
+  ps << "1 lw " << color << " c np 0 xfc " << y << " yc m 1 xfc "
+     << y << " yc l sp\n";
+  graph.ps(ps.str());
+}
+
+void ur_legend_box(PSGraph & graph, const std::vector<std::string> & text) {
+  std::ostringstream ps;
+  ps << "10 sf /xr 0.97 xfc def /yt 0.97 yfc def /ls 13 def /pd 4 def\n"
+     << "/max { 2 copy lt {exch pop} {pop} ifelse } def\n"
+     << "/mw 0 def\n";
+  for (uint64_t l{0}; l != text.size(); ++l) {
+    const std::string & line{text[l]};
+    ps << "/l" << l << " (" << line << ") def"
+       << " l" << l << " sw pop mw max /mw e def\n";
+  }
+  ps << "/yb yt 2 pd mul " << text.size() << " ls mul add sub def\n"
+     << "/xl xr 2 pd mul mw add sub def 0 0 0 c\n"
+     << "1 lw np xl yb m xr yb l xr yt l xl yt l cp gs 1 1 1 c fp gr sp\n"
+     << "xl pd add yt 1 sub m\n";
+  for (uint64_t l{0}; l != text.size(); ++l) {
+    ps << "0 ls neg rm gs l" << l << " s gr\n";
+  }
+  graph.ps(ps.str());
+}
+void ur_legend_box(PSGraph & graph, const std::string & text) {
+  std::istringstream text_stream{text.c_str()};
+  std::vector<std::string> lines;
+  std::string line;
+  while (getline(text_stream, line)) lines.push_back(line);
+  ur_legend_box(graph, lines);
+}
+
+PSGraph & typed_hist(PSPage & page, const std::string & title,
+                     const std::string & y_axis_name,
+                     const std::vector<double> & values,
+                     const std::vector<std::string> & names,
+                     const std::vector<std::string> & colors = {},
+                     const bool show_value = false,
+                     const double max_value = 100,
+                     const double fraction_empty = 0.3) {
+  const double gap_size{fraction_empty / (values.size() + 1)};
+  const double bar_size{(1 - fraction_empty) / values.size()};
+  std::ostringstream ps;
+  ps << "1 lw 0 0 0 c\n";
+  for (uint64_t t{0}; t != values.size(); ++t) {
+    const double value{values[t]};
+    const double start{gap_size + t * (gap_size + bar_size)};
+    const double stop{start + bar_size};
+    const double mid{(start + stop) / 2};
+    const std::string & color{t < colors.size() ? colors[t] : "0.9 0 0"};
+    ps << "np " << start << " 0 gc m "
+         << stop << " 0 gc l "
+         << stop << " " << value << " gc l "
+         << start << " " << value << " gc l cp "
+       << "gs " << color << " c fp gr sp\n";
+    if (names.size()) ps << "0 0 0 c 10 sf " << mid << " xc 0 yfc 12 sub m ("
+                         << names[t] << ") jc s\n";
+    if (show_value)
+      ps << "0 0 0 c 10 sf " << mid << " xc " << value << " yc 4 add m ("
+         << std::setprecision(4) << value
+         << std::setprecision(6) << "%) jc s\n";
+  }
+  PSGraph & graph{*PSGraph::create(
+      page, title + ";" + (names.size() ? "." : "") + ";" + y_axis_name,
+      Bounds{0, 1, 0, max_value})};
+  graph.x_label().color("1 1 1");
+  graph.do_x_ticks(false);
+  graph.ps(ps.str());
+  return graph;
+}
+
+constexpr uint64_t lll_font{14};  // Lower left legend
+constexpr double lll_y{1.0 * lll_font};
+constexpr double lll_off{1.9 * lll_font};
 
 }  // namespace paa
 

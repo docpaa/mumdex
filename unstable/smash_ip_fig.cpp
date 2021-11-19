@@ -26,14 +26,14 @@
 #include <utility>
 #include <vector>
 
-#include "./cn.h"
-#include "./error.h"
-#include "./files.h"
-#include "./longSA.h"
-#include "./lowess.h"
-#include "./mumdex.h"
-#include "./psplot.h"
-#include "./utility.h"
+#include "cn.h"
+#include "error.h"
+#include "files.h"
+#include "longSA.h"
+#include "lowess.h"
+#include "mumdex.h"
+#include "psplot.h"
+#include "utility.h"
 
 using std::array;
 using std::async;
@@ -275,7 +275,7 @@ vector<MappingInfo> smash_map(
       for (const match_t & mum : MUMs) {
         // if (mum.len < min_length) continue;
         const uint64_t read_length{sequences[read_2].size()};
-        mappings.emplace_back(sa.ref, mum, read_2, read_length);
+        mappings.emplace_back(sa.reference(), mum, read_2, read_length);
         /*
         MappingInfo & map{mappings.back()};
         if (map.length() < min_length) {

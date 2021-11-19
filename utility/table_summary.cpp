@@ -45,6 +45,7 @@ using std::vector;
 using paa::Error;
 using paa::MAD;
 using paa::replace_substring_inplace;
+using paa::stdev;
 
 template <class Type>
 string as_string(const Type & value) {
@@ -76,7 +77,7 @@ bool get_word(istream & in, const vector<char> & delimeters, string & word) {
 }
 
 int main(int argc, char ** argv) try {
-  paa::exit_on_pipe_close();
+  // paa::exit_on_pipe_close();
   std::ios_base::sync_with_stdio(false);
   cin.tie(nullptr);
 
@@ -206,13 +207,16 @@ int main(int argc, char ** argv) try {
     if (is_numeric[column]) {
       sort(values.begin(), values.end());
       const MAD mad{values, MAD::is_sorted()};
+      const double mean{total / n_rows};
       col_header.emplace_back("min", as_string(values.front()));
-      col_header.emplace_back("med", as_string(values[values.size() / 2]));
       col_header.emplace_back("max", as_string(values.back()));
+      col_header.emplace_back("med", as_string(values[values.size() / 2]));
       col_header.emplace_back("mad", as_string(mad.mad()));
-      col_header.emplace_back("avg", as_string(total / n_rows));
+      col_header.emplace_back("avg", as_string(mean));
+      col_header.emplace_back("std", as_string(stdev(values, mean)));
       col_header.emplace_back("tot", as_string(total));
     } else {
+      col_header.emplace_back("", "");
       col_header.emplace_back("", "");
       col_header.emplace_back("", "");
       col_header.emplace_back("", "");

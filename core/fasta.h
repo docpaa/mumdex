@@ -52,6 +52,7 @@ class RefArgs {
   bool verbose;
 
  private:
+  // RefArgs(RefArgs && other) = default;
   RefArgs & operator=(const RefArgs &) = delete;
 };
 
@@ -90,6 +91,7 @@ class Sequence : public RefArgs {
             << "If so, you will need to delete the current "
             << "reference to proceed";
       bread(reference, N, "N");
+      if (N == 0) throw Error("Zero N in Sequence") << ref_fasta;
       using_mapping = true;
       bread(bin_base + ".seq.bin", seq, "seq", N);
       uint64_t descr_size;
@@ -131,10 +133,11 @@ class Sequence : public RefArgs {
         // Meta tag line and start of a new sequence.
         if (data.eof() || line[0] == '>') {
           // Save previous sequence and meta data.
-          if (length > 0) {
+          if (meta.size()) {
             const uint64_t this_start = startpos.back();
-            if (false && verbose) std::cerr << meta << " " << length
-                                            << " " << this_start << std::endl;
+            if (false && verbose)
+              std::cerr << meta << " " << length
+                        << " " << this_start << std::endl;
             descr.push_back(meta);
             if (rcref || !data.eof()) {
               seq_vec.push_back('`');  // ` character used to separate strings
@@ -224,8 +227,16 @@ class Sequence : public RefArgs {
     if (verbose) std::cerr << "constructed reference in "
                            << end_time - start_time << " seconds" << std::endl;
   }
-
+  Sequence(Sequence && other) :
+      RefArgs{other},
+      N{other.N}, seq_vec{std::move(other.seq_vec)}, seq{other.seq},
+      descr{std::move(other.descr)}, startpos{std::move(other.startpos)},
+      sizes{std::move(other.sizes)}, maxdescrlen{other.maxdescrlen},
+      bin_base{std::move(other.bin_base)}, using_mapping{other.using_mapping} {
+        other.moved = true;
+      }
   ~Sequence() {
+    if (moved) return;
     if (memory_mapped && using_mapping) {
       if (munmap(seq, N * sizeof(*seq)))
         std::cerr << "sequence memory unmap failure" << std::endl;
@@ -264,6 +275,7 @@ class Sequence : public RefArgs {
   std::string bin_base{};
 
  private:
+  bool moved{false};
   bool using_mapping{};
   Sequence(const Sequence &) = delete;
   Sequence & operator=(const Sequence &) = delete;

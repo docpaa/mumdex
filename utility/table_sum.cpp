@@ -138,7 +138,7 @@ int main(int argc, char ** argv) try {
       bool is_int{true};
       const char this_delimeter{
         c + 1 == protect_column.size() ? '\n' : delimeter};
-      const bool protect{protect_column[c]};
+      const bool protect{static_cast<bool>(protect_column[c])};
       uint64_t n{0};
       for (uint64_t t{0}; t != tables.size(); ++t) {
         getline(*tables[t], sval, this_delimeter);

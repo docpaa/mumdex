@@ -15,7 +15,9 @@
 #include <vector>
 
 #include "error.h"
+#include "utility.h"
 
+using std::cin;
 using std::cout;
 using std::cerr;
 using std::endl;
@@ -30,17 +32,22 @@ using std::vector;
 using paa::Error;
 
 int main(int argc, char* argv[], char * []) try {
-  if (argc < 2) throw Error("usage: randomize_order input_file ...");
+  paa::exit_on_pipe_close();
+  std::ios_base::sync_with_stdio(false);
+  cin.tie(nullptr);
 
+  --argc;
   vector<string> data;
-  while (--argc) {
-    const string input_file_name((++argv)[0]);
-    ifstream input_file(input_file_name.c_str());
-    if (!input_file) throw Error("Could not open file for input:")
-                         << input_file_name;
-    string line;
-    while (getline(input_file, line)) {
-      data.push_back(line);
+  string line;
+  if (argc == 0) {
+    while (getline(cin, line)) data.push_back(line);
+  } else {
+    while (argc--) {
+      const string input_file_name((++argv)[0]);
+      ifstream input_file(input_file_name.c_str());
+      if (!input_file) throw Error("Could not open file for input:")
+                           << input_file_name;
+      while (getline(input_file, line)) data.push_back(line);
     }
   }
 

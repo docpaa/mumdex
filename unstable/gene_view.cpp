@@ -47,10 +47,8 @@ using paa::sout;
 int main(int argc, char * argv[]) try {
   paa::exit_on_pipe_close();
 
-  --argc;
-  if (argc != 6 && argc != 9)
-    throw Error("usage: gene_view mumdex_name isoform sample kmer clip credit "
-                "[genes isoforms xrefs]");
+  if (--argc != 6)
+    throw Error("usage: gene_view mumdex_name isoform sample kmer clip credit");
 
   const string mumdex_name{argv[1]};
   const string isoform{argv[2]};
@@ -59,17 +57,13 @@ int main(int argc, char * argv[]) try {
   const unsigned int clip{static_cast<unsigned int>(atoi(argv[5]))};
   const unsigned int credit{static_cast<unsigned int>(atoi(argv[6]))};
 
-  const string genes_name{argc == 9 ? argv[7] : "knownGene.txt"};
-  const string isoforms_name{argc == 9 ? argv[8] : "knownIsoforms.txt"};
-  const string kgXrefs_name{argc == 9 ? argv[9] : "kgXref.txt"};
-
   const MUMdex mumdex{mumdex_name};
   const string ref_name{saved_ref_name(mumdex_name)};
   const Reference & ref{mumdex.reference()};
   const Mappability map{mumdex_name};
   const ChromosomeIndexLookup chr_lookup{ref};
-  const KnownGenes genes{genes_name, isoforms_name, chr_lookup, ref};
-  const GeneXrefs xref{kgXrefs_name};
+  const KnownGenes genes{chr_lookup, ref};
+  const GeneXrefs xref{ref};
 
   // Look up isoform
   string gene_symbol;
@@ -146,8 +140,7 @@ int main(int argc, char * argv[]) try {
   sout << "Output" << n_pairs << "pairs" << endl;
   ostringstream command;
   command << "debruijn " << ref_name << " " << search_name << " "
-          << kmer << " " << clip << " "
-          << genes_name << " " << isoforms_name << " " << kgXrefs_name;
+          << kmer << " " << clip << " 1";
   cout << command.str() << endl;
   if (system(command.str().c_str()) == -1) {
     cerr << "Problem creating debruijn output" << endl;

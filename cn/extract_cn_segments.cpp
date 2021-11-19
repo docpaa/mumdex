@@ -85,11 +85,8 @@ int main(int argc, char* argv[])  try {
   const Reference ref{reference_file};
 
   const ChromosomeIndexLookup chr_lookup{ref};
-  const string genes_name{reference_file + ".bin/knownGene.txt"};
-  const string isoforms_name{reference_file + ".bin/knownIsoforms.txt"};
-  const string kgXrefs_name{reference_file + ".bin/kgXref.txt"};
-  const KnownGenes genes{genes_name, isoforms_name, chr_lookup, ref};
-  const GeneXrefs xref{kgXrefs_name};
+  const KnownGenes genes{chr_lookup, ref};
+  const GeneXrefs xref{ref};
   const GeneHitFinder gene_finder{genes};
 
   const string bins_name{argv[2]};

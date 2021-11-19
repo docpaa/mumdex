@@ -117,13 +117,12 @@ int main(int argc, char ** argv) try {
   // Process table
   string line;
   vector<string> row(column_indexes.size());
-  istringstream line_stream;
   cout << column_names[0];
   for (uint64_t c{1}; c != column_names.size(); ++c)
     cout << delimeter << column_names[c];
   cout << "\n";
   while (getline(cin, line)) {
-    line_stream.str(line);
+    istringstream line_stream{line};
     for (string & column : row) getline(line_stream, column, delimeter);
     cout << row[output_columns[0]];
     for (uint64_t c{1}; c != output_columns.size(); ++c)

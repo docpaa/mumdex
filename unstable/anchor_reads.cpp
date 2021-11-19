@@ -71,9 +71,8 @@ int main(int argc, char* argv[]) try {
 
   const Reference ref{ref_name};
   const ChromosomeIndexLookup chr_lookup{ref};
-
-  const KnownGenes genes{genes_name, isoforms_name, chr_lookup, ref};
-  const GeneXrefs xref{kgXrefs_name};
+  const KnownGenes genes{chr_lookup, ref};
+  const GeneXrefs xref{ref};
 
   ofstream sequences("sequences.txt");
   unsigned int last_gene_index = static_cast<unsigned int>(-1);

@@ -78,6 +78,7 @@ find_repeats
 finebin_cn
 gene_info
 gene_view
+genome_sort
 ggraph
 heatmap
 hist_compare
@@ -85,6 +86,7 @@ hists
 ihists
 jackpot
 karyotype
+karyotype2
 lines_at_pos
 local_similarity
 lookup_bridge
@@ -178,6 +180,7 @@ theoretical_bins
 transmission
 uint2int
 unequal_bridges
+uniqc
 validate_mumdex
 venn
 wg_smash_comparison

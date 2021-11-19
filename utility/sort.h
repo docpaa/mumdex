@@ -564,17 +564,17 @@ ParallelMerge(Results<T> & last_results,
 template <class Ti, class Oi>
 inline void ParallelSortMove2(Ti begin_i, Ti end_i, Oi out_i,
                               const unsigned int n_threads) {
-  using T = typename std::remove_reference<decltype(*begin_i)>::type;
+  using TT = typename std::remove_reference<decltype(*begin_i)>::type;
   using O = typename std::remove_reference<decltype(*out_i)>::type;
-  T * const begin{&*begin_i};
-  T * const end{&*end_i};
+  TT * const begin{&*begin_i};
+  TT * const end{&*end_i};
   O * const out{&*out_i};
   const uint64_t n_elem{end - begin};
 
   // Pick good sort section size, based on cpu cache
   // Assumes one thread per core, sandy bridge xeon
   const uint64_t cache_size{32 * 1024};
-  const uint64_t max_sort_size{cache_size / sizeof(T)};
+  const uint64_t max_sort_size{cache_size / sizeof(TT)};
 
   // Simple sort if small enough
   if (n_elem <= max_sort_size) {
@@ -602,28 +602,28 @@ inline void ParallelSortMove2(Ti begin_i, Ti end_i, Oi out_i,
 
   // Run sorting jobs
   ThreadPool pool{n_threads};
-  auto sort_fun = [](const Range<T> r) {
+  auto sort_fun = [](const Range<TT> r) {
     std::sort(r.first, r.second);
     return r;
   };
   uint64_t last_end{0};
-  Results<T> sort_results;
+  Results<TT> sort_results;
   sort_results.reserve(ends.size());
   for (const uint64_t this_end : ends) {
     sort_results.emplace_back(pool.run(
-        sort_fun, Range<T>{begin + last_end, begin + this_end}));
+        sort_fun, Range<TT>{begin + last_end, begin + this_end}));
     last_end = this_end;
   }
 
   // Scratch space for merging
   // Assumes out is half as small as n_elem
-  T * const scratch_begin{reinterpret_cast<T *>(out)};
-  T * const scratch_end{reinterpret_cast<T *>(out) + n_elem / 2};
-  ScratchManager<T> scratch{scratch_begin, scratch_end};
+  TT * const scratch_begin{reinterpret_cast<TT *>(out)};
+  TT * const scratch_end{reinterpret_cast<TT *>(out) + n_elem / 2};
+  ScratchManager<TT> scratch{scratch_begin, scratch_end};
 
-  Results<T> merge_results{ParallelMerge(sort_results, scratch, pool)};
+  Results<TT> merge_results{ParallelMerge(sort_results, scratch, pool)};
   if (merge_results.size() != 2) throw Error("Merge results size != 2");
-  T * const middle{merge_results.front().get().second};
+  TT * const middle{merge_results.front().get().second};
   if (merge_results.back().get().second != end)
     throw Error("Last merge part does not end at end");
 

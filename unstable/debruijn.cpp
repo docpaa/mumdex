@@ -358,9 +358,8 @@ Node::iter create_main_path(list<Node> & nodes, Node::smap & seen_nodes,
 
 int main(int argc, char* argv[]) try {
   --argc;
-  if (argc != 4 && argc != 7)
-    throw Error("usage: debruijn reference sequences kmer clip"
-                " [genes isoforms xrefs]");
+  if (argc != 4 && argc != 5)
+    throw Error("usage: debruijn reference sequences kmer clip [do_genes]");
 
   std::random_device rd;
   auto mersenne = mt19937_64(rd());
@@ -395,7 +394,7 @@ int main(int argc, char* argv[]) try {
   while (sequences_file) {
     // Gene metadata, optional
     string sample;
-    unsigned int gene_index;
+    unsigned int gene_index{0};
     string gene_symbol;
     string mumdex_name;
     if (argc == 7) {
@@ -567,15 +566,10 @@ int main(int argc, char* argv[]) try {
         auto mams = sa.find_mams(seq);
 
         vector<string> lines;
-        if (argc == 7) {
-          static const string genes_name{argv[5]};
-          static const string isoforms_name{argv[6]};
-          static const string kgXrefs_name{argv[7]};
-
+        if (argc == 5) {
           static const ChromosomeIndexLookup chr_lookup{ref};
-          static const KnownGenes genes{genes_name, isoforms_name,
-                chr_lookup, ref};
-          static const GeneXrefs xref{kgXrefs_name};
+          static const KnownGenes genes{chr_lookup, ref};
+          static const GeneXrefs xref{ref};
 
           const auto & gene = genes[gene_index];
 

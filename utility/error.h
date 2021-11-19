@@ -10,6 +10,7 @@
 #define PAA_UTILITY_ERROR_H_
 
 #include <exception>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -31,8 +32,12 @@ std::ostream & operator<<(std::ostream & out,
 class Error: public std::exception {
  public:
   // Initialize error with a message
-  explicit Error(const std::string & m) : std::exception(), message(m) {
-    // std::cerr << "Exception " << message << std::endl;
+  explicit Error(const std::string & m, const bool immediate = false) :
+      std::exception(), message(m) {
+    if (immediate) {
+      std::cerr << "paa::Error: " << message << std::endl;
+      exit(1);
+    }
   }
 
   // Destructor

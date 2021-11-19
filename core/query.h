@@ -239,9 +239,10 @@ class ReadPair : public ReadPairArgs {
   void run() {
     std::ostringstream out_name;
     out_name << "mumdex/part." << reinterpret_cast<uint64_t>(this);
-    const unsigned int max_pairs = (read1.sa.ref.rcref ? 10 : 1) * 200000;
+    const unsigned int max_pairs =
+        (read1.sa.reference().rcref ? 10 : 1) * 200000;
     const unsigned int max_mums = max_pairs * 16;
-    MUMdex_build<Sequence> mumdex{read1.sa.ref, out_name.str(),
+    MUMdex_build<Sequence> mumdex{read1.sa.reference(), out_name.str(),
           max_pairs, max_mums + 100};
     MUMdex_build_base sorted{max_pairs, max_mums + 100};
     OptionalSavers optional_savers{optional};

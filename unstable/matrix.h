@@ -11,6 +11,7 @@
 #define PAA_MATRIX_H
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <vector>
 

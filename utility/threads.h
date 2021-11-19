@@ -244,6 +244,14 @@ inline void test_thread_pool(
   }
 }
 
+template<class Func, class ... Args>
+auto pasync(Func && func, Args && ... args) -> decltype(
+    std::async(std::launch::async, std::forward<Func>(func),
+               std::forward<Args>(args)...)) {
+  return std::async(std::launch::async, std::forward<Func>(func),
+                    std::forward<Args>(args)...);
+}
+
 }  // namespace paa
 
 #endif  // PAA_THREADS_H

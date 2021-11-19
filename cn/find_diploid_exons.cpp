@@ -302,11 +302,8 @@ int main(int argc, char* argv[]) try {
           << "% cut" << endl;
 
   // Load gene info
-  const string genes_name{reference_file + ".bin/knownGene.txt"};
-  const string isoforms_name{reference_file + ".bin/knownIsoforms.txt"};
-  const string kgXrefs_name{reference_file + ".bin/kgXref.txt"};
-  const KnownGenes genes{genes_name, isoforms_name, lookup, ref};
-  const GeneXrefs xref{kgXrefs_name};
+  const KnownGenes genes{lookup, ref};
+  const GeneXrefs xref{ref};
   const GeneHitFinder gene_finder{genes};
 
   // Determine gene overlaps for each bin

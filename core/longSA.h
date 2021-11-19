@@ -72,10 +72,17 @@ class SimpleHit {
         pos == rhs.pos && chr == rhs.chr &&
         dir == rhs.dir;
   }
+  int read_begin_pos() const {
+    return static_cast<int>(pos) - static_cast<int>(off);
+  }
+  int read_end_pos(const int read_length) const {
+    return static_cast<int>(pos) + read_length - static_cast<int>(off);
+  }
 };
 inline std::ostream & operator<<(std::ostream & out, const SimpleHit & hit) {
   return hit.out(out);
 }
+using SimpleHits = std::vector<SimpleHit>;
 
 // Stores the LCP array in an unsigned char (0-255).  Values larger
 // than or equal to 255 are stored in a sorted array.
@@ -95,6 +102,7 @@ struct vec_uchar {
   vec_uchar() : N_vec(0), vec(nullptr), cap_M(0), N_M(0), M(nullptr),
                 using_mapping(false) {}
   ~vec_uchar() {
+    if (moved) return;
     if (memory_mapped && using_mapping) {
       if (munmap(vec, N_vec * sizeof(unsigned char)))
         std::cerr << "vec memory unmap failure" << std::endl;
@@ -170,6 +178,10 @@ struct vec_uchar {
     return sizeof(vec_uchar) + N_vec + cap_M * sizeof(item_t);
   }
 
+  vec_uchar(vec_uchar && other) :
+      N_vec{other.N_vec}, vec{other.vec}, cap_M{other.cap_M}, N_M{other.N_M},
+      M{other.M}, using_mapping{other.using_mapping} { other.moved = true; }
+
  private:
   ANINT N_vec;
   unsigned char * vec;
@@ -177,6 +189,7 @@ struct vec_uchar {
   ANINT N_M;
   item_t * M;
   bool using_mapping;
+  bool moved{false};
   vec_uchar(const vec_uchar &) = delete;
   vec_uchar & operator=(const vec_uchar &) = delete;
 };
@@ -237,19 +250,23 @@ class SAArgs {
 template <class ANINT>
 struct longSA_t : public SAArgs {
   uint64_t size() const { return N; }
+  const Sequence & reference() const { return ref; }
 
+ private:
   bool using_mapping{};
 
-  const Sequence ref;
-  const uint64_t N{};  // !< Length of the sequence.
+  Sequence ref;
+  uint64_t N{};  // !< Length of the sequence.
 
-  const uint64_t logN{};  // ceil(log(N))
-  const uint64_t Nm1{};  // N - 1
+  uint64_t logN{};  // ceil(log(N))
+  uint64_t Nm1{};  // N - 1
 
   ANINT * SA{};
   ANINT * ISA{};
   vec_uchar<ANINT> LCP{};  // Simulates a vector<int> LCP.
+  bool moved{false};
 
+ public:
   // Constructor builds suffix array.
   void common_longSA_initialization();
   longSA_t(const std::string & fasta, const bool rcref, const bool mmap,
@@ -265,8 +282,20 @@ struct longSA_t : public SAArgs {
       logN(static_cast<uint64_t>(ceil(log(N) / log(2.0)))), Nm1(N - 1) {
     common_longSA_initialization();
   }
+  longSA_t(longSA_t<ANINT> && other) :
+      SAArgs{other.verbose, other.mappability,
+        RefArgs{other.ref_args}, other.mappability_threads},
+      using_mapping{other.using_mapping},
+      ref{std::move(other.ref)},
+      N{other.N},
+      logN{other.logN},
+      Nm1{other.Nm1},
+      SA{other.SA},
+      ISA{other.ISA},
+      LCP{std::move(other.LCP)} { other.moved = true; }
 
   ~longSA_t() {
+    if (moved) return;
     if (memory_mapped && using_mapping) {
       if (munmap(SA, N * sizeof(ANINT)))
         std::cerr << "SA Memory unmap failure" << std::endl;
@@ -433,15 +462,15 @@ struct longSA_t : public SAArgs {
     return true;
   }
 
-  std::vector<SimpleHit> find_mams(const std::string & query,
-                                   const unsigned int min_len = 2) const {
+  SimpleHits find_mams(const std::string & query,
+                       const unsigned int min_len = 2) const {
     if (ref.rcref) {
-      return find_mams_in_this_sa(query, min_len);
+      return find_mams_simple(query, min_len);
     } else {
       static thread_local std::vector<match_t> matches;
       matches.clear();
       find_mams(matches, query, min_len);
-      std::vector<SimpleHit> mams;
+      SimpleHits mams;
       for (const match_t & match : matches) {
         mams.emplace_back(ref, match.ref, match.offset, match.len);
       }
@@ -449,10 +478,16 @@ struct longSA_t : public SAArgs {
     }
   }
 
-  std::vector<SimpleHit> find_mams_in_this_sa(
+  SimpleHits find_mams_simple(
       const std::string & query,
       const unsigned int min_len = 0) const {
-    std::vector<SimpleHit> mams;
+    SimpleHits mams;
+    find_mams_simple(mams, query, min_len);
+    return mams;
+  }
+  void find_mams_simple(SimpleHits & mams,
+                        const std::string & query,
+                        const unsigned int min_len = 0) const {
     interval_t cur(0, N - 1, 0);
     uint64_t prefix = 0;
     while (prefix < query.length()) {
@@ -483,19 +518,18 @@ struct longSA_t : public SAArgs {
         }
       } while (cur.depth > 0 && cur.size() == 1);
     }
-    return mams;
   }
 
   void find_mams(std::vector<match_t> & matches,
                  const std::string & query,
                  const unsigned int min_len = 2) const {
-    find_mams_in_this_sa(matches, query, min_len);
+    find_mams_simple(matches, query, min_len);
     if (!ref.rcref) {
       const uint64_t regular_stop{matches.size()};
       static thread_local std::string rcquery;
       rcquery.assign(query);
       reverse_complement(&rcquery);
-      find_mams_in_this_sa(matches, rcquery, min_len);
+      find_mams_simple(matches, rcquery, min_len);
       for (uint64_t m{regular_stop}; m < matches.size(); ++m) {
         match_t & match{matches[m]};
         match.ref += ref.N;
@@ -571,9 +605,9 @@ struct longSA_t : public SAArgs {
   // P throught he index.  Consequently, repeats can occur in the
   // pattern P.
   // NOTE: min_len must be > 1
-  void find_mams_in_this_sa(std::vector<match_t> & matches,
-                            const std::string & query,
-                            const unsigned int min_len = 2) const {
+  void find_mams_simple(std::vector<match_t> & matches,
+                        const std::string & query,
+                        const unsigned int min_len = 2) const {
     interval_t cur(0, N - 1, 0);
     uint64_t prefix = 0;
     while (prefix < query.length()) {
@@ -651,9 +685,126 @@ struct longSA_t : public SAArgs {
         sizeof(vec_uchar<ANINT>) + 2 * N * sizeof(ANINT);
   }
 
+#if 0
+  // Find Maximal Exact Matches (MEMs)
+  void MEM(const std::string &P, std::vector<match_t> & matches,
+           int min_len) const {
+    findMEM(P, matches, min_len);
+  }
+
+  // Use LCP information to locate right maximal matches. Test each for
+  // left maximality.
+  void collectMEMs(const std::string &P, int64_t prefix, interval_t mli,
+                   interval_t xmi, std::vector<match_t> &matches,
+                   int min_len) const {
+    // All of the suffixes in xmi's interval are right maximal.
+    for (int64_t i = xmi.start; i <= xmi.end; i++)
+      find_Lmaximal(P, prefix, SA[i], xmi.depth, matches, min_len);
+
+    if (mli.start == xmi.start && mli.end == xmi.end) return;
+
+    while (xmi.depth >= mli.depth) {
+      // Attempt to "unmatch" xmi using LCP information.
+      if (xmi.end+1 < N) {
+        xmi.depth = max(LCP[xmi.start], LCP[xmi.end+1]);
+      } else {
+        xmi.depth = LCP[xmi.start];
+      }
+
+      // If unmatched XMI is > matched depth from mli, then examine rmems.
+      if (xmi.depth >= mli.depth) {
+        // Scan RMEMs to the left, check their left maximality..
+        while (LCP[xmi.start] >= xmi.depth) {
+          xmi.start--;
+          find_Lmaximal(P, prefix, SA[xmi.start], xmi.depth, matches,
+                        min_len);
+        }
+        // Find RMEMs to the right, check their left maximality.
+        while (xmi.end+1 < N && LCP[xmi.end+1] >= xmi.depth) {
+          xmi.end++;
+          find_Lmaximal(P, prefix, SA[xmi.end], xmi.depth, matches,
+                        min_len);
+        }
+      }
+    }
+  }
+
+  // For a given offset in the prefix k, find all MEMs.
+  void findMEM(const std::string &P, std::vector<match_t> &matches,
+               int min_len) const {
+    // Offset all intervals at different start points.
+    int64_t prefix = 0;
+    interval_t mli(0, N-1, 0);  // min length interval
+    interval_t xmi(0, N-1, 0);  // max match interval
+
+    // Right-most match used to terminate search.
+
+    while (prefix <= static_cast<int64_t>(P.length() - 1)) {
+      // Traverse until minimum length matched.
+      traverse(P, prefix, mli, min_len);
+      if (mli.depth > xmi.depth) xmi = mli;
+      if (mli.depth <= 1) {
+        mli.reset(N-1); xmi.reset(N-1); ++prefix; continue;
+      }
+
+      if (mli.depth >= min_len) {
+        traverse(P, prefix, xmi, P.length());  // Traverse until mismatch.
+        // Using LCP info to find MEM length.
+        collectMEMs(P, prefix, mli, xmi, matches, min_len);
+        // When using ISA/LCP trick, depth = depth - K. prefix += K.
+        ++prefix;
+        if ( suffixlink(mli) == false ) {
+          mli.reset(N-1); xmi.reset(N-1); continue;
+        }
+        suffixlink(xmi);
+      } else {
+        // When using ISA/LCP trick, depth = depth - K. prefix += K.
+        ++prefix;
+        if ( suffixlink(mli) == false ) {
+          mli.reset(N-1); xmi.reset(N-1); continue;
+        }
+        xmi = mli;
+      }
+    }
+  }
+
+  // Suffix link simulation using ISA/LCP heuristic.
+  bool suffixlink(interval_t &m) const {
+    --m.depth;
+    if ( m.depth <= 0) return false;
+    m.start = ISA[SA[m.start] + 1];
+    m.end = ISA[SA[m.end] + 1];
+    return expand_link(m);
+  }
+
+  // Finds left maximal matches given a right maximal match at position i.
+  void sparseSA::find_Lmaximal(const string &P, int64_t prefix, int64_t i,
+                               int64_t len, vector<match_t> &matches,
+                               int min_len) {
+    // Advance to the left up to K steps.
+    for (int64_t k = 0; k < K; k++) {
+      // If we reach the end and the match is long enough, print.
+      if (prefix == 0 || i == 0) {
+        if (len >= min_len) {  // REMOVED bad ELSE here
+          matches.push_back(match_t(i, prefix, len));
+        }
+        return;  // Reached mismatch, done.
+      } else if (P[prefix-1] != S[i-1]) {
+        // If we reached a mismatch, print the match if it is long enough.
+        if (len >= min_len) {  // REMOVED bad ELSE here
+          matches.push_back(match_t(i, prefix, len));
+        }
+        return;  // Reached mismatch, done.
+      }
+      prefix--; i--; len++;  // Continue matching.
+    }
+  }
+#endif
+
  private:
   longSA_t(const longSA_t &) = delete;
   longSA_t & operator=(const longSA_t &) = delete;
+  friend class MappabilityBuilder;
 };
 
 using longSA = longSA_t<uint64_t>;
@@ -669,13 +820,13 @@ class MappabilityBuilder {
   explicit MappabilityBuilder(const std::string & ref_fasta_,
                               const std::string save_name_ = "") :
       ref_fasta{ref_fasta_},
-    save_name{save_name_.size() ? save_name_ : ref_fasta + ".bin/"},
-    low_name{save_name + "map.low.bin"},
-    high_name{save_name + "map.high.bin"} { }
+      save_name{save_name_.size() ? save_name_ : ref_fasta + ".bin/"},
+      low_name{save_name + "map.low.bin"},
+      high_name{save_name + "map.high.bin"} { }
 
  public:
   MappabilityBuilder(const longSA & sa, const unsigned int) :
-      MappabilityBuilder{sa.ref.ref_fasta, ""} {
+      MappabilityBuilder{sa.reference().ref_fasta, ""} {
     ref_size = [&sa]() {
       uint64_t rsize = 0;
       for (unsigned int chr = 0; chr != sa.ref.sizes.size(); chr += 2) {
@@ -688,7 +839,8 @@ class MappabilityBuilder {
     std::vector<uint8_t> high(ref_size);
 
     unsigned int iMp = 0;
-    for (unsigned int iSA_Cp = 0; iSA_Cp != sa.ref.sizes.size(); iSA_Cp += 2) {
+    for (unsigned int iSA_Cp = 0;
+         iSA_Cp != sa.ref.sizes.size(); iSA_Cp += 2) {
       const unsigned int chr_start = iMp;
       unsigned int iSA_Cn = iSA_Cp + 1;
       unsigned int chr_len = static_cast<unsigned int>(sa.ref.sizes[iSA_Cp]);
@@ -883,8 +1035,9 @@ class MappabilityBuilder {
         p += jump_dist;
       }
     }
-    std::cerr << "waiting for " << results.size()
-              << " tasks to construct mappability values" << std::endl;
+    if (sa.verbose)
+      std::cerr << "waiting for " << results.size()
+                << " tasks to construct mappability values" << std::endl;
 
     time_t stop_time{time(nullptr)};
     const char csi[]{27, '[', 0};
@@ -896,17 +1049,19 @@ class MappabilityBuilder {
       const int64_t elapsed{stop_time - start_time};
       const double remaining{1.0 * (positions_to_do - positions_completed) *
             elapsed / positions_completed};
-      std::cout << '\r'
-                << 100.0 * positions_completed / positions_to_do
-                << "% positions done "
-                << (stop_time - start_time) / 3600.0 << " hours elapsed "
-                << remaining / 3600 << " hours to go "
-                << csi << "K"
-                << std::flush;
+      if (sa.verbose)
+        std::cout << '\r'
+                  << 100.0 * positions_completed / positions_to_do
+                  << "% positions done "
+                  << (stop_time - start_time) / 3600.0 << " hours elapsed "
+                  << remaining / 3600 << " hours to go "
+                  << csi << "K"
+                  << std::flush;
     }
-    std::cout << '\r' << "100% done. Elapsed "
-              << (stop_time - start_time) / 3600.0 << " hours"
-              << csi << "K" << std::endl;
+    if (sa.verbose)
+      std::cout << '\r' << "100% done. Elapsed "
+                << (stop_time - start_time) / 3600.0 << " hours"
+                << csi << "K" << std::endl;
 
     sort(to_concatenate.begin(), to_concatenate.end(),
          [](const FileInfo & lhs, const FileInfo & rhs) {
@@ -922,10 +1077,12 @@ class MappabilityBuilder {
       throw Error("could not open high mappability file")
           << high_name << "for writing";
     }
+#if 0
     Progress progress(to_concatenate.size(), 0.1,
-                           "Mappability file concatenation");
+                      "Mappability file concatenation");
+#endif
     while (to_concatenate.size()) {
-      progress();
+      // progress();
       const FileInfo & file_info{to_concatenate.front()};
       {
         const std::string low_name_{file_info.second + ".low.bin"};

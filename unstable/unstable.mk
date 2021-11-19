@@ -57,6 +57,7 @@ DEVELOPMENT_PROGRAMS := \
 	ihists \
 	jackpot \
 	karyotype \
+	karyotype2 \
 	local_similarity \
 	lookup_bridge \
 	make_reference \

@@ -5,6 +5,7 @@ UTILITY_PROGRAMS := column_split \
 	dupes \
 	even \
 	even_columns \
+	genome_sort \
 	lines_at_pos \
 	randomize_order \
 	stats \
@@ -13,7 +14,8 @@ UTILITY_PROGRAMS := column_split \
 	table_summary \
 	test_beta \
 	test_kd \
-	test_lpe
+	test_lpe \
+	uniqc
 
 PROGRAMS += $(UTILITY_PROGRAMS)
 all : $(UTILITY_PROGRAMS)

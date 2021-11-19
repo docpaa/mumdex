@@ -152,10 +152,7 @@ bool add_genes(const RefCN & ref,
   unique_lock<mutex> lock{genes_mutex};
   static const KnownGenes genes{[&ref]() {
       try {
-        const string & reference_file{ref.fasta_file()};
-        const string genes_name{reference_file + ".bin/knownGene.txt"};
-        const string isoforms_name{reference_file + ".bin/knownIsoforms.txt"};
-        return KnownGenes{genes_name, isoforms_name, ref.chr_lookup, ref};
+        return KnownGenes{ref.chr_lookup, ref};
       } catch (Error & err) {
         cerr << err.what() << endl;
         return KnownGenes{ref};
@@ -180,8 +177,7 @@ bool add_genes(const RefCN & ref,
     }
     return false;
   }
-  static const string kgXrefs_name{ref.fasta_file() + ".bin/kgXref.txt"};
-  static const GeneXrefs xref{kgXrefs_name};
+  static const GeneXrefs xref{ref};
   static const paa::GeneLookup gene_lookup{genes, xref};
   lock.unlock();
   if (first_call) {
@@ -743,16 +739,8 @@ bool add_ratio_lines(const vector<double> cn_lines,  // Not a reference
     }
     if (y > graph.range[1][0] && y < graph.range[1][1]) {
       const unsigned int y_pos(graph.coord(1, y));
-      if (graph.tiled_radio) {
-        for (unsigned int s{0}; s != graph.n_files(); ++s) {
-          const int y_tiled{graph.y_tile(s, y_pos)};
-          XDrawLine(graph.display(), graph.pixmap, gc,
-                    graph.bounds[0][0], y_tiled, graph.bounds[0][1], y_tiled);
-        }
-      } else {
-        XDrawLine(graph.display(), graph.pixmap, gc,
-                  graph.bounds[0][0], y_pos, graph.bounds[0][1], y_pos);
-      }
+      XDrawLine(graph.display(), graph.pixmap, gc,
+                graph.bounds[0][0], y_pos, graph.bounds[0][1], y_pos);
     }
   }
   return false;
@@ -905,6 +893,33 @@ bool add_cytobands(const RefCN & ref,
     band_info.emplace_back(x_start, x_stop, band.name);
   }
 
+  return false;
+}
+
+bool add_verticals(const vector<double> & verticals,
+                   X11Graph & graph, const Event & event = Event()) {
+  if (event.type != Event::Draw) return false;
+
+  // Vertical lines
+  for (double x : verticals) {
+    GC gc{graph.major_gc};
+    if (graph.log_radios[0]) {
+      if (x <= 0) continue;
+      x = log10(x);
+    }
+    if (x > graph.range[0][0] && x < graph.range[0][1]) {
+      const unsigned int x_pos(graph.coord(0, x));
+      if (graph.tiled_radio) {
+        for (unsigned int s{0}; s != graph.n_files(); ++s) {
+          XDrawLine(graph.display(), graph.pixmap, gc,
+                    x_pos, graph.bounds[1][0], x_pos, graph.bounds[1][1]);
+        }
+      } else {
+        XDrawLine(graph.display(), graph.pixmap, gc,
+                  x_pos, graph.bounds[1][0], x_pos, graph.bounds[1][1]);
+      }
+    }
+  }
   return false;
 }
 
@@ -1133,6 +1148,7 @@ int main(int argc, char * argv[]) try {
   vector<double> ratio_lines{};
   std::string display_name{X11Graph::default_title};
   vector<unsigned int> colors;
+  vector<double> verticals;
   --argc;
   while (argc) {
     if (argv[1][0] == '-') {
@@ -1294,6 +1310,11 @@ int main(int argc, char * argv[]) try {
         }
         argc -= 2;
         argv += 2;
+      } else if (matches("--vertical")) {
+        const double x_pos{atof(argv[2])};
+        verticals.push_back(x_pos);
+        argc -= 2;
+        argv += 2;
       } else {
         throw UsageError("Unrecognized command line option") << option;
       }
@@ -1381,7 +1402,7 @@ int main(int argc, char * argv[]) try {
         Info{short_names, input_data.front().info()}};
 
   auto add_special_features =
-      [do_genome, do_cn, &ref_ptr, &ratio_lines, scale]
+      [do_genome, do_cn, &ref_ptr, &ratio_lines, &verticals, scale]
       (X11Graph & graph) {
     if (do_genome) {
       // Chromosomes and ratio lines
@@ -1431,6 +1452,13 @@ int main(int argc, char * argv[]) try {
       graph.grid_radios[1][1].toggled(false);
       graph.grid_radios[0][1].toggled(false);
       graph.tick_radios[1].toggled(true);
+    }
+
+    // Vertical lines
+    if (verticals.size()) {
+      graph.add_call_back("Toggle vertical marker line display",
+                          X11Graph::CallBack{std::bind(
+                              &add_verticals, std::cref(verticals), _1, _2)});
     }
   };
 
@@ -1498,6 +1526,7 @@ Optional leading arguments (CAPS for numeric):
      | --genes FILE
   -d | --drivers
   -c | --colors c1,c2,c3,...
+  -v | --vertical X
   -h | --help
 
 Use optional leading argument --help to display additional usage information
@@ -1551,7 +1580,9 @@ or visit http://mumdex.com/ggraph/ to view the G-Graph tutorial)xxx"};
   19. The --output option saves the initial view and then exits
   20. The --genes option loads a space separated list of gene names to highlight
   21. The --drivers option highlights common cancer driver genes
-  22. The --help option displays this text and then exits
+  22. The --colors option lets you set series colors
+  23. The --vertical option lets you add vertical marker lines
+  24. The --help option displays this text and then exits
 )xxx"
             << std::endl;
 

@@ -122,6 +122,22 @@ inline void unlink(const std::string & file, const bool complain = false) {
     throw Error("Could not unlink file") << file;
   }
 }
+inline void mkfifo(const std::string & file) {
+  if (::mkfifo(file.c_str(), 0666)) {
+    throw Error("Could not mkfifo") << file;
+  }
+}
+
+// Find a path below in directory the hierarchy
+inline std::string below(const std::string & name) {
+  std::string result;
+  uint64_t n{0};
+  while (!readable(result + name)) {
+    result += "../";
+    if (++n == 20) throw Error("Too many levels down looking for") << name;
+  }
+  return result + name;
+}
 
 inline uint64_t get_block_size(const std::string name) {
   struct stat sb;
@@ -1416,6 +1432,81 @@ struct Fstream : public STREAM {
 };
 using iFstream = Fstream<std::ifstream>;
 using oFstream = Fstream<std::ofstream>;
+
+class EvenColumns {
+ public:
+  explicit EvenColumns(const std::string & spacing_ = " ",
+                       const uint64_t n_cols = 1) :
+      spacing{spacing_}, max_len(n_cols),
+      columns(n_cols, std::vector<std::string>(1)) {}
+  ~EvenColumns() { if (output_) output(); }
+  void output(std::ostream & out = std::cout) {
+    output_ = false;
+    for (uint64_t r{0};; ++r) {
+      bool did_out{false};
+      std::ostringstream line;
+      for (uint64_t c{0}; c != columns.size(); ++c) {
+        std::vector<std::string> & column{columns[c]};
+        if (column.back().empty()) column.pop_back();  // Rethink this
+        const uint64_t len{max_len[c]};
+        if (r >= column.size()) {
+          line << std::string(len, ' ');
+        } else {
+          const std::string & text{column[r]};
+          line << text << std::string(len - text.size(), ' ');
+          did_out = true;
+        }
+        if (c + 1 != columns.size()) line << spacing;
+      }
+      if (!did_out) break;
+      out << line.str() << '\n';
+    }
+  }
+  EvenColumns & operator[](const uint64_t c) {
+    increase_size(c + 1);
+    current = c;
+    return *this;
+  }
+  EvenColumns & operator++() {
+    increase_size(++current + 1);
+    return *this;
+  }
+  void increase_size(const uint64_t n_cols) {
+    while (n_cols > columns.size()) {
+      columns.push_back(std::vector<std::string>(1));
+      max_len.push_back(0);
+    }
+  }
+  template<class Item>
+  void add(const Item & item) {
+    std::ostringstream text;
+    text << item;
+    for (const char c : text.str())
+      if (c == '\n') {
+        const uint64_t len{columns[current].back().size()};
+        if (len > max_len[current]) max_len[current] = len;
+        columns[current].push_back("");
+      } else {
+        columns[current].back() += c;
+      }
+  }
+
+ private:
+  bool output_{true};
+  uint64_t current{0};
+  std::string spacing;
+  std::vector<uint64_t> max_len;
+  std::vector<std::vector<std::string>> columns;
+};
+template <class Item>
+EvenColumns & operator<<(EvenColumns & columns, const Item & item) {
+  columns.add(item);
+  return columns;
+}
+inline EvenColumns & operator<<(EvenColumns & columns, const EvenColumns &) {
+  return columns;
+}
+
 
 }  // namespace paa
 

@@ -116,6 +116,14 @@ class MADT {
   }
   Value median() const { return median_; }
   Value mad() const { return mad_; }
+  double stdev(const double mean) const {
+    if (values_.empty()) throw Error("empty mad container");
+    return sqrt(std::accumulate(
+        values_.begin(), values_.end(), 0.0,
+        [this, mean](const double total, const double val) {
+          return total + pow(val - mean, 2.0);
+        }) / values_.size());
+  }
   double stdev() const { return mad() * 1.4826; }
   std::istream & in(std::istream & input) {
     return input >> median_ >> mad_;
@@ -140,6 +148,16 @@ std::ostream & operator<<(std::ostream & out, const MADT<Value> & val) {
 template <class Value>
 std::istream & operator>>(std::istream & in, MADT<Value> & val) {
   return val.in(in);
+}
+
+double stdev(const std::vector<double> & values, const double mean) {
+  if (values.empty()) throw Error("empty values container in stdev");
+  return sqrt(std::accumulate(
+      values.begin(), values.end(), 0.0,
+      [
+          mean](const double total, const double val) {
+        return total + pow(val - mean, 2.0);
+      }) / values.size());
 }
 
 class NormalParams {

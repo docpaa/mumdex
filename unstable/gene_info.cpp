@@ -42,11 +42,8 @@ int main(int argc, char * argv[]) try {
   const string reference_file{argv[1]};
   const Reference reference{reference_file};
   const ChromosomeIndexLookup chr_lookup{reference};
-  const string genes_name{reference_file + ".bin/knownGene.txt"};
-  const string isoforms_name{reference_file + ".bin/knownIsoforms.txt"};
-  const string kgXrefs_name{reference_file + ".bin/kgXref.txt"};
-  const KnownGenes genes{genes_name, isoforms_name, chr_lookup, reference};
-  const GeneXrefs xref{kgXrefs_name};
+  const KnownGenes genes{chr_lookup, reference};
+  const GeneXrefs xref{reference};
   const GeneLookup gene_lookup{genes, xref};
   --argc;
   argv += 2;

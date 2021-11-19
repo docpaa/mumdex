@@ -277,6 +277,7 @@ class CN_abspos {
   unsigned int cn_offset(const unsigned int chr) const {
     return cn_offsets[chr];
   }
+  // BAD ??? !!!
   unsigned int ref_size(const unsigned int chr) const {
     return ref_offsets[chr + 1] - ref_offsets[chr];
   }
@@ -1247,13 +1248,13 @@ void copy_number(const Reference & ref,
   const std::string r_code{R"foo(library("DNAcopy")
 cbs.segment <- function(sample, alpha, nperm, undo.SD, min.width) {
 	data <- read.table(paste(sample, "ratios.txt", sep="."), header=T) 
-	set.seed(25) 
+	set.seed(25)
 	CNA.object <- CNA(log(data$ratio, base=2), data$chr, data$abspos,
                           data.type="logratio", sampleid=sample) 
 	smoothed.CNA.object <- smooth.CNA(CNA.object) 
 	segment.smoothed.CNA.object <- segment(smoothed.CNA.object,
           alpha=alpha, nperm=nperm, undo.splits="sdundo", undo.SD=undo.SD,
-          min.width=min.width) 
+          min.width=min.width)
 	Short <- segment.smoothed.CNA.object[[2]]
 	m <- matrix(data=0, nrow=nrow(data), ncol=1)	
 	prevEnd <- 0
@@ -1781,7 +1782,56 @@ std::ostream & operator<<(std::ostream & out, const Segments & seg) {
              << " " << 1.0 * seg.n_bins_good_event() / seg.n_bins_good();
 }
 
+template <class Counts>
+void increment_bin(const std::vector<Bin> & bins,
+                   const unsigned int abspos,
+                   Counts & counts) {
+  std::vector<Bin>::const_iterator found{
+    upper_bound(bins.begin(), bins.end(), abspos)};
+  if (found-- != bins.begin() &&
+      abspos >= found->abspos_start() &&
+      abspos < found->abspos_start() + found->length())
+    ++counts[found - bins.begin()];
+}
 
+template <class Counts>
+void plot_cn(PSPage & page, const std::string sample_name,
+             const CN_abspos & cn_abspos, const std::vector<Bin> & bins,
+             const Counts & counts) {
+  std::vector<double> ratios;
+  unsigned int total_count{0};
+  for (uint64_t b{0}; b != bins.size(); ++b) {
+    const unsigned int count{counts[b]};
+    total_count += count;
+    ratios.push_back(count / bins[b].norm());
+  }
+  if (!total_count) return;
+  std::vector<double> sorted_ratios{ratios};
+  sort(sorted_ratios.begin(), sorted_ratios.end());
+  const double rmedian{sorted_ratios[sorted_ratios.size() / 2]};
+  for (double & ratio : ratios) ratio /= rmedian;
+
+  // Plot profile
+  const double min_cn{0.1};
+  const double max_cn{40};
+  const double extra_cn{1.2};
+  PSGraph & graph{*PSGraph::create(
+      page, "Sample " + sample_name + ";Position;Copy Number",
+      Bounds{0, 1.0 * cn_abspos.n_positions(),
+            min_cn / extra_cn, extra_cn * max_cn})};
+  graph.do_x_ticks(false);
+  graph.log_y(true);
+  const Marker black_marker {paa::circle(), 0.4, "0 0 0", 0.2, true};
+  PSXYSeries & series{*PSXYSeries::create(graph, black_marker)};
+  for (uint64_t b{0}; b != bins.size(); ++b) {
+    const Bin & bin{bins[b]};
+    const unsigned int abspos{
+      cn_abspos(bin.chromosome(), bin.start_position())};
+    const double ratio{ratios[b]};
+    const double cn_value{2.0 * ratio};
+    series.add_point(abspos, std::min(max_cn, std::max(min_cn, cn_value)));
+  }
+}
 
 }  // namespace paa
 

@@ -22,9 +22,9 @@ STD := -std=c++11
 WARN := -Wall
 LIBS := -pthread
 INCFLAGS := $(addprefix -I ,$(MODULES))
-#debug = defined
+# debug = defined
 ifdef debug
-  FAST := -O0 -g -ggdb
+  FAST := -O0 -ggdb
 else
   FAST := -Ofast -march=native -DNDEBUG
   # For gcc under cygwin
@@ -105,12 +105,19 @@ COMPILE.cpp = $(CXX) $(STD) $(FAST) $(WARN) $(INCFLAGS) $(DEPFLAGS) -c
 	$(POSTCOMPILE)
 % : %.eo ; $(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
 
+# Special rules for zlib compilation and linking
+# give .zo prerequisite if zlib headers are needed
+%.zo : %.cpp .dep/%.dep
+	$(COMPILE.cpp) $< -o $@
+	$(POSTCOMPILE)
+% : %.zo ; $(CXX) $(LDFLAGS) $^ -o $@ -lz $(LIBS)
+
 # Do not delete .o files when a chain is used
 .PRECIOUS : %.o %.gslo %.x11o %.eo
 
 # Clean all compiled files
 clean :
-	rm -f *.x11o *.gslo *.sqlo *.eo *.ro *.o $(PROGRAMS)
+	rm -f *.x11o *.gslo *.sqlo *.eo *.ro *.zo *.o $(PROGRAMS)
 	rm -Rf .dep/ .lint/ python/build python/dist
 spotless : clean
 	rm -f *~ */*~

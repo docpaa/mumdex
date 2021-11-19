@@ -55,10 +55,7 @@ int main(int argc, char* argv[]) try {
   const Reference & ref = mumdex.reference();
   const ChromosomeIndexLookup chr_lookup{ref};
 
-  const string genes_name{argv[2]};
-  const string isoforms_name{argv[3]};
-
-  const KnownGenes genes{genes_name, isoforms_name, chr_lookup, ref};
+  const KnownGenes genes{chr_lookup, ref};
   const BedFile bed{genes.generate_bed("junctions.bed")};
   JunctionCounts gene_counts(genes);
 

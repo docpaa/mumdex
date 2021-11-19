@@ -31,6 +31,14 @@ using StringPairs = std::vector<StringPair>;
 using Strings = std::vector<std::string>;
 using StringSet = std::set<std::string>;
 
+template<class Stream>
+inline std::string getline(Stream & input) {
+  std::string line;
+  // using std::getline;
+  getline(input, line);
+  return line;
+}
+
 inline std::string first_word(const std::string & text) {
   auto found = text.find(" ");
   if (found == std::string::npos) {

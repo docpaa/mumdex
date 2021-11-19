@@ -55,14 +55,14 @@ class Gaps {
     unsigned int stop;
     unsigned int ix;
     std::string n;
-    unsigned int size;
+    unsigned int size_;
     std::string type;
     std::string bridge;
     while (getline(input, line)) {
       std::istringstream line_str{line.c_str()};
       line_str >> bin >> chr_name >> start >> stop
-               >> ix >> n >> size >> type >> bridge;
-      if (size && types.find(type) != std::string::npos &&
+               >> ix >> n >> size_ >> type >> bridge;
+      if (size_ && types.find(type) != std::string::npos &&
           (just_chr.empty() || chr_name == just_chr))
         data.emplace_back(lookup[chr_name], start, stop, type);
     }
@@ -75,7 +75,7 @@ class Gaps {
           }
         });
     }
-    std::cerr << "Loaded " << data.size() << " gaps" << std::endl;
+    if (data.empty()) throw Error("No gaps loaded");
   }
 
   using Closest = std::pair<unsigned int, std::string>;
@@ -111,6 +111,7 @@ class Gaps {
   }
   std::vector<Gap>::const_iterator begin() const { return data.begin(); }
   std::vector<Gap>::const_iterator end() const { return data.end(); }
+  uint64_t size() const { return data.size(); }
 
  private:
   std::vector<Gap> data{};
@@ -132,7 +133,8 @@ class GeneXref {
 
 class GeneXrefs {
  public:
-  explicit GeneXrefs(const std::string & file_name);
+  explicit GeneXrefs(const Reference & ref_arg) :
+      GeneXrefs{ref_arg.fasta_file() + ".bin/kgXref.txt"} {}
   const GeneXref & operator[](const std::string & name) const {
     try {
       return data.at(name);
@@ -142,6 +144,7 @@ class GeneXrefs {
   }
 
  private:
+  explicit GeneXrefs(const std::string & file_name);
   std::map<std::string, GeneXref> data{};
 };
 
@@ -262,10 +265,11 @@ class KnownGenes {
  public:
   // Empty gene information in case UCSC files are unavailable
   explicit KnownGenes(const Reference & ref_arg) : ref{ref_arg} {}
-  KnownGenes(const std::string & genes_file_name,
-             const std::string & isoforms_file_name,
-             const ChromosomeIndexLookup & index,
-             const Reference & ref_arg);
+  KnownGenes(const ChromosomeIndexLookup & index,
+             const Reference & ref_arg) :
+      KnownGenes{ref_arg.fasta_file() + ".bin/knownGene.txt",
+        ref_arg.fasta_file() + ".bin/knownIsoforms.txt",
+        index, ref_arg} { }
   const KnownGene & operator[] (const unsigned int i) const {
     return genes[i];
   }
@@ -346,6 +350,10 @@ class KnownGenes {
   }
 
  private:
+  KnownGenes(const std::string & genes_file_name,
+             const std::string & isoforms_file_name,
+             const ChromosomeIndexLookup & index,
+             const Reference & ref_arg);
   std::vector<KnownGene> genes{};
 
  public:

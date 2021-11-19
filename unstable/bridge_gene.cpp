@@ -83,11 +83,8 @@ int main(int argc, char* argv[])  try {
 
   // Load gene info
   const string reference_file{argv[1]};
-  const string genes_name{reference_file + ".bin/knownGene.txt"};
-  const string isoforms_name{reference_file + ".bin/knownIsoforms.txt"};
-  const string kgXrefs_name{reference_file + ".bin/kgXref.txt"};
-  const KnownGenes genes{genes_name, isoforms_name, chr_lookup, ref};
-  const GeneXrefs xref{kgXrefs_name};
+  const KnownGenes genes{chr_lookup, ref};
+  const GeneXrefs xref{ref};
 
   for (const bool anchor2 : {false, true}) {
     const vector<unsigned int> pos_genes{

@@ -60,8 +60,9 @@ int main(int argc, char* argv[])  try {
   const unsigned int y{temp_ref.find_y_chromosome()};
   const bool is_hg38{temp_ref.size(y) == 57227415};
   const bool is_hg19{temp_ref.size(y) == 59373566};
-  if (!is_hg38 && !is_hg19)
-    throw Error("Cannot identify reference as hg19 or hg38");
+  const bool is_mm10{temp_ref.size(y) == 91744698};
+  if (!is_hg38 && !is_hg19 && !is_mm10)
+    throw Error("Cannot identify reference as hg19, hg38 or mm10");
 
   const unsigned int hg19_par_limits[2][2]
   {{10000, 2649520}, {59034049, 59363566}};
@@ -74,7 +75,7 @@ int main(int argc, char* argv[])  try {
   for (unsigned int c{0}; c != temp_ref.n_chromosomes(); ++c) {
     masked_ref_stream << ">" << temp_ref.name(c) << "\n";
     for (unsigned int b{0}; b != temp_ref.size(c); ++b) {
-      if (c == y && (
+      if (!is_mm10 && c == y && (
               (b >= par_limits[0][0] && b < par_limits[0][1]) ||
               (b >= par_limits[1][0] && b < par_limits[1][1]))) {
         masked_ref_stream << "N";

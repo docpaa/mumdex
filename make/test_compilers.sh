@@ -53,15 +53,15 @@ function compile() {
             if [ ! -z $remote ] ; then
                 rdir=.test_compiler_$code_name
                 rsync -aL --delete $PWD/ $remote:$rdir
-                ssh $remote "(hostname -s ; $CXX --version | head -n 1) 1>&2 && cd $rdir && make clean > /dev/null && make -j 12 $program && ./even /dev/null" > /dev/null 2> $out_dir/$compiler.txt
+                ssh $remote "(hostname -s ; $CXX --version | head -n 1) 1>&2 && cd $rdir && make clean > /dev/null && make -j 12 $program && ./even /dev/null" > /dev/null 2> $compiler.txt
             else
                 echo -n "$out"
-                ((hostname -s ; $CXX --version | head -n 1) 1>&2 && make -j $nproc $program && ./even /dev/null && make clean) > /dev/null 2> $out_dir/$compiler.txt
+                ((hostname -s ; $CXX --version | head -n 1) 1>&2 && make -j $nproc $program && ./even /dev/null && make clean) > /dev/null 2> $compiler.txt
             fi
             sss=$?
             stop=$(date +%s)
             echo -n "$([ ! -z $remote ] && echo -n "$out") "
-            printf "%3s s %1s e %3s l %-40s %-8s %s\n" $((stop-start)) $sss "$(tail -n +3 $out_dir/$compiler.txt | wc -l)" "$out_dir/$compiler.txt" "$(echo $(head -n 1 $out_dir/$compiler.txt))" "$(echo $(head -n 2 $out_dir/$compiler.txt | tail -n 1))"
+            printf "%3s s %1s e %3s l %-40s %-8s %s\n" $((stop-start)) $sss "$(tail -n +3 $compiler.txt | wc -l)" "$code_dir/$compiler.txt" "$(echo $(head -n 1 $compiler.txt))" "$(echo $(head -n 2 $compiler.txt | tail -n 1))"
         fi
     )
 }

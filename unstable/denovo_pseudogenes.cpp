@@ -150,22 +150,17 @@ class GeneCandidates {
 int main(int argc, char* argv[]) try {
   paa::exit_on_pipe_close();
 
-  --argc;
-  if (argc != 5) throw Error(
-          "usage: denovo_pseudogenes family_info genes isoforms xrefs bed");
+  if (--argc != 2) throw Error(
+          "usage: denovo_pseudogenes family_info bed");
 
   const string ref_name{"/data/safe/paa/analysis/mums/hg19/chrAll.fa"};
   const Reference ref{ref_name};
   const ChromosomeIndexLookup chr_lookup{ref};
   const Mappability mappability{ref_name, true};
-  const string genes_name{argv[2]};
-  const string isoforms_name{argv[3]};
-  const string kgXrefs_name{argv[4]};
+  const KnownGenes genes{chr_lookup, ref};
+  const GeneXrefs xref{ref};
 
-  const KnownGenes genes{genes_name, isoforms_name, chr_lookup, ref};
-  const GeneXrefs xref{kgXrefs_name};
-
-  const string bed_name{argv[5]};
+  const string bed_name{argv[2]};
   const BedFile bed{bed_name};
 
   const auto last_slash = bed_name.find_last_of('/');

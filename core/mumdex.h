@@ -208,8 +208,9 @@ class TReference {
         new (this) TReference{fasta, ReadFromBinary()};  // placement new
         return;
       }
-      std::cerr << "Creating binary reference cache from "
-                << fasta << std::endl;
+      if (false)
+        std::cerr << "Creating binary reference cache from "
+                  << fasta << std::endl;
       {
         mkdir(fasta + ".bin/");
         FILE * output = fopen(ref_bin_name.c_str(), "wb");
@@ -226,17 +227,15 @@ class TReference {
                                  FILE * out_file,
                                  const uint64_t max_bytes) {
     std::ifstream input{fasta.c_str()};
-    if (!input) {
-      throw Error("Could not open fasta file") << fasta;
-    }
+    if (!input) throw Error("Could not open fasta file") << fasta;
     std::string line;
     unsigned int chr_end{0};
     uint64_t seq_size{0};
     while (input >> line) {
       if (line[0] == '>') {
-        if (chr_name.size()) {
+        // std::cerr << line << std::endl;
+        if (chr_name.size())
           chr_len.push_back(static_cast<unsigned int>(seq_size - chr_end));
-        }
         chr_end = static_cast<unsigned int>(seq_size);
         chrs.push_back(static_cast<unsigned int>(chr_name.size()));
         chr_name.push_back(line.substr(1));
@@ -263,8 +262,7 @@ class TReference {
   void fasta_out(const std::string & out_file,
                  const uint64_t line_length = 50) const {
     std::ofstream out(out_file.c_str());
-    if (!out)
-      throw Error("Could not open fasta file for writing") << out_file;
+    if (!out) throw Error("Could not open fasta file for writing") << out_file;
     for (unsigned int c{0}; c != n_chromosomes(); ++c) {
       out << '>' << name(c);
       for (unsigned int b{0}; b != size(c); ++b) {
@@ -353,19 +351,15 @@ class TReference {
 
   // save to binary file
   void save(const std::string & fasta, const bool save_seq = true) const {
-    if (save_seq) {
-      seq.save(fasta + ".bin/ref.seq.bin");
-    }
-
+    if (save_seq) seq.save(fasta + ".bin/ref.seq.bin");
     chr_len.save(fasta + ".bin/ref.chr_len.bin");
     std::string chr_names_filename{fasta + ".bin/ref.chr_name.bin"};
     std::ofstream chr_names_file{chr_names_filename.c_str()};
     if (!chr_names_file)
       throw Error("Could not open chromosome names file for writing")
           << chr_names_filename;
-    for (const std::string & name_ : chr_name) {
+    for (const std::string & name_ : chr_name)
       chr_names_file << name_ << '\n';
-    }
   }
 
  private:
@@ -376,16 +370,14 @@ class TReference {
     fasta_file_{fasta} {
       std::string chr_names_filename{fasta_file_ + ".bin/ref.chr_name.bin"};
       std::ifstream chr_names_file{chr_names_filename.c_str()};
-      if (!chr_names_file) {
+      if (!chr_names_file)
         throw Error("Could not open chromosome names file for reading")
             << chr_names_filename;
-      }
       std::string line;
       uint64_t pos{0};
       for (unsigned int c{0}; c != chr_len.size(); ++c) {
-        if (!std::getline(chr_names_file, line)) {
+        if (!std::getline(chr_names_file, line))
           throw Error("Problem reading name for chromosome") << c;
-        }
         chr_name.push_back(line);
         chr.push_back(seq.begin() + pos);
         chrs.push_back(c);
@@ -508,11 +500,12 @@ class TMappability {
     }
     return result;
   }
-  unsigned int max(const unsigned int pos, const unsigned int length) const {
+  unsigned int max(const unsigned int pos, const unsigned int length,
+                   const bool high__ = false) const {
     unsigned int result{0};
     const unsigned int stop{pos + length};
     for (unsigned int p{pos}; p != stop; ++p) {
-      result = std::max(result, low(p));
+      result = std::max(result, high__ ? high(p) : low(p));
       if (p + result > stop) break;
     }
     return result;

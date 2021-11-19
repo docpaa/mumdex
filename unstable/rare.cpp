@@ -121,11 +121,8 @@ int main(int argc, char* argv[])  try {
   const unsigned int stop{static_cast<unsigned int>(atoi(argv[6]))};
 
   // Load gene info
-  const string genes_name{reference_file + ".bin/knownGene.txt"};
-  const string isoforms_name{reference_file + ".bin/knownIsoforms.txt"};
-  const string kgXrefs_name{reference_file + ".bin/kgXref.txt"};
-  const KnownGenes genes{genes_name, isoforms_name, chr_lookup, ref};
-  const GeneXrefs xref{kgXrefs_name};
+  const KnownGenes genes{chr_lookup, ref};
+  const GeneXrefs xref{ref};
   const GeneHitFinder gene_finder{genes};
 
   // Set up queue of bridge files

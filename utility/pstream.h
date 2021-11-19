@@ -49,6 +49,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <ios>
 #include <streambuf>
 #include <istream>
+#include <memory>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -56,6 +57,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <cerrno>       // for errno
 #include <cstddef>      // for size_t
 #include <cstdlib>      // for exit()
+
+#include "files.h"
+#include "utility.h"
 
 // The library version.
 #define PSTREAMS_VERSION 0x0070   // 0.7.0
@@ -100,6 +104,15 @@ struct pstreams {
   enum { bufsz = 32 };  // Size of pstreambuf buffers.
   enum { pbsz  = 2 };   // Number of putback characters kept.
 };
+std::ios_base::openmode ioe() {
+  return pstreams::pstdout | pstreams::pstdin | pstreams::pstderr;
+}
+std::ios_base::openmode oe() {
+  return pstreams::pstdout | pstreams::pstderr;
+}
+std::ios_base::openmode ie() {
+  return pstreams::pstdin| pstreams::pstderr;
+}
 
 // Class template for stream buffer.
 template <typename CharT, typename Traits = std::char_traits<CharT> >
@@ -240,9 +253,10 @@ class basic_pstreambuf
   destroy_buffers(pmode mode);
 
   // Writes buffered characters to the process' stdin pipe.
+ public:
   bool
   empty_buffer();
-
+ protected:
   bool
   fill_buffer(bool non_blocking = false);
 
@@ -367,7 +381,7 @@ class basic_ipstream
 
   // Default constructor, creates an uninitialised stream.
   basic_ipstream()
-      : istream_type(NULL), pbase_type() { }
+      : istream_type(nullptr), pbase_type() { }
 
   /**
    * @brief Constructor that initialises the stream by starting a process.
@@ -1964,30 +1978,39 @@ pstream_common<C, T>::fopen(FILE*& fin, FILE*& fout, FILE*& ferr) {
  */
 
 #pragma GCC diagnostic pop
-
-#include "error.h"
-
 // better pstream
 namespace paa {
 
-class ipstream {
+struct rFifo {
+  explicit rFifo(const std::string & name_ = get_name()) : name{name_} {
+    unlink(name);
+    mkfifo(name);
+  }
+  rFifo(const rFifo &) = delete;
+  rFifo & operator=(const rFifo &) = delete;
+  ~rFifo() { unlink(name); }
+  static std::string get_name() { return "fifo" + std::to_string(++n); }
+  operator const std::string &() const { return name; }
+  const std::string name{get_name()};
+  static uint64_t n;
+};
+uint64_t rFifo::n{0};
+
+class riopstream {
  public:
-  explicit ipstream(const std::string & file_name) :
-      stream{file_name.c_str()} {
-    if (!stream.is_open()) throw Error("Problem opening stream") << file_name;
+  explicit riopstream(const std::string & command_) :
+      command{"(" + command_ + ") < " + fifo.name} {
   }
-  ~ipstream() {
-    stream.close();
-    if (!stream.rdbuf()->exited()) {
-      std::cerr << "Stream has not exited " << stream.rdbuf()->status();
-      exit(1);
-    }
-  }
-  redi::ipstream & operator()() { return stream; }
-  const redi::ipstream & operator()() const { return stream; }
+  void open_in() { in_ = std::make_unique<redi::ipstream>(command); }
+  void open_out() { out_ = std::make_unique<std::ofstream>(fifo.name); }
+  redi::ipstream & in() const { return *in_; }
+  std::ofstream & out() const { return *out_; }
 
  private:
-  redi::ipstream stream;
+  rFifo fifo{};
+  std::string command;
+  std::unique_ptr<redi::ipstream> in_{nullptr};
+  std::unique_ptr<std::ofstream> out_{nullptr};
 };
 
 }  // namespace paa

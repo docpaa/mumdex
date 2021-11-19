@@ -4346,6 +4346,7 @@ class TabularData {
       reals_(n_cols()),
       strings_maybe(n_cols()),
       reals_maybe(n_cols()),
+      is_integral(n_cols()),
       widths(0),
       name2col{} { }
   TabularData(const TabularData & other, const uInts & cols) :
@@ -4358,6 +4359,7 @@ class TabularData {
       reals_(n_cols()),
       strings_maybe(n_cols()),
       reals_maybe(n_cols()),
+      is_integral(n_cols()),
       widths(n_cols()),
       name2col{other.name2col} {
         uint64_t col{0};
@@ -4368,6 +4370,7 @@ class TabularData {
           reals_[col] = other.reals_[other_col];
           strings_maybe[col] = other.strings_maybe[other_col];
           reals_maybe[col] = other.reals_maybe[other_col];
+          is_integral[col] = other.is_integral[other_col];
           widths[col] = other.widths[other_col];
           ++col;
         }
@@ -4383,6 +4386,7 @@ class TabularData {
       reals_(n_cols()),
       strings_maybe(n_cols()),
       reals_maybe(n_cols()),
+      is_integral(n_cols()),
       widths(n_cols()) {
         for (unsigned int c{0}; c != n_cols(); ++c) {
           const auto & col = tsv(c);
@@ -4395,6 +4399,7 @@ class TabularData {
           std::string col_type{"str"};
           if (col.is_real()) {
             col_type = "real";
+            if (col.is_integral()) is_integral[c] = true;
             reals_maybe[c] = std::make_shared<Reals>(n_rows());
             for (unsigned int r{0}; r != n_rows(); ++r) {
               if (col.is_integral()) {
@@ -4424,8 +4429,13 @@ class TabularData {
   bool is_real(const uint64_t col) const { return reals_[col].size(); }
   const hReals & reals(const uint64_t col) const { return reals_[col]; }
   std::string string(const uint64_t col, const uint64_t row) const {
-    if (is_real(col)) {
-      static std::ostringstream value_string{};
+    if (is_integral[col]) {
+      static thread_local std::ostringstream value_string{};
+      value_string.str("");
+      value_string << static_cast<int64_t>(floor(reals_[col][row] + 0.5));
+      return value_string.str();
+    } else if (is_real(col)) {
+      static thread_local std::ostringstream value_string{};
       value_string.str("");
       value_string << std::setprecision(10);
       value_string << reals_[col][row];
@@ -4512,6 +4522,7 @@ class TabularData {
     strings_maybe.push_back(nullptr);
     strings_.emplace_back();
     reals_maybe.push_back(std::make_shared<Reals>(n_rows_));
+    is_integral.push_back(0);
     reals_.emplace_back(*reals_maybe.back());
     widths.push_back(0);
     name2col[name__] = n_cols_++;
@@ -4532,6 +4543,7 @@ class TabularData {
     strings_maybe.push_back(std::make_shared<Strings>(n_rows_));
     strings_.emplace_back(*strings_maybe.back());
     reals_maybe.push_back(nullptr);
+    is_integral.push_back(0);
     reals_.emplace_back();
     widths.push_back(0);
     name2col[name__] = n_cols_++;
@@ -4552,6 +4564,7 @@ class TabularData {
   RealTable reals_;
   StringTableMaybe strings_maybe;
   RealTableMaybe reals_maybe;
+  std::vector<unsigned char> is_integral;
   std::vector<uint64_t> widths;
   std::map<std::string, uint64_t> name2col{};
 };
@@ -4988,8 +5001,7 @@ class X11DataTable : public X11Win {
     for (const unsigned int s : normal_fonts.sizes()) std::cerr << " " << s;
     std::cerr << std::endl;
   }
-  std::string cell_string(const uint64_t row,
-                          const uint64_t col) const {
+  std::string cell_string(const uint64_t row, const uint64_t col) const {
     if (row) {
       if (col) {
         return data.string(col - 1, order[row - 1]);

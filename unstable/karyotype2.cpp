@@ -1,5 +1,5 @@
 //
-// karyotype.cpp
+// karyotype2.cpp
 //
 // draw a karyotype
 //
@@ -17,6 +17,7 @@
 
 #include "error.h"
 #include "mumdex.h"
+#include "paastrings.h"
 #include "repeats.h"
 
 using std::cin;
@@ -31,13 +32,14 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
+using paa::replace_substring;
 using paa::ChromosomeIndexLookup;
 using paa::Error;
 using paa::Reference;
 
 int main(int argc, char * argv[]) try {
   if (--argc != 4) {
-    throw Error("usage: karyotype ref bands_file title scale");
+    throw Error("usage: cin | karyotype2 ref bands_file title scale");
   }
 
   const Reference ref{argv[1]};
@@ -126,6 +128,7 @@ int main(int argc, char * argv[]) try {
 
   // Draw chromosome outlines
   for (const string & schr : show_chromosomes) {
+    if (schr == "chrY") continue;
     const unsigned int chr{chr_lookup[schr]};
     const unsigned int chr_index{chromosome_index.at(schr)};
     const double xl{xpos(chr_index, 0)};
@@ -133,7 +136,7 @@ int main(int argc, char * argv[]) try {
     const double yl{ypos(chr_index)};
     const double yh{yl + chr_height};
     cout << "newpath " << xl << " " << yl << " moveto "
-         << "gsave (" << schr
+         << "gsave (" << replace_substring(schr, "chr", "")
          << ") dup stringwidth pop neg 5 sub 0 rmoveto show grestore "
          << xh << " " << yl << " lineto "
          << xh << " " << yh << " lineto "
@@ -195,15 +198,20 @@ int main(int argc, char * argv[]) try {
 
   vector<vector<bool>> mask(page_width * scale,
                             vector<bool>(page_height * scale));
+  vector<string> colors{"0 0.8 0", "0 0 1", "1 0 0"};
+  map<string, string> type_colors;
   string schr;
   unsigned int pos;
-  while (cin >> schr >> pos) {
+  string type;
+  while (cin >> schr >> pos >> type) {
     try {
+      auto found = type_colors.emplace(type, colors.back());
+      if (found.second) colors.pop_back();
       const unsigned int chr_index{chromosome_index.at(schr)};
       double off{0};
       const double x{xpos(chr_index, pos)};
       while (true) {
-        const double y{ypos(chr_index) + chr_height + off + 2};
+        const double y{ypos(chr_index) + chr_height + off + 5};
         if (x * scale > mask.size()) continue;
         if (y * scale > mask[x * scale].size()) break;
         if (mask[x * scale][y * scale] ||
@@ -211,10 +219,11 @@ int main(int argc, char * argv[]) try {
             mask[(x + 1) * scale][y * scale] ||
             mask[(x - 2) * scale][y * scale] ||
             mask[(x + 2) * scale][y * scale]) {
-          off += 1.9;
+          off += 5;
         } else {
           mask[x * scale][y * scale] = true;
-          cout << "newpath " << x << " " << y << " 0.8 0 360 arc fill" << endl;
+          cout << found.first->second << " setrgbcolor "
+               << "newpath " << x << " " << y << " 2.0 0 360 arc fill" << endl;
           break;
         }
       }
@@ -227,6 +236,22 @@ int main(int argc, char * argv[]) try {
     }
   }
 
+  // Draw legend
+  const unsigned int legend_index{chromosome_index.at("chrY")};
+  const double legend_y{ypos(legend_index)};
+  const double legend_x{xpos(legend_index, 0)};
+  cout << "/Helvetica findfont 16 scalefont setfont" << endl;
+  cout << "0 0 0 setrgbcolor "
+       << legend_x << " " << legend_y << " moveto (Legend: ) show ";
+  bool first{true};
+  for (const auto & info : type_colors) {
+    if (first) {
+      first = false;
+    } else {
+      cout << "(, ) show ";
+    }
+    cout << info.second << " setrgbcolor (" << info.first << ") show ";
+  }
   cout << "showpage" << endl;
   cout << "%%EndPage: 1" << endl;
   cout << "%%Trailer" << endl;

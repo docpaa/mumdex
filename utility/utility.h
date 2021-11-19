@@ -17,15 +17,19 @@
 #include <cmath>
 #include <cstdint>
 #include <deque>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <typeinfo>
 #include <vector>
+
+#include "error.h"
 
 namespace paa {
 
@@ -246,6 +250,7 @@ template<class T> class Last {
   T last_value;
 };
 
+#if 0
 template<class T> class Max {
  public:
   explicit Max(const T initial = 0) : max_(initial) {}
@@ -258,7 +263,7 @@ template<class T> class Max {
  private:
   T max_;
 };
-
+#endif
 class Timer {
  public:
   Timer() : start{std::chrono::system_clock::now()} {}
@@ -295,7 +300,6 @@ template <class T> class ClassInfo {
     std::cout << "Type " << typeid(T).name() << std::endl;
     std::cout << "  Size is " << sizeof(T) << std::endl;
     std::cout << "  is trivial? " << std::is_trivial<T>::value << std::endl;
-    std::cout << "  is pod? " << std::is_pod<T>::value << std::endl;
     std::cout << "  is standard layout? " << std::is_standard_layout<T>::value
               << std::endl;
     std::cout << "  is polymorphic? " << std::is_polymorphic<T>::value
@@ -510,6 +514,188 @@ std::istream & operator>>(std::istream & in, ParameterT<Type> & param) {
   in >> value;
   param(value, false);
   return in;
+}
+
+using NameFuncs = std::map<std::string, std::function<void()>>;
+inline void process_table(std::istream & table,
+                          const NameFuncs & name_funcs,
+                          const std::function<void()> & process_line,
+                          const bool ignore_missing = false) {
+  // Lookup for a column number given a column name
+  using NameColumns = std::map<std::string, uint64_t>;
+  auto at = [ignore_missing]
+      (const NameColumns & name_cols, const std::string & name) -> uint64_t {
+    try {
+      return name_cols.at(name);
+    } catch(...) {
+      if (!ignore_missing) {
+        std::cerr << "Problem looking up column name " << name << std::endl;
+        throw;
+      }
+    }
+    return -1ul;
+  };
+
+  // Read header to get column numbers for each header name
+  const NameColumns name_cols{[&table]() {
+      NameColumns result;
+      std::string line;
+      getline(table, line);
+      std::istringstream header{line};
+      for (uint64_t c{0}; header; ++c)
+        if (getline(header, line, '\t'))
+          result[line] = c;
+      return result;
+    }()};
+
+  // Function to call for each column number
+  using ColFuncs = std::vector<std::function<void()>>;
+  std::string dummy;
+  const ColFuncs col_funcs{
+    [&name_funcs, &name_cols, &at, &table, &dummy]() {
+      ColFuncs result(name_cols.size());
+      for (uint64_t c{0}; c != name_cols.size(); ++c)
+        result[c] = [&table, &dummy]() { table >> dummy; };
+      for (const auto & info : name_funcs) {
+        const uint64_t col{at(name_cols, info.first)};
+        if (col != -1ul) result[col] = info.second;
+      }
+      return result;
+    }()};
+
+  // Read in the data and add to list of loci
+  std::string line;
+  // All complication above for the simplicity of this block below
+  for (uint64_t c{0}; table; ++c) {
+    const uint64_t col{c % col_funcs.size()};
+    col_funcs.at(col)();
+    if (col + 1 == col_funcs.size()) process_line();
+  }
+}
+
+// Useful for reporing counts
+struct NamedNumber {
+  explicit NamedNumber(const std::string & name_, const uint64_t number_ = 0) :
+      name{name_}, number{number_} {}
+  operator uint64_t & () { return number; }
+  operator uint64_t () const { return number; }
+  uint64_t operator-(const NamedNumber & rhs) const {
+    return number - rhs.number;
+  }
+  uint64_t operator+(const NamedNumber & rhs) const {
+    return number + rhs.number;
+  }
+  NamedNumber & operator+=(const NamedNumber & rhs) {
+    number += rhs.number;
+    return *this;
+  }
+  std::string name;
+  uint64_t number;
+};
+inline std::ostream & operator<<(std::ostream & out,
+                                 const NamedNumber & named_number) {
+  return out << named_number.number;
+}
+// Report count, with percentages of other counts as well
+namespace hidden_report {
+inline void report(const uint64_t, const NamedNumber &) {}
+inline void report(const uint64_t n_spaces, const NamedNumber & count,
+            const NamedNumber & of) {
+  std::cout << std::string(n_spaces, ' ')
+            << (of.number ? 100.0 * count.number / of.number : 0)
+            << "%" << " of " << of.name << std::endl;
+}
+template <class ... Ofs>
+void report(const uint64_t n_spaces, const NamedNumber & count,
+            const NamedNumber & of, Ofs & ... ofs) {
+  report(n_spaces, count, of);
+  report(n_spaces, count, ofs ...);
+}
+}  // namespace hidden_report
+inline void report(const NamedNumber & count) {
+  std::cout << "N " << count.name << ": " << count.number << std::endl;
+}
+template <class ... Ofs>
+void report(const NamedNumber & count, const NamedNumber & of,
+            Ofs & ... ofs) {
+  std::ostringstream out;
+  out << "N " << count.name << ": " << count.number << ", ";
+  std::cout << out.str();
+  hidden_report::report(0, count, of);
+  hidden_report::report(out.str().size(), count, ofs...);
+}
+// Report counts and percentages uniformly
+inline void report(const std::string & description, const uint64_t count,
+                   const std::string & of_name1, const uint64_t of_count1,
+                   const std::string & of_name2 = "",
+                   const uint64_t of_count2 = 0,
+                   const std::string & of_name3 = "",
+                   const uint64_t of_count3 = 0) {
+  std::ostringstream out;
+  out << "N " << description << ": " << count << "; ";
+  std::cout << out.str()
+            << static_cast<unsigned int>(100000.0 * count / of_count1) / 1000.0
+            << "% of " << of_name1 << std::endl;
+  if (of_name2.size() && of_count2)
+    std::cout << std::string(out.str().size(), ' ')
+              << static_cast<unsigned int>(
+                  100000.0 * count / of_count2) / 1000.0
+              << "% of " << of_name2 << std::endl;
+  if (of_name3.size() && of_count3)
+    std::cout << std::string(out.str().size(), ' ')
+              << static_cast<unsigned int>(
+                  100000.0 * count / of_count3) / 1000.0
+              << "% of " << of_name3 << std::endl;
+}
+
+inline void show_command(int argc, char ** argv,
+                         std::ostream & out = std::cout) {
+  out << "Command run:";
+  for (int arg{0}; arg != argc; ++arg) out << " " << argv[arg];
+  out << std::endl;
+}
+
+template <class Type>
+class TwoRefs {
+ public:
+  TwoRefs(const Type & one_, const Type & two_) : one{one_}, two{two_} {}
+  const Type & operator[](const bool second) const {
+    return second ? two : one;
+  }
+
+ private:
+  const Type & one;
+  const Type & two;
+};
+
+inline std::string decimals(const double value, const uint64_t n) {
+  const double mult{pow(10, n)};
+  std::ostringstream out;
+  out << round(mult * value) / mult;
+  return out.str();
+}
+
+template <class A, class B>
+struct Tee {
+  Tee(A & a_, B & b_) : a{a_}, b{b_} {}
+  template <class T>
+  Tee & operator<<(const T & t) {
+    a << t;
+    b << t;
+    return *this;
+  }
+  Tee & operator<<(std::ostream & (*pf)(std::ostream &)) {
+    a << pf;
+    b << pf;
+    return *this;
+  }
+
+  A & a;
+  B & b;
+};
+template <class A, class B>
+Tee<A, B> tee(A & a, B & b) {
+  return Tee<A, B>(a, b);
 }
 
 }  // namespace paa
