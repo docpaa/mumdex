@@ -43,11 +43,8 @@ if [ ! -d "$mumdex_dir" ] ; then
     exit 1
 fi
 
-rsync -aL $mumdex_dir/ code
-(cd code ; make clean ; make -j smash extract_cn_segments) 
-
-if [ ! -x "code/smash" ] ; then
-    echo smash executable code/smash does not exist 1>&2
+if [ ! -x "$mumdex_dir/smash" ] ; then
+    echo smash executable $mumdex_dir/smash does not exist 1>&2
     exit 1
 fi
 
@@ -101,22 +98,22 @@ fi
 
 echo running smash on sample $name in fastq files $fastq1, $fastq2 using reference $ref and bin files $bin_files on node $(hostname)
 
-echo ./code/smash "$ref" '<('zcat "$fastq1"')' '<('zcat "$fastq2"')' 20 4 1000 $n_threads "$name" "$bin_files" "$bad_pos" '>' "$name".out.txt '2>' "$name".err.txt
+echo $mumdex_dir/smash "$ref" '<('zcat "$fastq1"')' '<('zcat "$fastq2"')' 20 4 1000 $n_threads "$name" "$bin_files" "$bad_pos" '>' "$name".out.txt '2>' "$name".err.txt
 
-if ./code/smash "$ref" <(zcat $fastq1) <(zcat $fastq2) 20 4 1000 $n_threads "$name" "$bin_files" "$bad_pos" > "$name".out.txt 2> "$name".err.txt ; then
+if $mumdex_dir/smash "$ref" <(zcat $fastq1) <(zcat $fastq2) 20 4 1000 $n_threads "$name" "$bin_files" "$bad_pos" > "$name".out.txt 2> "$name".err.txt ; then
     echo done with smash for sample $name
 else
-    echo smash failed
+    echo smash failed 1>&2
     exit 1
 fi
 
 # Do segmentation
-for bin in $(echo $n_bins | perl -pe 's/,/ /g') ; do for results in $(find $PWD -name '*'_${bin}_bins_results.txt) ; do segments=${results/_results./_segments.} ; if [ ! -e $segments ] ; then ./code/extract_cn_segments $ref $bin_dir/bins.$bin.txt $results > $segments 2> ${segments%.txt}.err.txt & fi ; done ; done
+for bin in $(echo $n_bins | perl -pe 's/,/ /g') ; do for results in $(find $PWD -name '*'_${bin}_bins_results.txt) ; do segments=${results/_results./_segments.} ; if [ ! -e $segments ] ; then $mumdex_dir/extract_cn_segments $ref $bin_dir/bins.$bin.txt $results > $segments 2> ${segments%.txt}.err.txt & fi ; done ; done
 wait 
 
 # Generate Nexus files
 for file in *_bins_results.txt ; do
-    ./code/src/bins2nexus.sh $file
+    $mumdex_dir/cn/bins2nexus.sh $file
 done
 
 if [ $pdf = true ] ; then
