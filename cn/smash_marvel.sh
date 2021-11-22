@@ -112,13 +112,14 @@ for bin in $(echo $n_bins | perl -pe 's/,/ /g') ; do for results in $(find $PWD 
 wait 
 
 # Generate Nexus files
+export PATH="$mumdex_dir/utility:$PATH"
 for file in *_bins_results.txt ; do
     $mumdex_dir/cn/bins2nexus.sh $file
 done
 
 if [ $pdf = true ] ; then
     # Generate pdf from postscript
-    find $PWD -name '*.ps' | while read file ; do pdf=${file%.ps}.pdf ; if [ ! -e $pdf ] ; then echo generate $pdf ; $mumdex_dir/*/ps2pdf.sh $file ; fi ; done
+    find $PWD -name '*.ps' | while read file ; do pdf=${file%.ps}.pdf ; if [ ! -e $pdf ] ; then echo generate $pdf ; $mumdex_dir/convert/ps2pdf.sh $file ; fi ; done
 fi
 
 rm -Rf code

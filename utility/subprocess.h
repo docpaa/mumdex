@@ -301,6 +301,7 @@ struct ifile {
     return *this;
   }
   ifile & operator>>(std::string & value) {
+    if (!file) return *this;
     static thread_local char buffer[256];
     value.clear();
     while (true) {
@@ -334,21 +335,29 @@ struct ifile {
     }
   }
   void getline(std::string & line, const char delimeter = '\n') {
-    if (getdelim(&getline_line, &getline_n, delimeter, file) < 0) {
-      close();
-    } else {
-      line = getline_line;  // Will not get embedded nulls
-      if (line.back() == delimeter) line.pop_back();
+    if (file) {
+      if (getdelim(&getline_line, &getline_n, delimeter, file) < 0) {
+        close();
+      } else {
+        line = getline_line;  // Will not get embedded nulls
+        if (line.back() == delimeter) line.pop_back();
+      }
     }
   }
 
  private:
   template <class Value>
   void scanf(const char * const format, Value & value) {
+    if (file) {
+      if (peek() == EOF) {
+        close();
+      } else {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"
-    if (fscanf(file, format, &value) == 0) close();
+        if (fscanf(file, format, &value) == 0) close();
 #pragma GCC diagnostic pop
+      }
+    }
   }
   FILE * file{nullptr};
   std::string name;
