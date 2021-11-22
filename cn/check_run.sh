@@ -10,4 +10,4 @@ echo Should show no bad lines in segments error file:
 for file in */*segments.err.txt ; do if ! grep done $file > /dev/null ; then echo $file ; fi ; done
 
 echo Generating overall stats file:
-(cat */*stats.txt | head -n 1 ; cat */*stats.txt | grep -v sample | sort | uniq ) | even | tee stats.txt 
+(cat */*stats.txt | head -n 1 ; cat */*stats.txt | grep -v sample | sort | uniq ) | tee stats.txt 
