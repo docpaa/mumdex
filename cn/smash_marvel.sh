@@ -86,16 +86,6 @@ while read bin ; do
 done | perl -pe 's/\n/,/g')
 bin_files=${bin_files%,}
 
-if false && [ ! -e "$fastq1" ] ; then
-    echo first fastq command line argument $fastq1 does not exist 1>&2
-    exit 1
-fi
-
-if false && [ ! -e "$fastq2" ] ; then
-    echo second fastq command line argument $fastq2 does not exist 1>&2
-    exit 1
-fi
-
 echo running smash on sample $name in fastq files $fastq1, $fastq2 using reference $ref and bin files $bin_files on node $(hostname)
 
 echo $mumdex_dir/smash "$ref" '<('zcat "$fastq1"')' '<('zcat "$fastq2"')' 20 4 1000 $n_threads "$name" "$bin_files" "$bad_pos" '>' "$name".out.txt '2>' "$name".err.txt
@@ -121,8 +111,6 @@ if [ $pdf = true ] ; then
     # Generate pdf from postscript
     find $PWD -name '*.ps' | while read file ; do pdf=${file%.ps}.pdf ; if [ ! -e $pdf ] ; then echo generate $pdf ; $mumdex_dir/convert/ps2pdf.sh $file ; fi ; done
 fi
-
-rm -Rf code
 
 echo All done with smash_marvel.sh
 
